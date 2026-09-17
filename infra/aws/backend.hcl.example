@@ -1,0 +1,10 @@
+# Copy to backend.hcl (gitignored) and fill in the bucket name from:
+#   terraform -chdir=../bootstrap output -raw state_bucket_name
+#
+# Then: terraform init -backend-config=backend.hcl
+
+bucket       = "fedramp-20x-ksi-tfstate-<account_id>"
+key          = "aws/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
+encrypt      = true
