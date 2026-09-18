@@ -3833,3 +3833,27 @@ where that decision meets a hard requirement rather than a soft one.
 **What survives it.** The "where available" qualifier. The honest emission is the metrics that exist
 with the collection window stated, and the README naming the limit rather than letting a reader
 assume a year of data sits behind the artifact.
+
+---
+
+## 2026-09-18 — Cloud Asset Inventory scoped to the project, not the organization (PIY-GIV)
+
+**What the build check found.** GIV's build table names an org-scope asset feed. During GCP
+onboarding, `gcloud organizations list` returned a real organization tied to the account's domain,
+auto-provisioned by Google — but `gcloud projects describe` showed the project this build created has
+no parent: it sits outside that org, standalone.
+
+**Why it is worth recording.** Moving the project into the org to get org-scope requires org-admin
+permissions that were never set up as part of this persona, and stands up more identity surface
+(org-level IAM bindings, folder structure) than a real two-person team without a Workspace deployment
+would plausibly have. The org existing at all is an artifact of how Google provisions accounts now,
+not something this persona asked for or is using for anything else.
+
+**Chosen.** Build the asset feed at project scope. GIV's own design rationale already supports this
+reading independent of the org question: "all" is inherited from MAS-CSO-IIR as resources within the
+identified cloud service offering, not everything in the account — and with one project, project
+scope *is* that offering's full scope here.
+
+**The consequence, stated rather than hidden.** If this persona's GCP footprint ever grows past one
+project, org-scope would need revisiting to keep "all" true. At one project, the two are equivalent in
+practice; the gap is dormant, not resolved.

@@ -1,0 +1,10 @@
+# Copy to backend.hcl (gitignored) — reuses the same bucket infra/aws uses,
+# just a different state key so the two roots don't collide.
+#
+# Then: terraform init -backend-config=backend.hcl
+
+bucket       = "fedramp-20x-ksi-tfstate-<account_id>"
+key          = "gcp/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
+encrypt      = true
