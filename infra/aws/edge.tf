@@ -94,6 +94,14 @@ resource "aws_lb" "main" {
   tags = {
     Name = "fedramp-20x-ksi"
   }
+
+  # The load balancer validates that it can write access logs at creation
+  # time, so the bucket policy granting that has to exist first. Terraform
+  # infers a dependency on the bucket but not on its policy, so without
+  # this the create fails intermittently depending on ordering. The
+  # CloudTrail resource in log_corpus.tf carries the same depends_on for
+  # the same reason.
+  depends_on = [aws_s3_bucket_policy.alb_logs]
 }
 
 # --- Access logs ---

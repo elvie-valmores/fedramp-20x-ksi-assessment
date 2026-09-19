@@ -205,7 +205,7 @@ data "aws_iam_policy_document" "extracts_bucket" {
 
     condition {
       test     = "StringNotEquals"
-      variable = "aws:sourceVpce"
+      variable = "aws:SourceVpce"
       values   = [aws_vpc_endpoint.s3.id]
     }
   }

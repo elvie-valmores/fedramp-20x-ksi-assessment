@@ -24,9 +24,10 @@ from common.db import connect, DatabaseUnavailable
 
 LOG = logging.getLogger("api")
 
-# The tmpfs mount. The root filesystem is read only, so this is the only
+# The writable mount. The root filesystem is read only, so this is the only
 # writable path in the container and the certificate is the only thing
-# written to it.
+# written to it. On Fargate this is ephemeral storage rather than tmpfs --
+# encrypted at rest and destroyed with the task, but not memory.
 TLS_DIR = "/tmp/tls"
 
 app = FastAPI(title="ksi-api", docs_url=None, redoc_url=None)
@@ -115,7 +116,7 @@ def read(customer: str, limit: int = 50) -> dict:
 
 
 def write_tls_material() -> tuple[str, str]:
-    """Fetch the task certificate from Secrets Manager onto the tmpfs mount.
+    """Fetch the task certificate from Secrets Manager onto the writable mount.
 
     KSI-SVC-SIN requires TLS continue to the task rather than terminate at
     the load balancer, so the task needs a certificate and a private key.
@@ -124,8 +125,8 @@ def write_tls_material() -> tuple[str, str]:
     copy of it.
 
     uvicorn takes file paths rather than PEM strings, so this writes them
-    out. The destination is tmpfs, which is memory rather than disk and dies
-    with the task.
+    out. The destination is the task's ephemeral storage, which is
+    encrypted at rest and destroyed when the task stops.
     """
     secret_arn = os.environ["TLS_SECRET_ARN"]
     client = boto3.client("secretsmanager", region_name=os.environ["AWS_REGION"])
@@ -162,9 +163,13 @@ def main() -> None:
         port=port,
         ssl_certfile=cert_path,
         ssl_keyfile=key_path,
-        # TLS 1.2 floor. The load balancer enforces a modern policy on the
-        # public side; this is the same floor on the internal hop, so the
-        # weaker leg is not the one nobody looks at.
+        # uvicorn's default. Note what this does NOT do: it selects the
+        # protocol negotiator, not a minimum version. The TLS 1.2 floor on
+        # this hop comes from the base image's OpenSSL configuration
+        # (Debian sets MinProtocol=TLSv1.2), which is inherited rather
+        # than declared -- the one place in this service where a security
+        # property rests on a default, contrary to KSI-CNA-DFP. uvicorn
+        # exposes no minimum-version argument to state it explicitly.
         ssl_version=ssl.PROTOCOL_TLS_SERVER,
         access_log=True,
         server_header=False,  # KSI-CNA-MAT: no version disclosure

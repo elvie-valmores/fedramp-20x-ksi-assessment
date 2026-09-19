@@ -537,9 +537,14 @@ resource "aws_ecs_task_definition" "api" {
     operating_system_family = "LINUX"
   }
 
-  # The tmpfs the read-only root filesystem makes necessary. The TLS
-  # material is written here and nowhere else, and it is memory rather
-  # than disk, so it does not survive the task.
+  # The writable mount the read-only root filesystem makes necessary. The
+  # TLS material is written here and nowhere else.
+  #
+  # Not tmpfs: Fargate does not support linuxParameters.tmpfs, so this is
+  # a Docker volume on the task's ephemeral storage. That storage is
+  # encrypted at rest with an AWS-managed key and is destroyed with the
+  # task, so the private key does not outlive the task -- but it does
+  # touch disk, and calling it tmpfs would overstate the claim.
   volume {
     name = "tmp"
 

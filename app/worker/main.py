@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from common.db import connect, DatabaseUnavailable
 
@@ -109,7 +110,17 @@ def cycle(bucket: str, prefix: str, region: str, window_minutes: int) -> None:
         LOG.info("extract window empty, nothing landed (cutoff=%s)", cutoff.isoformat())
         return
 
-    key = land(records, bucket, prefix, region)
+    try:
+        key = land(records, bucket, prefix, region)
+    except (BotoCoreError, ClientError) as exc:
+        # Also not fatal, and for the same reason the database failure
+        # above is not: the extract window overlaps the interval, so the
+        # next cycle re-reads these rows and lands them. Letting this
+        # propagate would exit the process, and ECS would replace a task
+        # whose only problem was a transient S3 error.
+        LOG.warning("landing failed, will retry next cycle: %s", exc.__class__.__name__)
+        return
+
     LOG.info("landed %d records at s3://%s/%s", len(records), bucket, key)
 
 

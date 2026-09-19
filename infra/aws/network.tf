@@ -345,6 +345,13 @@ data "aws_iam_policy_document" "interface_endpoint" {
         aws_iam_role.api_task.arn,
         aws_iam_role.worker_task.arn,
         aws_iam_role.task_execution.arn,
+        # The migration task reads the database master secret through the
+        # secretsmanager endpoint and decrypts it through the kms one.
+        # Omitting it here would leave a task whose IAM policy and security
+        # group both permit the call, failing on the endpoint policy --
+        # the kind of three-places-must-agree failure this architecture
+        # makes possible and which is invisible until the task runs.
+        aws_iam_role.migrate_task.arn,
       ]
     }
 

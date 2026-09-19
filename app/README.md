@@ -34,11 +34,12 @@ authentication disabled server-side.
 
 **TLS continues to the task.** KSI-SVC-SIN requires TLS not be terminated at
 the load balancer, so `api` serves HTTPS itself. The certificate is fetched from
-Secrets Manager at startup and written to a tmpfs mount, never baked into the
-image and never on a writable disk.
+Secrets Manager at startup and written to the task's ephemeral storage, never
+baked into the image. That storage is encrypted at rest and dies with the task.
+It is not tmpfs — Fargate does not support tmpfs mounts.
 
 **Read-only root filesystem, non-root user.** KSI-CNA-MAT's container hardening
-row. Anything either service writes goes to the tmpfs mount at `/tmp`.
+row. Anything either service writes goes to the writable mount at `/tmp`.
 
 **Explicitly declared everything.** KSI-CNA-DFP requires command, entrypoint,
 user and ports be stated rather than inherited, so the Dockerfiles set them and

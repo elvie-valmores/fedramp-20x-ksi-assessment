@@ -14,6 +14,7 @@ the right trade; at real volume it would need a pooler that re-mints.
 import logging
 import os
 from contextlib import contextmanager
+from functools import lru_cache
 
 import boto3
 import psycopg
@@ -35,10 +36,28 @@ class DatabaseUnavailable(RuntimeError):
     """
 
 
+@lru_cache(maxsize=1)
+def _rds_client():
+    """One client for the process.
+
+    `connect()` runs per unit of work, which for the api is per request.
+    Building a boto3 client is not cheap -- it loads and parses the service
+    model -- so doing it per request would put tens of milliseconds and a
+    fresh parse on every call. The client is thread-safe for this use and
+    refreshes the task role's credentials itself.
+    """
+    return boto3.client("rds", region_name=os.environ["AWS_REGION"])
+
+
 def _auth_token() -> str:
-    """Mint a short-lived RDS IAM auth token for this task's role."""
-    client = boto3.client("rds", region_name=os.environ["AWS_REGION"])
-    return client.generate_db_auth_token(
+    """Mint a short-lived RDS IAM auth token for this task's role.
+
+    Minted per connection rather than cached: the token is valid for
+    fifteen minutes, and caching it would mean holding a live credential
+    in process memory for the sake of saving a local signing operation
+    that involves no network call at all.
+    """
+    return _rds_client().generate_db_auth_token(
         DBHostname=os.environ["DB_HOST"],
         Port=int(os.environ["DB_PORT"]),
         DBUsername=os.environ["DB_USER"],
