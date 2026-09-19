@@ -1,0 +1,13 @@
+{
+  "id": "piy-giv-cfg-aws-config-recorder",
+  "indicator": "KSI-PIY-GIV",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Config recorder enabled, recording all supported types, in every in-scope region",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "config_recorder",
+    "region": "us-east-1"
+  }
+}

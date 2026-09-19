@@ -1,0 +1,14 @@
+{
+  "id": "piy-giv-cfg-gcp-asset-feed",
+  "indicator": "KSI-PIY-GIV",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Asset feed enabled, project scope (docs/DECISIONS.md, 2026-09-18)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "cloud_asset_feed",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "feed_id": "fedramp-20x-ksi-inventory-feed"
+  }
+}

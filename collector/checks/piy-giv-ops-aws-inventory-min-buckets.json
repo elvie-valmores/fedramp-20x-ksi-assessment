@@ -1,0 +1,13 @@
+{
+  "id": "piy-giv-ops-aws-inventory-min-buckets",
+  "indicator": "KSI-PIY-GIV",
+  "mechanism": "inventory_reconciliation",
+  "evidence_type": "OPS",
+  "description": "Generated inventory reconciled against live independent enumeration: at least the known S3 buckets are present",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource_type": "AWS::S3::Bucket",
+    "min_count": 2
+  }
+}
