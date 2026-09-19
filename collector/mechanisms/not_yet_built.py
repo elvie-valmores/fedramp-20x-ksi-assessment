@@ -20,11 +20,6 @@ class _NotYetBuilt(Mechanism):
         )
 
 
-class LogQuery(_NotYetBuilt):
-    name = "log_query"
-    depends_on = "the normalized log corpus and query layer (build order step 4)"
-
-
 class DeclaredVersusLiveComparison(_NotYetBuilt):
     name = "declared_versus_live_comparison"
     depends_on = "a Terraform-state reader paired against live queries -- not wired up yet"

@@ -6,11 +6,11 @@ should be a typo, never "we haven't built that yet."
 
 from mechanisms.cloud_api_config_read import CloudAPIConfigRead
 from mechanisms.inventory_reconciliation import InventoryReconciliation
+from mechanisms.log_query import LogQuery
 from mechanisms.not_yet_built import (
     DeclaredVersusLiveComparison,
     DeliberateTest,
     EffectiveAccessAnalysis,
-    LogQuery,
     PipelineConfigRead,
     RecordStore,
     RegisterRead,

@@ -3857,3 +3857,37 @@ scope *is* that offering's full scope here.
 **The consequence, stated rather than hidden.** If this persona's GCP footprint ever grows past one
 project, org-scope would need revisiting to keep "all" true. At one project, the two are equivalent in
 practice; the gap is dormant, not resolved.
+
+---
+
+## 2026-09-19 — OSM's normalization and detection build split, four ways (MLA-OSM)
+
+**What the build check found.** OSM's own build table names seven items. Two were already built
+(central store, query layer scaffolding). The remaining five are not equally ready: schema
+normalization and Parquet conversion have no cross-cloud blocker, but detection queries and delivery
+alarms both say "results routed into the detection path" — and the detection path is a separate shared
+component, built for KSI-IAM-SUS, which does not exist yet.
+
+**Chosen, four scope cuts stated together rather than discovered one at a time:**
+
+1. **AWS side only for normalization.** GCP audit log delivery into this AWS-hosted corpus needs its
+   own cross-cloud pipeline (a Cloud Logging sink, Pub/Sub, and a puller or push target on the AWS
+   side) that is separable work, not a detail of the normalization Lambda itself.
+2. **NDJSON, not compiled Parquet.** The design's build item names Parquet explicitly. A CTAS-based
+   compaction step would satisfy it, but adds a second scheduled job and real complexity for a
+   dataset at this project's volume, where JSON with partition projection is fully queryable at
+   identical functional correctness. Compaction is future work, not a functional gap today.
+3. **Two OCSF classes.** Authentication and API Activity, chosen as the critical classes per the
+   documented adoption norm. Every other CloudTrail event still lands, still queryable, just under
+   the generic API Activity class rather than something more specific — the same "stored raw and
+   queryable but not finely correlatable" shape OSM's own limitations section already describes for
+   unmapped classes.
+4. **Detection and alarms route to a standalone SNS topic, not the detection path.** The detection
+   path doesn't exist. Routing there now would mean referencing a resource that isn't real. An interim
+   topic keeps the alerting mechanism itself real and testable; rewiring the `alarm_actions` and the
+   Lambda's `ALERT_TOPIC_ARN` to the real detection path once IAM-SUS is built is a small, contained
+   change, not a redesign.
+
+**Why record this now instead of after IAM-SUS exists.** Four separate readers finding four separate
+"why isn't this the real thing" moments is worse than one entry saying so up front. None of these are
+walked back; they're facts about build order, stated at the point they were made.
