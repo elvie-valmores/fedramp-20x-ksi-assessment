@@ -3,10 +3,11 @@
   "indicator": "KSI-PIY-GIV",
   "mechanism": "inventory_reconciliation",
   "evidence_type": "OPS",
-  "description": "Generated GCP inventory includes the project itself",
+  "description": "The generated GCP inventory includes the project itself",
   "required_cadence": "3 days",
   "params": {
     "provider": "gcp",
+    "project_id": "fedramp-20x-ksi-assessment",
     "resource_type": "cloudresourcemanager.googleapis.com/Project",
     "min_count": 1
   }

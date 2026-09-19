@@ -1,12 +1,17 @@
-"""KSI-MLA-OSM build item 5 (scoped): one detection query.
+"""Scheduled detection: alerts on failed authentication attempts.
 
-Fired on a schedule by EventBridge. Queries the normalized corpus via
-Athena for failed authentication events in the last 24 hours and
-publishes to the interim alert topic if it finds any.
+Runs daily. Queries the normalized log corpus for authentication events
+that failed in the last 24 hours, and sends an alert if it finds any.
+Silent when there is nothing to report.
 
-Interim, not final: this should route into the shared detection path
-(KSI-IAM-SUS's build), which doesn't exist yet. Routes to a standalone
-SNS topic instead until that's built. See docs/DECISIONS.md, 2026-09-19.
+This is detection-as-code: the query is versioned in this file rather
+than configured in a console, so a change to what counts as suspicious
+shows up in the repo's history.
+
+Where alerts go is temporary. They currently land on a standalone SNS
+topic because the project's shared incident-response path doesn't exist
+yet. When it does, only the ALERT_TOPIC_ARN environment variable needs
+to change.
 """
 
 import os
@@ -21,6 +26,9 @@ DATABASE = os.environ["ATHENA_DATABASE"]
 WORKGROUP = os.environ["ATHENA_WORKGROUP"]
 TOPIC_ARN = os.environ["ALERT_TOPIC_ARN"]
 
+# The dt filter is what keeps this cheap: it limits the scan to the last
+# two days of files rather than the whole corpus. Two days, not one, so
+# events near midnight aren't missed when the partition rolls over.
 QUERY = """
 SELECT time, actor.user.name AS user_name, src_endpoint.ip AS source_ip
 FROM normalized_events
@@ -29,8 +37,13 @@ WHERE class_name = 'Authentication'
   AND dt >= date_format(date_add('day', -1, current_date), '%Y-%m-%d')
 """
 
+POLL_INTERVAL_SECONDS = 2
+POLL_ATTEMPTS = 30
+
 
 def handler(event, context):
+    # Athena is asynchronous: this returns an ID immediately, and the
+    # query runs in the background.
     execution = athena.start_query_execution(
         QueryString=QUERY,
         QueryExecutionContext={"Database": DATABASE},
@@ -39,24 +52,27 @@ def handler(event, context):
     query_id = execution["QueryExecutionId"]
 
     state = "RUNNING"
-    for _ in range(30):
+    for _ in range(POLL_ATTEMPTS):
         status = athena.get_query_execution(QueryExecutionId=query_id)
         state = status["QueryExecution"]["Status"]["State"]
         if state in ("SUCCEEDED", "FAILED", "CANCELLED"):
             break
-        time.sleep(2)
+        time.sleep(POLL_INTERVAL_SECONDS)
 
+    # Raising makes the Lambda invocation fail, which trips the error
+    # alarm. A detection that silently stopped running is worse than one
+    # that loudly breaks.
     if state != "SUCCEEDED":
         reason = status["QueryExecution"]["Status"].get("StateChangeReason", "unknown")
         raise RuntimeError(f"detection query {state}: {reason}")
 
     results = athena.get_query_results(QueryExecutionId=query_id)
-    rows = results["ResultSet"]["Rows"][1:]  # skip header row
+    rows = results["ResultSet"]["Rows"][1:]  # row 0 is the column header
 
     if rows:
         sns.publish(
             TopicArn=TOPIC_ARN,
-            Subject="fedramp-20x-ksi: failed console login detection",
+            Subject="fedramp-20x-ksi: failed authentication detected",
             Message=(
                 f"Detection query found {len(rows)} failed authentication "
                 "event(s) in the last 24h."

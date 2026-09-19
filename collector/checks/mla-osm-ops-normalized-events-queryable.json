@@ -3,9 +3,10 @@
   "indicator": "KSI-MLA-OSM",
   "mechanism": "log_query",
   "evidence_type": "OPS",
-  "description": "A query returns events from the normalized corpus in one result set (AWS side only for this build; see docs/DECISIONS.md, 2026-09-19)",
+  "description": "Normalized log events are queryable from the central corpus",
   "required_cadence": "3 days",
   "params": {
+    "region": "us-east-1",
     "database": "fedramp_20x_ksi_log_corpus",
     "workgroup": "fedramp-20x-ksi-log-corpus",
     "query": "SELECT class_name FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -1, current_date), '%Y-%m-%d') LIMIT 1",

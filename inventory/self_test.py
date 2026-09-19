@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Self-test for the inventory generator, per KSI-PIY-GIV's automation
-assurance section (docs/KSI-Design-Matrix.xlsx, PIY tab):
+"""Proves the inventory generator actually works, against real clouds.
 
-  "Accuracy is tested by seeding a resource that should appear and one
-  that should be excluded, then confirming the generator returns exactly
-  one."
+Two claims need proving, and neither can be proven by reading the code:
 
-Plus the real-time validation row: a resource created after the previous
-generation must appear on the next run. A freshly-seeded resource proves
-both at once — it didn't exist before this process started, so its
-presence in the output is itself proof the query is live, not cached.
+  Accuracy -- the inventory includes what it should and excludes what it
+  shouldn't. Tested by creating two resources: one of a type the cloud is
+  watching, one of a type it isn't. Exactly one should appear.
 
-Both AWS Config and GCP Cloud Asset Inventory index changes with some
-lag (seconds to a few minutes), so this polls with a timeout rather than
-asserting instantly. Every resource this script creates is a throwaway
-seed, deleted at the end whether the test passes or fails — the same
-apply-and-destroy discipline the rest of this project follows applies to
-test seeds too.
+  Liveness -- the inventory is queried fresh, not served from a cache.
+  Tested implicitly by the same seed: its name is a random string that
+  did not exist anywhere before this script started, so a cached answer
+  could not possibly contain it.
+
+Both clouds index new resources with a short delay, so lookups poll
+rather than checking once. Every resource created here is deleted before
+the script exits, pass or fail.
 """
 
 from __future__ import annotations
@@ -30,107 +28,139 @@ from google.cloud import pubsub_v1, storage
 
 import aws_source
 import gcp_source
+from gcp_auth import DEFAULT_PROJECT_ID
 
 POLL_INTERVAL_SECONDS = 15
-POLL_TIMEOUT_SECONDS = 300  # Config/Asset Inventory ingestion lag observed up to a few minutes
+POLL_TIMEOUT_SECONDS = 300  # indexing lag runs to a few minutes on both clouds
 
 
-def _poll_until(predicate, timeout=POLL_TIMEOUT_SECONDS, interval=POLL_INTERVAL_SECONDS):
-    deadline = time.time() + timeout
+def _seed_name() -> str:
+    """A globally unique, obviously-disposable resource name."""
+    return f"fedramp-20x-ksi-selftest-{uuid.uuid4().hex[:10]}"
+
+
+def _poll_until(predicate):
+    """Call `predicate` until it returns something non-None, or time out.
+
+    Returns the predicate's value on success, None on timeout.
+    """
+    deadline = time.time() + POLL_TIMEOUT_SECONDS
     while time.time() < deadline:
         result = predicate()
         if result is not None:
             return result
-        time.sleep(interval)
+        time.sleep(POLL_INTERVAL_SECONDS)
     return None
 
 
-def aws_test(region: str = "us-east-1") -> bool:
+def _report(cloud: str, in_scope_present: bool, out_of_scope_absent: bool) -> bool:
+    print(f"[{cloud}] liveness: PASS (seed created this run was returned)")
+    print(
+        f"[{cloud}] accuracy  in-scope present: {in_scope_present}, "
+        f"out-of-scope absent: {out_of_scope_absent}"
+    )
+    return in_scope_present and out_of_scope_absent
+
+
+def aws_test(region: str = aws_source.DEFAULT_REGION) -> bool:
     s3 = boto3.client("s3", region_name=region)
     sns = boto3.client("sns", region_name=region)
 
-    in_scope_name = f"fedramp-20x-ksi-selftest-{uuid.uuid4().hex[:10]}"
-    out_of_scope_name = f"fedramp-20x-ksi-selftest-{uuid.uuid4().hex[:10]}"
+    bucket_name = _seed_name()  # S3::Bucket -- a type Config records
+    topic_name = _seed_name()  # SNS::Topic -- a type Config does not record
+    bucket_created = False
+    topic_arn = None
 
-    print(f"[aws] seeding in-scope resource (recorded type): S3 bucket {in_scope_name}")
-    s3.create_bucket(Bucket=in_scope_name)
-
-    print("[aws] seeding out-of-scope resource (unrecorded type): SNS topic")
-    out_of_scope_arn = sns.create_topic(Name=out_of_scope_name)["TopicArn"]
-
+    # Each flag flips only once its resource exists, so the finally block
+    # deletes exactly what was created even if seeding fails partway.
     try:
-        print(f"[aws] polling Config for the seeded bucket (up to {POLL_TIMEOUT_SECONDS}s)...")
+        print(f"[aws] seeding watched type: S3 bucket {bucket_name}")
+        s3.create_bucket(Bucket=bucket_name)
+        bucket_created = True
 
-        def check():
+        print(f"[aws] seeding unwatched type: SNS topic {topic_name}")
+        topic_arn = sns.create_topic(Name=topic_name)["TopicArn"]
+
+        print(f"[aws] polling Config for the seeded bucket (up to {POLL_TIMEOUT_SECONDS}s)")
+
+        def bucket_is_indexed():
             resources = aws_source.generate(region=region)
             ids = {r["resource_id"] for r in resources}
-            return resources if in_scope_name in ids else None
+            return resources if bucket_name in ids else None
 
-        resources = _poll_until(check)
+        resources = _poll_until(bucket_is_indexed)
         if resources is None:
-            print("[aws] FAIL: seeded bucket never appeared within timeout — "
-                  "real-time claim not demonstrated")
+            print("[aws] FAIL: seeded bucket never appeared; liveness not demonstrated")
             return False
 
         ids = {r["resource_id"] for r in resources}
-        in_scope_present = in_scope_name in ids
-        out_of_scope_absent = out_of_scope_name not in ids and out_of_scope_arn not in ids
-
-        print(f"[aws] real-time: PASS (seeded bucket, created this run, appeared)")
-        print(f"[aws] accuracy — in-scope present: {in_scope_present}, "
-              f"out-of-scope absent: {out_of_scope_absent}")
-
-        return in_scope_present and out_of_scope_absent
+        return _report(
+            "aws",
+            in_scope_present=bucket_name in ids,
+            out_of_scope_absent=topic_name not in ids and topic_arn not in ids,
+        )
     finally:
-        print("[aws] reverting seeds")
-        s3.delete_bucket(Bucket=in_scope_name)
-        sns.delete_topic(TopicArn=out_of_scope_arn)
+        print("[aws] deleting seeds")
+        if topic_arn:
+            sns.delete_topic(TopicArn=topic_arn)
+        if bucket_created:
+            s3.delete_bucket(Bucket=bucket_name)
 
 
-def gcp_test(project_id: str = "fedramp-20x-ksi-assessment") -> bool:
-    in_scope_name = f"fedramp-20x-ksi-selftest-{uuid.uuid4().hex[:10]}"
-
+def gcp_test(project_id: str = DEFAULT_PROJECT_ID) -> bool:
     storage_client = storage.Client(project=project_id)
-    publisher = pubsub_v1.PublisherClient()
-
-    print(f"[gcp] seeding in-scope resource (recorded type): GCS bucket {in_scope_name}")
-    storage_client.create_bucket(in_scope_name)
-
-    print("[gcp] seeding out-of-scope resource (unrecorded type): Pub/Sub subscription")
-    feed_topic_path = publisher.topic_path(project_id, "fedramp-20x-ksi-asset-feed")
     subscriber = pubsub_v1.SubscriberClient()
-    sub_name = f"fedramp-20x-ksi-selftest-{uuid.uuid4().hex[:10]}"
+
+    bucket_name = _seed_name()  # storage Bucket -- a tracked asset type
+    sub_name = _seed_name()  # pubsub Subscription -- an untracked asset type
     sub_path = subscriber.subscription_path(project_id, sub_name)
-    subscriber.create_subscription(request={"name": sub_path, "topic": feed_topic_path})
+    bucket_created = False
+    subscription_created = False
 
     try:
-        print(f"[gcp] polling Cloud Asset Inventory for the seeded bucket (up to {POLL_TIMEOUT_SECONDS}s)...")
+        print(f"[gcp] seeding watched type: GCS bucket {bucket_name}")
+        storage_client.create_bucket(bucket_name)
+        bucket_created = True
 
-        def check():
+        print(f"[gcp] seeding unwatched type: Pub/Sub subscription {sub_name}")
+        # Attached to the asset feed's own topic purely because it is a
+        # topic that already exists; the subscription is never read from.
+        feed_topic = pubsub_v1.PublisherClient().topic_path(
+            project_id, "fedramp-20x-ksi-asset-feed"
+        )
+        subscriber.create_subscription(request={"name": sub_path, "topic": feed_topic})
+        subscription_created = True
+
+        print(
+            f"[gcp] polling Cloud Asset Inventory for the seeded bucket "
+            f"(up to {POLL_TIMEOUT_SECONDS}s)"
+        )
+
+        def bucket_is_indexed():
             resources = gcp_source.generate(project_id=project_id)
-            names = {r["resource_id"] for r in resources}
-            match = f"//storage.googleapis.com/{in_scope_name}"
-            return resources if any(match in n for n in names) else None
+            # GCP resource IDs are full paths, so match on substring
+            # rather than equality.
+            if any(bucket_name in r["resource_id"] for r in resources):
+                return resources
+            return None
 
-        resources = _poll_until(check)
+        resources = _poll_until(bucket_is_indexed)
         if resources is None:
-            print("[gcp] FAIL: seeded bucket never appeared within timeout — "
-                  "real-time claim not demonstrated")
+            print("[gcp] FAIL: seeded bucket never appeared; liveness not demonstrated")
             return False
 
         ids = {r["resource_id"] for r in resources}
-        in_scope_present = any(in_scope_name in i for i in ids)
-        out_of_scope_absent = not any(sub_name in i for i in ids)
-
-        print(f"[gcp] real-time: PASS (seeded bucket, created this run, appeared)")
-        print(f"[gcp] accuracy — in-scope present: {in_scope_present}, "
-              f"out-of-scope absent: {out_of_scope_absent}")
-
-        return in_scope_present and out_of_scope_absent
+        return _report(
+            "gcp",
+            in_scope_present=any(bucket_name in i for i in ids),
+            out_of_scope_absent=not any(sub_name in i for i in ids),
+        )
     finally:
-        print("[gcp] reverting seeds")
-        subscriber.delete_subscription(request={"subscription": sub_path})
-        storage_client.bucket(in_scope_name).delete()
+        print("[gcp] deleting seeds")
+        if subscription_created:
+            subscriber.delete_subscription(request={"subscription": sub_path})
+        if bucket_created:
+            storage_client.bucket(bucket_name).delete()
 
 
 def main() -> int:

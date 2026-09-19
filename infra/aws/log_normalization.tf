@@ -1,10 +1,19 @@
-# KSI-MLA-OSM, build item 2 (scoped): schema normalization, AWS side.
+# The log normalization pipeline: raw CloudTrail in, queryable events out.
 #
-# Scope for this build: CloudTrail events only, mapped to two OCSF
-# classes (Authentication, API Activity) -- "critical event classes
-# first" per the documented adoption norm. GCP-side normalization and
-# NDJSON-to-Parquet compaction are deferred; see docs/DECISIONS.md,
-# 2026-09-19.
+# The flow is:
+#   CloudTrail writes a log file to the log store
+#     -> S3 fires an ObjectCreated notification
+#     -> the Lambda rewrites each event into a common schema
+#     -> output lands under normalized-raw/, partitioned by source and date
+#     -> the Glue table at the bottom makes that path queryable from Athena
+#
+# The Lambda's own source is in lambda/normalize_events/. Terraform zips
+# it at plan time rather than expecting a prebuilt artifact, so editing
+# the Python and running apply is the whole deploy step.
+#
+# Currently AWS-only, and output is JSON rather than the more compact
+# Parquet. Both are scope cuts, recorded in docs/DECISIONS.md
+# (2026-09-19), not oversights.
 
 data "archive_file" "normalize_events" {
   type        = "zip"
@@ -58,15 +67,21 @@ resource "aws_iam_role_policy" "normalize_events" {
 }
 
 resource "aws_lambda_function" "normalize_events" {
-  function_name    = "fedramp-20x-ksi-normalize-events"
-  role             = aws_iam_role.normalize_events.arn
-  handler          = "handler.handler"
-  runtime          = "python3.13"
-  timeout          = 60
-  filename         = data.archive_file.normalize_events.output_path
+  function_name = "fedramp-20x-ksi-normalize-events"
+  role          = aws_iam_role.normalize_events.arn
+  handler       = "handler.handler" # file name . function name
+  runtime       = "python3.13"
+  timeout       = 60
+
+  filename = data.archive_file.normalize_events.output_path
+  # Redeploys the function whenever the source changes. Without this,
+  # Terraform compares only the filename and never notices an edit.
   source_code_hash = data.archive_file.normalize_events.output_base64sha256
 }
 
+# S3 can only invoke the function if the function's own policy allows it.
+# This is separate from the Lambda's execution role: that governs what the
+# function can do, this governs who can call it.
 resource "aws_lambda_permission" "allow_s3_invoke_normalize" {
   statement_id  = "AllowS3Invoke"
   action        = "lambda:InvokeFunction"
@@ -81,19 +96,34 @@ resource "aws_s3_bucket_notification" "log_store" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.normalize_events.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "AWSLogs/"
-    filter_suffix       = ".json.gz"
+
+    # Narrow the trigger to CloudTrail's own log files. Without the
+    # prefix filter the Lambda's own output under normalized-raw/ would
+    # re-trigger it, and it would process its own writes in a loop.
+    filter_prefix = "AWSLogs/"
+    filter_suffix = ".json.gz"
   }
 
+  # The permission must exist first, or S3 rejects the notification as
+  # undeliverable at create time.
   depends_on = [aws_lambda_permission.allow_s3_invoke_normalize]
 }
 
-# --- Queryable table over the normalized output ---
+# --- Table definition ---
 #
-# JSON, not Parquet -- compaction to Parquet is deferred (see file
-# header). Partition projection means no crawler and no manual
-# add-partition calls; Athena computes valid partitions from the
-# declared range at query time.
+# Tells Athena how to read the Lambda's output: where the files are, that
+# each line is a JSON object, and what columns to expect.
+#
+# The projection.* settings are the interesting part. Normally a query
+# engine has to be told which partitions exist, either by running a
+# crawler or by registering each new date by hand. Partition projection
+# replaces that with a rule -- "dates from 7 days ago to today, one per
+# day, at this path template" -- and Athena computes the partitions at
+# query time. No crawler to schedule, no crawler charges, and a new day's
+# data is queryable the moment it lands.
+#
+# $${source} escapes to a literal ${source} in the emitted template;
+# Athena substitutes it, not Terraform.
 
 resource "aws_glue_catalog_table" "normalized_events" {
   name          = "normalized_events"
@@ -114,7 +144,11 @@ resource "aws_glue_catalog_table" "normalized_events" {
   }
 
   storage_descriptor {
-    location      = "s3://${aws_s3_bucket.log_store.bucket}/normalized-raw/"
+    location = "s3://${aws_s3_bucket.log_store.bucket}/normalized-raw/"
+
+    # Read the files as plain lines of text, then hand each line to the
+    # JSON deserializer below. That combination is what "newline-delimited
+    # JSON" looks like to Athena.
     input_format  = "org.apache.hadoop.mapred.TextInputFormat"
     output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
 
@@ -172,6 +206,9 @@ resource "aws_glue_catalog_table" "normalized_events" {
     }
   }
 
+  # These are not stored inside the files -- their values come from the
+  # directory names (source=aws/dt=2026-09-19/), and they're queryable as
+  # ordinary columns.
   partition_keys {
     name = "source"
     type = "string"

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""KSI-PIY-GIV, build item 3: the inventory generator.
+"""Produces one inventory of every resource across AWS and GCP.
 
-Single command producing a normalized inventory across both clouds at
-query time. No cached intermediate — every run queries the authoritative
-provider services (AWS Config, GCP Cloud Asset Inventory) live. See
-docs/KSI-Design-Matrix.xlsx, PIY tab, KSI-PIY-GIV for the full design
-rationale and docs/PROJECT-CONTEXT.md for how this fits the rest of the
-build.
+Calls both cloud sources, concatenates their results, and prints a single
+JSON document. Both sources emit the same record shape, so no merging or
+field translation happens here -- this file is orchestration only.
+
+The inventory is generated on demand, never read from a cache, so the
+output always reflects what the clouds report at the moment it ran.
 
 Usage:
-    python generate_inventory.py                 # both clouds
-    python generate_inventory.py --aws-only       # GCP not set up yet
+    python generate_inventory.py                  # both clouds
+    python generate_inventory.py --aws-only       # skip GCP entirely
     python generate_inventory.py --output out.json
 """
 
@@ -26,9 +26,13 @@ import gcp_source
 
 
 def generate(aws_only: bool, aws_region: str) -> dict:
+    """Collect from both clouds and wrap the result with run metadata."""
     generated_at = datetime.now(timezone.utc).isoformat()
     resources = aws_source.generate(region=aws_region)
 
+    # A missing GCP setup is reported in the output rather than raised.
+    # Returning an AWS-only inventory that silently claims to cover both
+    # clouds would be worse than an inventory that says what it skipped.
     gcp_status = "skipped"
     if not aws_only:
         try:
@@ -39,6 +43,7 @@ def generate(aws_only: bool, aws_region: str) -> dict:
 
     return {
         "generated_at": generated_at,
+        # Named so a reader can tell which API each half came from.
         "sources": {
             "aws": "aws-config-select-resource-config",
             "gcp": gcp_status,
@@ -53,9 +58,13 @@ def main() -> int:
     parser.add_argument(
         "--aws-only",
         action="store_true",
-        help="Skip GCP entirely instead of recording it as not_configured.",
+        help="Skip GCP entirely instead of querying it.",
     )
-    parser.add_argument("--aws-region", default="us-east-1")
+    parser.add_argument(
+        "--aws-region",
+        default=aws_source.DEFAULT_REGION,
+        help=f"AWS region to query (default: {aws_source.DEFAULT_REGION}).",
+    )
     parser.add_argument(
         "--output",
         default="-",
@@ -64,6 +73,9 @@ def main() -> int:
     args = parser.parse_args()
 
     inventory = generate(aws_only=args.aws_only, aws_region=args.aws_region)
+
+    # default=str so timestamp objects that aren't JSON-native serialize
+    # instead of raising.
     output = json.dumps(inventory, indent=2, default=str)
 
     if args.output == "-":

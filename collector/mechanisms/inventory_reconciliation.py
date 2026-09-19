@@ -1,27 +1,28 @@
-"""inventory_reconciliation: confirm the live inventory contains at
-least the expected resources of a given type.
+"""Mechanism: check the live inventory contains the resources it should.
 
-Wraps the inventory generator (inventory/aws_source.py,
-inventory/gcp_source.py) rather than querying providers directly --
-this mechanism's whole point is to check against the inventory GIV
-built, not to duplicate what generates it. Once the consolidated
-resource register exists, most of this mechanism's real check
-definitions will target specific expected resource IDs from that
-register rather than a bare minimum count like the examples in
-collector/checks/ do today.
+Used for evidence of the form "everything we expect to exist is
+accounted for." Calls the inventory generator rather than querying the
+clouds directly -- the point is to test what the inventory reports, so
+re-querying the providers here would be testing something else.
+
+Check params:
+    provider       "aws" or "gcp"
+    resource_type  the type to count, e.g. "AWS::S3::Bucket"
+    min_count      how many must be present (default 1)
+    region         required when provider is "aws"
+    project_id     required when provider is "gcp"
+
+The min_count form is a placeholder. Once the project has a register of
+expected resources, these checks will assert on specific resource IDs
+instead of a floor count.
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "inventory"))
-
-import aws_source  # noqa: E402
-import gcp_source  # noqa: E402
-
-from base import CheckDefinition, CheckResult, Mechanism  # noqa: E402
+import _paths  # noqa: F401  (puts inventory/ on the import path)
+import aws_source
+import gcp_source
+from base import CheckDefinition, CheckResult, Mechanism
 
 
 class InventoryReconciliation(Mechanism):
@@ -33,22 +34,25 @@ class InventoryReconciliation(Mechanism):
         min_count = check.params.get("min_count", 1)
 
         if provider == "aws":
-            resources = aws_source.generate(region=check.params.get("region", "us-east-1"))
+            resources = aws_source.generate(region=check.params["region"])
         elif provider == "gcp":
-            resources = gcp_source.generate(
-                project_id=check.params.get("project_id", "fedramp-20x-ksi-assessment")
-            )
+            resources = gcp_source.generate(project_id=check.params["project_id"])
         else:
             raise ValueError(f"unsupported provider {provider!r}")
 
         matches = [r for r in resources if r["resource_type"] == resource_type]
-        passed = len(matches) >= min_count
 
         evidence = {
             "resource_type": resource_type,
             "matched_count": len(matches),
             "min_count": min_count,
+            # The IDs themselves are the evidence -- a count alone can't
+            # be audited back to specific resources.
             "matched_ids": [r["resource_id"] for r in matches],
         }
-        message = f"found {len(matches)} of type {resource_type} (need >= {min_count})"
-        return CheckResult(check.id, passed, evidence, message)
+        return CheckResult(
+            check.id,
+            len(matches) >= min_count,
+            evidence,
+            f"found {len(matches)} of type {resource_type} (need >= {min_count})",
+        )

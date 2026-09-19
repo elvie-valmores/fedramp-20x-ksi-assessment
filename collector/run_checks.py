@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""CLI entry point for the collector framework.
+"""Runs every check definition and reports what passed.
 
-Loads check definitions (one JSON file per evidence row) from
-collector/checks/, executes each through its declared mechanism, and
-reports pass/fail. This is the "380 lines of configuration" the
-mechanism-first build order calls for (docs/PROJECT-CONTEXT.md) -- right
-now there are only a handful of checks, proving the framework itself
-works; the rest get added as configuration in build order step 7.
+Reads each JSON file in checks/, hands it to the mechanism it names, and
+prints one line per check. Exits non-zero if anything failed, so this can
+be wired into CI unchanged.
 
 Usage:
-    python run_checks.py
+    cd collector && python run_checks.py
 """
 
 from __future__ import annotations
@@ -25,6 +22,7 @@ CHECKS_DIR = Path(__file__).resolve().parent / "checks"
 
 
 def load_checks() -> list[CheckDefinition]:
+    """Read every check definition from checks/, sorted by filename."""
     checks = []
     for path in sorted(CHECKS_DIR.glob("*.json")):
         data = json.loads(path.read_text())
@@ -41,6 +39,9 @@ def main() -> int:
     all_passed = True
     for check in checks:
         mechanism = MECHANISMS.get(check.mechanism)
+
+        # A name that isn't in the registry is a typo in the check file,
+        # and a silently ignored check is worse than a loud one.
         if mechanism is None:
             print(f"[{check.id}] SKIP -- unknown mechanism {check.mechanism!r}")
             all_passed = False
@@ -49,15 +50,18 @@ def main() -> int:
         try:
             result = mechanism.run(check)
         except NotImplementedError as exc:
+            # The mechanism exists but its dependencies don't yet. Not a
+            # failure of the thing being assessed, so it doesn't fail the run.
             print(f"[{check.id}] SKIP -- {exc}")
             continue
         except Exception as exc:
+            # Anything else means the check itself broke. Report and keep
+            # going so one bad check doesn't hide the rest.
             print(f"[{check.id}] ERROR -- {exc}")
             all_passed = False
             continue
 
-        status = "PASS" if result.passed else "FAIL"
-        print(f"[{check.id}] {status} -- {result.message}")
+        print(f"[{check.id}] {'PASS' if result.passed else 'FAIL'} -- {result.message}")
         if not result.passed:
             all_passed = False
 

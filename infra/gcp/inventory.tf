@@ -1,19 +1,21 @@
-# KSI-PIY-GIV, build item 2: Cloud Asset Inventory.
+# Cloud Asset Inventory -- GCP's equivalent of AWS Config, and the source
+# the inventory generator queries; see inventory/gcp_source.py.
 #
-# Scoped to this project, not the organization — see docs/DECISIONS.md,
-# 2026-09-18, "Cloud Asset Inventory scoped to the project, not the
-# organization". The project this root manages sits outside the domain's
-# auto-provisioned org, and moving it in would stand up more identity
-# surface than this persona plausibly has.
+# The feed continuously reports resource changes to a Pub/Sub topic.
+# Nothing subscribes to that topic yet; the feed's value right now is that
+# it exists and is watching, which is itself the evidence. Queries go
+# through the separate SearchAllResources API, which works regardless.
 #
-# Unlike AWS Config (billed per configuration item, which is why
-# infra/aws/inventory.tf narrows resource_types for cost), Cloud Asset
-# Inventory and Pub/Sub at this volume are effectively free — there's no
-# cost reason to narrow this list. asset_types is still required though:
-# unlike AWS Config, an empty list here means "nothing," not "everything"
-# (Cloud Asset's API rejects a feed with no asset_names/asset_types at
-# all). Scoped to what docs/PROJECT-CONTEXT.md's architecture section
-# names for the GCP side; extend as later build phases add resources.
+# Scoped to this project rather than an organization: the project sits
+# outside any org, so project scope is the widest available -- and with
+# one project, it is also complete. Recorded in docs/DECISIONS.md
+# (2026-09-18).
+#
+# Unlike AWS Config, there is no per-item billing here, so no cost reason
+# to narrow the type list. It is still required to be explicit: an empty
+# asset_types list means "watch nothing", not "watch everything", and the
+# API rejects a feed with neither types nor names. Keep in sync with
+# ASSET_TYPES in inventory/gcp_source.py.
 locals {
   asset_feed_types = [
     "storage.googleapis.com/Bucket",
@@ -29,20 +31,22 @@ locals {
   ]
 }
 
-data "google_project" "asset_inventory" {
-  project_id = var.gcp_project_id
-}
-
 resource "google_pubsub_topic" "asset_feed" {
   name = "fedramp-20x-ksi-asset-feed"
 }
 
-# The Cloud Asset service's own service agent is what publishes feed
-# events — not terraform-admin — so it needs its own grant on the topic.
+# Cloud Asset Inventory publishes as its own Google-managed service
+# account, not as terraform-admin, so that account needs its own grant on
+# the topic. The address is derived from the project number and is fixed
+# by Google's naming convention.
+#
+# It also has to be created before it can be granted anything -- see the
+# gcloud beta services identity command in the setup notes; enabling the
+# API alone does not create it.
 resource "google_pubsub_topic_iam_member" "asset_feed_publisher" {
   topic  = google_pubsub_topic.asset_feed.name
   role   = "roles/pubsub.publisher"
-  member = "serviceAccount:service-${data.google_project.asset_inventory.number}@gcp-sa-cloudasset.iam.gserviceaccount.com"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudasset.iam.gserviceaccount.com"
 }
 
 resource "google_cloud_asset_project_feed" "main" {
@@ -57,5 +61,7 @@ resource "google_cloud_asset_project_feed" "main" {
     }
   }
 
+  # The publish grant must exist first; GCP validates that the feed can
+  # actually deliver to its destination at create time.
   depends_on = [google_pubsub_topic_iam_member.asset_feed_publisher]
 }

@@ -1,11 +1,18 @@
-# KSI-PIY-GIV, build item 1: AWS Config recorder.
+# AWS Config -- records the configuration of resources in this account.
+# This is the source the inventory generator queries; see
+# inventory/aws_source.py.
 #
-# Scoped to the resource types the determinations actually use, not "all
-# supported types" — see docs/DECISIONS.md, 2026-09-05, "Config recorder
-# scoped for cost, with the coverage consequence stated". AWS Config bills
-# per configuration item and apply-and-destroy regenerates items every
-# session, so narrower scope is a deliberate cost/coverage tradeoff, not an
-# oversight. Extend resource_types as later build phases add resources.
+# Standing it up takes three separate resources, because AWS models them
+# separately: a recorder (what to watch), a delivery channel (where to
+# write configuration history), and a status resource (the on switch). A
+# recorder without the status resource exists but records nothing.
+#
+# The type list below is deliberately narrow rather than "everything AWS
+# supports". Config bills per configuration item recorded, and this
+# environment is destroyed and rebuilt often, which regenerates every
+# item each time. Narrower scope costs less and covers less -- a tradeoff
+# recorded in docs/DECISIONS.md (2026-09-05). Keep it in sync with
+# RESOURCE_TYPES in inventory/aws_source.py.
 locals {
   config_recorder_resource_types = [
     "AWS::S3::Bucket",
@@ -52,9 +59,9 @@ resource "aws_iam_role_policy_attachment" "config_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
 }
 
-# Config's delivery channel needs its own bucket, distinct from the
-# Terraform state bucket bootstrap created — different lifecycle, different
-# writer (the Config service, not us).
+# Config writes its configuration history here. Kept separate from the
+# Terraform state bucket: different writer (the Config service, not us)
+# and different lifecycle.
 resource "aws_s3_bucket" "config_delivery" {
   bucket = "fedramp-20x-ksi-config-${data.aws_caller_identity.current.account_id}"
 }
@@ -141,10 +148,10 @@ resource "aws_config_configuration_recorder" "main" {
   name     = "fedramp-20x-ksi-recorder"
   role_arn = aws_iam_role.config.arn
 
-  # include_global_resource_types is left unset: global types (IAM::User,
-  # IAM::Role, IAM::Policy) are already named explicitly in resource_types
-  # below, and combining that with the flag trips
-  # InvalidRecordingGroupException.
+  # include_global_resource_types is intentionally unset. The global
+  # types (IAM::User, IAM::Role, IAM::Policy) are already named
+  # explicitly below, and AWS rejects the combination of an explicit
+  # type list plus that flag with InvalidRecordingGroupException.
   recording_group {
     all_supported  = false
     resource_types = local.config_recorder_resource_types

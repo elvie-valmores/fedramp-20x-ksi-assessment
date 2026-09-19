@@ -1,18 +1,20 @@
-# KSI-MLA-OSM, build items 1 and 4 (partial): the central log store and
-# the query layer scaffolding. Schema normalization (build item 2),
-# Parquet conversion/partitioning (build item 3), detection queries
-# (build item 5), and delivery-failure alarms (build item 6) are
-# deliberately deferred to a following session — see chat, 2026-09-18:
-# this indicator's full build is flagged in docs/PROJECT-CONTEXT.md as
-# "most likely to overrun."
+# The central log store, and the query engine that reads it.
 #
-# Retention: 7 days, Object Lock compliance mode. Chosen for the reasons
-# recorded in docs/DECISIONS.md — cost is negligible either way at this
-# log volume; 7 days bounds the irreversible-lock risk window to
-# something that survives a normal pause between sessions without
-# leaving early, likely-malformed test data locked in for too long.
-# COMPLIANCE mode cannot be shortened by anyone, including AWS root, once
-# an object is written under it.
+# Everything that produces an audit trail writes here, and nothing can
+# delete what lands. That tamper-resistance comes from S3 Object Lock in
+# COMPLIANCE mode: for the retention period, an object cannot be deleted
+# or overwritten by anyone -- not the account owner, not AWS root, not
+# AWS support. The only escape is closing the account.
+#
+# That irreversibility is why retention is set in days rather than the
+# months or years a production deployment would use. Seven days survives
+# a normal gap between working sessions without locking in a week's worth
+# of mistakes made while the pipeline is still being built.
+#
+# Two properties are needed for tamper-resistance and Object Lock only
+# provides one: it stops deletion, but not undetected alteration. That's
+# what CloudTrail's log file validation below adds -- it writes signed
+# digests, so a modified log file can be detected after the fact.
 
 locals {
   log_store_retention_days = 7
@@ -21,15 +23,19 @@ locals {
 resource "aws_s3_bucket" "log_store" {
   bucket = "fedramp-20x-ksi-log-store-${data.aws_caller_identity.current.account_id}"
 
-  # Object Lock can only be enabled at bucket creation, never added later.
+  # Only settable at creation. A bucket that wasn't created with Object
+  # Lock enabled can never have it added -- it has to be recreated.
   object_lock_enabled = true
 
+  # This bucket outlives the destroy-and-rebuild cycle the rest of the
+  # environment follows; its contents are the audit record.
   lifecycle {
     prevent_destroy = true
   }
 }
 
-# Object Lock requires versioning; must exist before the lock config below.
+# Object Lock is implemented on top of object versions, so versioning has
+# to be on before the lock configuration below will apply.
 resource "aws_s3_bucket_versioning" "log_store" {
   bucket = aws_s3_bucket.log_store.id
 
@@ -130,30 +136,36 @@ resource "aws_s3_bucket_policy" "log_store" {
 }
 
 resource "aws_cloudtrail" "main" {
-  name                          = "fedramp-20x-ksi-trail"
-  s3_bucket_name                = aws_s3_bucket.log_store.bucket
-  enable_log_file_validation    = true
+  name           = "fedramp-20x-ksi-trail"
+  s3_bucket_name = aws_s3_bucket.log_store.bucket
+
+  # Writes a signed digest of each log file, which is what makes
+  # after-the-fact tampering detectable rather than merely prevented.
+  enable_log_file_validation = true
+
+  # Global services (IAM, STS) only report into one region; multi-region
+  # capture costs nothing extra and avoids a blind spot.
   include_global_service_events = true
-  is_multi_region_trail         = true # no extra cost for multi-region, and AU mappings emphasize coverage
+  is_multi_region_trail         = true
 
   depends_on = [aws_s3_bucket_policy.log_store]
 }
 
-# --- Query layer scaffolding ---
+# --- Query engine ---
 #
-# The Glue database and Athena workgroup exist now so cost guardrails
-# (scan limits) are in place before any query ever runs. The actual
-# partitioned table isn't registered yet: its schema depends on the OCSF
-# field mapping the normalization Lambda will produce, which is part of
-# the deferred work above.
+# Athena runs SQL directly against files in S3. It needs two things: a
+# Glue database, which holds the table definitions describing those files
+# (see log_normalization.tf), and a workgroup, which carries the
+# execution settings -- including the spend guardrail below.
 
 resource "aws_glue_catalog_database" "log_corpus" {
   name = "fedramp_20x_ksi_log_corpus"
 }
 
-# Query results are transient and re-derivable — deliberately a separate,
-# non-locked bucket rather than reusing the compliance-locked log store,
-# which should hold only authoritative audit data.
+# Athena writes every query's results to S3. Those results go in their
+# own bucket, not the log store: they're re-derivable scratch output, and
+# writing them into an Object Lock bucket would make them undeletable for
+# the retention period.
 resource "aws_s3_bucket" "athena_results" {
   bucket = "fedramp-20x-ksi-athena-results-${data.aws_caller_identity.current.account_id}"
 }
@@ -197,10 +209,14 @@ resource "aws_athena_workgroup" "log_corpus" {
   name = "fedramp-20x-ksi-log-corpus"
 
   configuration {
+    # Forces every query to use the settings below, including the scan
+    # limit. Without this, a client can override them per query.
     enforce_workgroup_configuration = true
-    # 1 GB per query -- costs roughly half a cent at Athena's per-TB
-    # rate, a safety net set before rather than after a billing surprise,
-    # per the design rationale.
+
+    # Athena bills per byte scanned, so a careless query against a large
+    # dataset is the expensive failure mode. This caps any single query
+    # at 1 GB -- about half a cent -- and cancels anything that exceeds
+    # it. Set now, while the corpus is small and the limit costs nothing.
     bytes_scanned_cutoff_per_query     = 1073741824
     publish_cloudwatch_metrics_enabled = true
 

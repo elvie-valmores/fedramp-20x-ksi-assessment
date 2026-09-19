@@ -55,3 +55,6 @@ __pycache__/
 
 # Terraform-generated Lambda zip artifacts (built from lambda/ source)
 .build/
+
+# macOS Finder metadata
+.DS_Store

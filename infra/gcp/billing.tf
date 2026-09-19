@@ -1,6 +1,8 @@
-# GCP-side counterpart to infra/aws/billing.tf. Same guardrail idea: a
-# monthly $50 threshold, alerting by email, checked before anything else
-# gets built. See docs/PROJECT-CONTEXT.md's cost posture section.
+# Spend guardrail, matching the AWS one in infra/aws/billing.tf: alert if
+# this project's charges cross $50 in a month.
+#
+# GCP splits this across two resources -- the budget defines the
+# threshold, and a notification channel defines where the alert goes.
 resource "google_billing_budget" "monthly_guardrail" {
   billing_account = var.billing_account_id
   display_name    = "fedramp-20x-ksi-monthly-guardrail"
@@ -16,6 +18,7 @@ resource "google_billing_budget" "monthly_guardrail" {
     }
   }
 
+  # Fraction, not percent: 1.0 means alert at 100% of the $50 above.
   threshold_rules {
     threshold_percent = 1.0
   }
@@ -33,8 +36,4 @@ resource "google_monitoring_notification_channel" "billing_email" {
   labels = {
     email_address = var.billing_alert_email
   }
-}
-
-data "google_project" "current" {
-  project_id = var.gcp_project_id
 }

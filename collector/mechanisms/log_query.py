@@ -1,13 +1,23 @@
-"""log_query: run a SQL query against the normalized log corpus (Athena
-over collector's KSI-MLA-OSM tables) and assert a condition against the
-result.
+"""Mechanism: run a SQL query against the normalized log corpus.
 
-Real, as of the normalization/query-layer build in infra/aws/
-log_normalization.tf and detection.tf -- scoped to AWS-side, JSON-format
-events only (see docs/DECISIONS.md, 2026-09-19). A check definition
-supplies the SQL directly rather than this mechanism guessing intent
-from parameters, since query intent varies too much per evidence row to
-usefully templatize.
+Used for evidence that depends on what actually happened, rather than on
+how something is configured. Queries run through Athena against the
+tables built in infra/aws/log_normalization.tf.
+
+Check params:
+    region      AWS region to query in
+    database    Glue database holding the tables
+    workgroup   Athena workgroup (carries the per-query scan limit)
+    query       the SQL to run
+    expect      "any_rows" (default) or "no_rows"
+
+The SQL lives in the check definition rather than being assembled here.
+Evidence queries vary too much to express as parameters, and a query
+written out in full is also the clearest record of what was asked.
+
+"no_rows" is the more common shape in practice: most security evidence is
+the absence of something, e.g. "no unencrypted buckets," and an empty
+result set is what proves it.
 """
 
 from __future__ import annotations
@@ -19,24 +29,22 @@ import boto3
 from base import CheckDefinition, CheckResult, Mechanism
 
 POLL_INTERVAL_SECONDS = 2
-POLL_ATTEMPTS = 30
+POLL_ATTEMPTS = 30  # ~60s ceiling; these queries scan very little data
 
 
 class LogQuery(Mechanism):
     name = "log_query"
 
     def run(self, check: CheckDefinition) -> CheckResult:
-        region = check.params.get("region", "us-east-1")
-        database = check.params["database"]
-        workgroup = check.params["workgroup"]
-        query = check.params["query"]
-        expect = check.params.get("expect", "any_rows")  # "any_rows" or "no_rows"
+        expect = check.params.get("expect", "any_rows")
+        client = boto3.client("athena", region_name=check.params["region"])
 
-        client = boto3.client("athena", region_name=region)
+        # Athena is asynchronous: starting a query returns an ID, and the
+        # results have to be collected separately once it finishes.
         execution = client.start_query_execution(
-            QueryString=query,
-            QueryExecutionContext={"Database": database},
-            WorkGroup=workgroup,
+            QueryString=check.params["query"],
+            QueryExecutionContext={"Database": check.params["database"]},
+            WorkGroup=check.params["workgroup"],
         )
         query_id = execution["QueryExecutionId"]
 
@@ -48,6 +56,8 @@ class LogQuery(Mechanism):
                 break
             time.sleep(POLL_INTERVAL_SECONDS)
 
+        # A query that failed proves nothing either way, so it is a failed
+        # check rather than an empty result.
         if state != "SUCCEEDED":
             reason = status["QueryExecution"]["Status"].get(
                 "StateChangeReason", "unknown"
@@ -57,9 +67,12 @@ class LogQuery(Mechanism):
             )
 
         results = client.get_query_results(QueryExecutionId=query_id)
-        rows = results["ResultSet"]["Rows"][1:]  # skip header row
+        rows = results["ResultSet"]["Rows"][1:]  # row 0 is the column header
 
         passed = bool(rows) if expect == "any_rows" else not rows
-        evidence = {"row_count": len(rows), "expect": expect}
-        message = f"query returned {len(rows)} row(s), expected {expect}"
-        return CheckResult(check.id, passed, evidence, message)
+        return CheckResult(
+            check.id,
+            passed,
+            {"row_count": len(rows), "expect": expect},
+            f"query returned {len(rows)} row(s), expected {expect}",
+        )

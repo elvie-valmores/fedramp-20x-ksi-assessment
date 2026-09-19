@@ -1,26 +1,23 @@
-"""GCP half of the KSI-PIY-GIV inventory generator.
+"""Reads the live GCP resource inventory out of Cloud Asset Inventory.
 
-Queries Cloud Asset Inventory's SearchAllResources API directly at call
-time -- no cached intermediate, the same live-query shape aws_source.py
-uses against AWS Config's SelectResourceConfig.
+The GCP counterpart to aws_source.py. Cloud Asset Inventory's
+SearchAllResources endpoint plays the same role AWS Config's
+SelectResourceConfig does: one API that answers across many resource
+types, queried live on every call rather than cached.
 
-Scoped to the project, not the organization: see docs/DECISIONS.md,
-2026-09-18, "Cloud Asset Inventory scoped to the project, not the
-organization". Asset types queried must stay in sync with the feed scope
-in infra/gcp/inventory.tf — change one, change the other, same caveat as
-aws_source.py's RESOURCE_TYPES.
-
-Authenticates as the human running it (Application Default Credentials),
-then impersonates terraform-admin for the actual call -- the same
-identity and mechanism infra/gcp/provider.tf uses for Terraform itself.
+Searches are scoped to a single project. The project this assessment uses
+sits outside any GCP organization, so project scope is the widest scope
+available -- and with one project, it is also the complete picture.
 """
 
 from __future__ import annotations
 
-import google.auth
-from google.auth import impersonated_credentials
 from google.cloud import asset_v1
 
+from gcp_auth import DEFAULT_PROJECT_ID, GCPNotConfigured, asset_client
+
+# Must mirror the feed's asset_types in infra/gcp/inventory.tf, for the
+# same reason aws_source.RESOURCE_TYPES mirrors the Config recorder.
 ASSET_TYPES = [
     "storage.googleapis.com/Bucket",
     "run.googleapis.com/Service",
@@ -34,49 +31,37 @@ ASSET_TYPES = [
     "cloudresourcemanager.googleapis.com/Project",
 ]
 
-
-class GCPNotConfigured(RuntimeError):
-    pass
-
-
-def _client(project_id: str) -> asset_v1.AssetServiceClient:
-    try:
-        source_credentials, _ = google.auth.default()
-    except google.auth.exceptions.DefaultCredentialsError as exc:
-        raise GCPNotConfigured(
-            "No Application Default Credentials found. Run "
-            "'gcloud auth application-default login' first."
-        ) from exc
-
-    target_credentials = impersonated_credentials.Credentials(
-        source_credentials=source_credentials,
-        target_principal=f"terraform-admin@{project_id}.iam.gserviceaccount.com",
-        target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    )
-    return asset_v1.AssetServiceClient(credentials=target_credentials)
+# Re-exported so callers can catch it without importing gcp_auth too.
+__all__ = ["ASSET_TYPES", "GCPNotConfigured", "generate"]
 
 
-def generate(project_id: str = "fedramp-20x-ksi-assessment") -> list[dict]:
-    """Query Cloud Asset Inventory live and return a normalized resource list.
+def generate(project_id: str = DEFAULT_PROJECT_ID) -> list[dict]:
+    """Return every tracked GCP resource, in the shared cross-cloud shape.
 
-    Same shape aws_source.generate() produces, so the two lists can be
-    concatenated into one cross-cloud inventory without a merge step.
+    Field names match aws_source.generate() exactly so the two lists can
+    be concatenated directly.
     """
-    client = _client(project_id)
+    client = asset_client(project_id)
     request = asset_v1.SearchAllResourcesRequest(
         scope=f"projects/{project_id}",
         asset_types=ASSET_TYPES,
     )
 
     resources = []
+    # The client pages through results transparently; iterating the
+    # response walks every match, not just the first page.
     for asset in client.search_all_resources(request=request):
         resources.append(
             {
                 "cloud": "gcp",
                 "resource_id": asset.name,
-                "resource_type": asset.asset_type,
+                # display_name is often empty, so fall back to the last
+                # path segment of the full resource name.
                 "name": asset.display_name or asset.name.rsplit("/", 1)[-1],
+                "resource_type": asset.asset_type,
                 "location": asset.location,
+                # GCP calls these labels; AWS calls them tags. Same idea,
+                # so they land in the same field.
                 "tags": dict(asset.labels) if asset.labels else {},
                 "created_at": (
                     asset.create_time.isoformat() if asset.create_time else None

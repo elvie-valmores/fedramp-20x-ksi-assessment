@@ -1,17 +1,18 @@
-"""AWS half of the KSI-PIY-GIV inventory generator.
+"""Reads the live AWS resource inventory out of AWS Config.
 
-Queries AWS Config's SelectResourceConfig API directly at call time — no
-cached intermediate. Config is the authoritative source (see
-docs/KSI-Design-Matrix.xlsx, PIY tab, KSI-PIY-GIV design rationale):
-Terraform state describes intent and drifts from reality, whereas Config
-reports what actually exists.
+AWS Config continuously records the configuration of resources in the
+account. Rather than calling each service's own list API (s3:ListBuckets,
+rds:DescribeDBInstances, and so on), this queries Config's single
+SelectResourceConfig endpoint, which accepts a SQL-like expression and
+answers across every resource type it records.
 
-Resource types queried must stay in sync with the recorder scope in
-infra/aws/inventory.tf (docs/DECISIONS.md, 2026-09-05, "Config recorder
-scoped for cost, with the coverage consequence stated"). A type present
-here but not recorded there returns nothing, silently — that's a real
-failure mode, not a hypothetical, which is why the two lists are kept in
-one place in a real refactor. For now: change one, change the other.
+Every call hits the API. Nothing is cached, because a cached inventory
+answers "what existed last time we looked," and the question being asked
+is "what exists now."
+
+Design note: Config is treated as authoritative over Terraform state.
+State describes what was declared; Config describes what is actually
+there, including anything created outside Terraform.
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ from typing import Iterator
 
 import boto3
 
+DEFAULT_REGION = "us-east-1"
+
+# Must mirror the recorder's scope in infra/aws/inventory.tf. Config only
+# answers for types it was told to record, so a type listed here but not
+# recorded there returns zero rows and looks like "none exist" rather
+# than "never watched." Change one list, change the other.
 RESOURCE_TYPES = [
     "AWS::S3::Bucket",
     "AWS::IAM::User",
@@ -43,25 +50,36 @@ RESOURCE_TYPES = [
 
 
 def _query_resource_type(client, resource_type: str) -> Iterator[dict]:
+    """Yield every Config record of one resource type.
+
+    The expression is Config's own SQL dialect, evaluated server-side.
+    Results come back one page at a time, so a paginator walks the
+    continuation tokens instead of the caller handling them.
+    """
     expression = (
         "SELECT resourceId, resourceName, resourceType, awsRegion, "
         "availabilityZone, tags, resourceCreationTime "
         f"WHERE resourceType = '{resource_type}'"
     )
+
     paginator = client.get_paginator("select_resource_config")
     for page in paginator.paginate(Expression=expression):
-        for raw in page["Results"]:
-            yield json.loads(raw)
+        # Each row arrives as a JSON *string*, not a parsed object --
+        # Config returns it that way because the shape differs per
+        # resource type. Hence a second decode per row.
+        for row in page["Results"]:
+            yield json.loads(row)
 
 
-def generate(region: str = "us-east-1") -> list[dict]:
-    """Query AWS Config live and return a normalized resource list.
+def generate(region: str = DEFAULT_REGION) -> list[dict]:
+    """Return every recorded AWS resource, in the shared cross-cloud shape.
 
-    Each entry uses the same shape gcp_source.generate() produces, so the
-    two can be concatenated into one cross-cloud inventory without a
-    separate merge step.
+    Field names here match gcp_source.generate() exactly, so the two
+    lists concatenate into one inventory with no merge or translation
+    step in between.
     """
     client = boto3.client("config", region_name=region)
+
     resources = []
     for resource_type in RESOURCE_TYPES:
         for record in _query_resource_type(client, resource_type):

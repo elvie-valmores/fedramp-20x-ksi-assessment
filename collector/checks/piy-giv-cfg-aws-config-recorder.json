@@ -3,7 +3,7 @@
   "indicator": "KSI-PIY-GIV",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "Config recorder enabled, recording all supported types, in every in-scope region",
+  "description": "The AWS Config recorder exists and is actively recording",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",

@@ -1,11 +1,13 @@
-"""Shared types for the collector framework.
+"""The two data types and one interface the collector framework is built on.
 
-380 evidence rows across the 46 indicators reduce to nine evidence
-mechanisms (docs/PROJECT-CONTEXT.md's shared-components table). A
-CheckDefinition is one evidence row, expressed as data rather than code;
-a Mechanism knows how to execute a whole class of them. Build order step
-7 adds the remaining ~377 check definitions as more of these; it does
-not add more mechanisms.
+A CheckDefinition is a single piece of evidence to gather, written as
+data (a JSON file in checks/) rather than as code. A Mechanism is the
+code that knows how to gather a whole category of them.
+
+The split matters because the assessment needs roughly 380 pieces of
+evidence, and they reduce to only nine ways of gathering evidence. Adding
+evidence means adding a JSON file. Adding a *new way* of gathering it --
+rare -- means adding a Mechanism.
 """
 
 from __future__ import annotations
@@ -18,26 +20,30 @@ from typing import Any
 
 @dataclass
 class CheckDefinition:
+    """One piece of evidence to gather. Loaded from a JSON file."""
+
     id: str
-    indicator: str  # e.g. "KSI-PIY-GIV"
-    mechanism: str  # registry key, e.g. "cloud_api_config_read"
-    evidence_type: str  # "CFG" (verify) or "OPS" (validate), per the design matrix's own columns
+    indicator: str  # which requirement this is evidence for, e.g. "KSI-PIY-GIV"
+    mechanism: str  # which Mechanism runs it; a key in registry.MECHANISMS
+    evidence_type: str  # "CFG" proves a thing is configured; "OPS" proves it works
     description: str
-    required_cadence: str  # "3 days" or "3 months", per the catalog's cycle
-    params: dict[str, Any] = field(default_factory=dict)
+    required_cadence: str  # how often the framework requires this be re-checked
+    params: dict[str, Any] = field(default_factory=dict)  # mechanism-specific inputs
 
 
 @dataclass
 class CheckResult:
+    """The outcome of running one CheckDefinition."""
+
     check_id: str
     passed: bool
-    evidence: dict[str, Any]
-    message: str
+    evidence: dict[str, Any]  # the raw data the verdict was based on
+    message: str  # one line, human-readable
     ran_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class Mechanism(abc.ABC):
-    """One of the nine evidence mechanisms. Subclasses implement run()."""
+    """One way of gathering evidence. Subclasses implement run()."""
 
     name: str
 

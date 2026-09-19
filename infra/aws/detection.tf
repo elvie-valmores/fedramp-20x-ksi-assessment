@@ -1,20 +1,33 @@
-# KSI-MLA-OSM, build items 5-6 (interim): one detection query and the
-# delivery-failure/store-growth alarms. No detection path exists yet
-# (that's KSI-IAM-SUS's build) -- alerts route to a standalone SNS topic
-# as a stated interim sink until that's built. See docs/DECISIONS.md,
-# 2026-09-19.
+# Alerting: what happens when something is found, or when the pipeline
+# that would find it breaks.
+#
+# Three things report here -- a scheduled query that looks for failed
+# logins, an alarm for the normalization Lambda erroring, and an alarm
+# for the log store growing unexpectedly fast.
+#
+# The last two matter as much as the first. A detection pipeline that has
+# silently stopped running looks exactly like a quiet one, so the
+# pipeline's own health is monitored alongside what it detects.
+#
+# Everything routes to one SNS topic for now. The project's shared
+# incident-response path doesn't exist yet, so this stands in; swapping
+# it later means repointing alarm_actions and one environment variable.
+# Recorded in docs/DECISIONS.md (2026-09-19).
 
 resource "aws_sns_topic" "detection_interim" {
   name = "fedramp-20x-ksi-detection-interim"
 }
 
+# Email subscriptions require the recipient to click a confirmation link
+# before anything is delivered. Until then the subscription sits pending.
 resource "aws_sns_topic_subscription" "detection_interim_email" {
   topic_arn = aws_sns_topic.detection_interim.arn
   protocol  = "email"
   endpoint  = var.billing_alert_email
 }
 
-# Delivery failure (AU-5): alarm on the normalization Lambda's own error count.
+# Fires if the normalization Lambda throws at all -- threshold 0, not a
+# rate. Any error means log events are being dropped on the floor.
 resource "aws_cloudwatch_metric_alarm" "normalize_events_errors" {
   alarm_name          = "fedramp-20x-ksi-normalize-events-errors"
   comparison_operator = "GreaterThanThreshold"
@@ -32,9 +45,10 @@ resource "aws_cloudwatch_metric_alarm" "normalize_events_errors" {
   alarm_actions = [aws_sns_topic.detection_interim.arn]
 }
 
-# Store growth (AU-4): alarm if the log store grows sharply -- a rough
-# guardrail against runaway or misconfigured delivery, not a capacity
-# limit, since the store has none.
+# Catches runaway log delivery -- a misconfigured source writing far more
+# than expected, which shows up as cost before it shows up as anything
+# else. S3 has no capacity limit, so this is a spend guardrail, not a
+# storage one. BucketSizeBytes is only published daily, hence the period.
 resource "aws_cloudwatch_metric_alarm" "log_store_growth" {
   alarm_name          = "fedramp-20x-ksi-log-store-growth"
   comparison_operator = "GreaterThanThreshold"
@@ -53,7 +67,10 @@ resource "aws_cloudwatch_metric_alarm" "log_store_growth" {
   alarm_actions = [aws_sns_topic.detection_interim.arn]
 }
 
-# --- One detection query: failed console logins ---
+# --- The detection query itself ---
+#
+# A Lambda that runs one SQL query on a schedule and alerts if it returns
+# anything. Query lives in lambda/run_detection_query/.
 
 data "archive_file" "run_detection_query" {
   type        = "zip"
@@ -125,6 +142,9 @@ resource "aws_lambda_function" "run_detection_query" {
   filename         = data.archive_file.run_detection_query.output_path
   source_code_hash = data.archive_file.run_detection_query.output_base64sha256
 
+  # Passed as environment variables rather than hardcoded in the handler,
+  # so redirecting alerts to the real incident-response path later is a
+  # config change rather than a code change.
   environment {
     variables = {
       ATHENA_DATABASE  = aws_glue_catalog_database.log_corpus.name
@@ -134,9 +154,8 @@ resource "aws_lambda_function" "run_detection_query" {
   }
 }
 
-# Cadence: the catalog's machine-based minimum is 3 days
-# (VDR-TFR-MVX); daily is stricter and costs effectively nothing extra
-# at this query size.
+# Daily. The assessment framework's floor for this kind of check is every
+# three days; running it daily is stricter and, at this query size, free.
 resource "aws_cloudwatch_event_rule" "run_detection_query" {
   name                = "fedramp-20x-ksi-run-detection-query"
   schedule_expression = "rate(1 day)"

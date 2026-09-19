@@ -8,8 +8,12 @@ terraform {
     }
   }
 
-  # Same state backend AWS uses — one S3 bucket, different key. Terraform's
-  # S3 backend just stores a JSON file; it has no opinion about which cloud
-  # the resources it describes live in. No separate GCP state bucket needed.
+  # State lives in the same S3 bucket the AWS roots use, under a different
+  # key. The backend only stores a JSON file and has no opinion about
+  # which cloud the resources it tracks live in, so a second state bucket
+  # on GCP would be redundant.
+  #
+  # Bucket and key are supplied at init time via -backend-config; see
+  # backend.hcl.example.
   backend "s3" {}
 }

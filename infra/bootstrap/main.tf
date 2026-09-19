@@ -1,22 +1,30 @@
+# The bucket that holds Terraform state for every other root.
+#
+# This root keeps its own state on local disk, because it cannot store
+# state in a bucket it has not created yet. See infra/README.md.
+
 data "aws_caller_identity" "current" {}
 
 locals {
-  # Account ID makes this collision-proof without asking anyone to invent a
-  # globally unique name by hand.
+  # S3 bucket names are globally unique across all AWS accounts, so the
+  # account ID is appended to guarantee no collision without anyone
+  # having to invent a unique name by hand.
   state_bucket_name = "fedramp-20x-ksi-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket" "tfstate" {
   bucket = local.state_bucket_name
 
-  # This bucket is explicitly one of the things PROJECT-CONTEXT.md says
-  # persists across apply-and-destroy sessions. A stray `terraform destroy`
-  # in this root should not be able to take it out.
+  # Losing this bucket means losing the record of every resource
+  # Terraform manages. A stray destroy in this root should not be able to
+  # take it out.
   lifecycle {
     prevent_destroy = true
   }
 }
 
+# Keeps prior versions of the state file, which is the recovery path if a
+# bad apply corrupts it.
 resource "aws_s3_bucket_versioning" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
 
@@ -45,6 +53,8 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
   restrict_public_buckets = true
 }
 
+# State files contain resource attributes and can contain secrets, so
+# unencrypted transport is refused outright rather than merely discouraged.
 data "aws_iam_policy_document" "tfstate_tls_only" {
   statement {
     sid    = "DenyInsecureTransport"

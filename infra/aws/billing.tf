@@ -1,6 +1,8 @@
-# One guardrail: if actual spend crosses $50 in a calendar month, email the
-# address below. $50 is the number PROJECT-CONTEXT.md already names as the
-# signal that something from a prior session was not torn down.
+# Spend guardrail. Emails if actual charges cross $50 in a calendar month.
+#
+# The number is a tripwire, not a budget: this environment is meant to be
+# destroyed between sessions and cost only a few dollars a month. Crossing
+# $50 almost certainly means something was left running.
 resource "aws_budgets_budget" "monthly_guardrail" {
   name         = "fedramp-20x-ksi-monthly-guardrail"
   budget_type  = "COST"

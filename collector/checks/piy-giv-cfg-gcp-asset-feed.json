@@ -3,7 +3,7 @@
   "indicator": "KSI-PIY-GIV",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "Asset feed enabled, project scope (docs/DECISIONS.md, 2026-09-18)",
+  "description": "The Cloud Asset Inventory feed exists and is watching asset types",
   "required_cadence": "3 days",
   "params": {
     "provider": "gcp",
