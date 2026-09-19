@@ -14,6 +14,7 @@ cloud APIs — nothing here is mocked or simulated.
 ```
 docs/         The assessment design. Start with PROJECT-CONTEXT.md.
 infra/        Terraform for both clouds. Three roots; see infra/README.md.
+app/          The application being assessed. Two services; see app/README.md.
 inventory/    Generates a live inventory of every resource in both clouds.
 collector/    Runs evidence checks against that infrastructure.
 lambda/       Python for the AWS Lambda functions Terraform deploys.
@@ -28,6 +29,16 @@ were worked through one at a time and the reasoning recorded.
 - `KSI-Design-Matrix.xlsx` — the primary artifact: all 46 determinations.
 - `DECISIONS.md` — a dated log of why each decision was made, including
   the ones that were later reversed.
+
+### `app/`
+
+Two small but real services on ECS Fargate: an API behind the load balancer
+and a worker that extracts data for the GCP analytics pipeline. They exist
+because several determinations need something genuine to assess — real image
+digests for KSI-SVC-VRI, a real dependency manifest for KSI-SCR-MON, two
+genuinely separate services for KSI-CNA-MAT's segmentation claim.
+
+Neither holds a database password. Both authenticate to Postgres with IAM.
 
 ### `inventory/`
 
@@ -81,7 +92,9 @@ All three need working cloud credentials: an AWS profile, and
 | Collector framework | 3 of 9 mechanisms implemented |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
-| Application environment | Not started |
+| Application environment, AWS | Written and planned; not yet applied |
+| Application environment, GCP | Not started |
+| CI/CD pipeline | Not started |
 
 Scope reductions are recorded in `docs/DECISIONS.md` as they are made, rather
 than discovered later by a reader.

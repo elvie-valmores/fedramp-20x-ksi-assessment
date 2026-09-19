@@ -1,0 +1,6 @@
+# Direct dependencies of the api service. Compiled to requirements.txt with
+# pinned versions and hashes -- see app/README.md.
+fastapi
+uvicorn[standard]
+psycopg[binary]
+boto3

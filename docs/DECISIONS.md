@@ -3891,3 +3891,70 @@ component, built for KSI-IAM-SUS, which does not exist yet.
 **Why record this now instead of after IAM-SUS exists.** Four separate readers finding four separate
 "why isn't this the real thing" moments is worse than one entry saying so up front. None of these are
 walked back; they're facts about build order, stated at the point they were made.
+
+---
+
+## 2026-09-19 — The application environment build, and four platform constraints it hit
+
+The environment is the last shared component and the substrate every other one runs against.
+Building it turned up four places where the design's build rows cannot be satisfied exactly as
+written. None is a scope reduction chosen for convenience; each is a platform constraint met head-on,
+and all four are recorded here together rather than discovered one at a time by a later reader.
+
+**1. The task certificate is self-signed, not ACM-issued.**
+
+KSI-SVC-SIN's build row 2 requires TLS continue to the task rather than terminate at the load
+balancer, which needs a certificate the container can serve. KSI-SVC-ASM's build row 4 separately
+wants ACM-issued certificates with automatic renewal.
+
+Both cannot hold. ACM issues public certificates only after validating control of a domain name and
+this persona owns no domain. AWS Private CA would issue a genuine internal certificate and costs
+roughly 400 USD per month — more than three times the entire environment's standing cost, to satisfy
+one build row.
+
+Chosen: a self-signed certificate, generated in Terraform, stored in Secrets Manager for the task and
+imported into ACM for the load balancer's public listener. What is lost is stated rather than
+glossed: there is no chain of trust and no managed renewal, so KSI-SVC-ASM's certificate row is
+partially satisfied and KSI-SVC-SIN's transit row holds for confidentiality on the internal hop but
+not authenticity. The load balancer cannot be configured to verify a backend certificate in any case,
+so the authenticity half of that hop was never available regardless of who issued it.
+
+**2. VPC flow logs land in CloudWatch Logs, not the object-locked corpus.**
+
+Flow logs are the evidence source for most of KSI-CNA-RNT's and KSI-CNA-ULN's validation rows. The
+natural destination is the central log store, which is where everything else that produces an audit
+trail writes.
+
+It does not work. VPC flow log delivery to S3 fails when the destination bucket carries a default
+Object Lock retention period, which the log store does and which is the whole point of it.
+
+Chosen: CloudWatch Logs, encrypted with the logs-class customer-managed key, 30-day retention. The
+consequence is that flow logs sit outside the tamper-resistant store, so the immutability claim
+KSI-MLA-OSM makes for the corpus does not extend to them. Pulling them into the corpus through the
+normalization path is future work; recording the gap now is not.
+
+**3. Load balancer access logs use SSE-S3, not a customer-managed key.**
+
+KSI-SVC-SIN's build row 1 asks for customer-managed keys across all stores. The ELB log delivery
+principal cannot write to a bucket encrypted with one.
+
+Chosen: a separate access-log bucket with SSE-S3, rather than weakening the log store's encryption to
+accommodate one writer. This is the narrower concession — one bucket holding request metadata, rather
+than the store holding every audit record in both clouds.
+
+**4. The root applies in two phases, because digest pinning means images must exist first.**
+
+KSI-SVC-VRI's build row 2 requires task definitions reference images by digest and that tag
+references be rejected. A digest cannot be looked up for an image that has not been built, so the ECS
+services cannot be declared in the same apply that creates the registry they pull from.
+
+Chosen: a `deploy_services` variable, default false. The first apply builds network, database,
+registry and identities; images are built and pushed; the second apply with the flag set creates the
+services. The alternative — a tag reference resolving to whatever happens to be there at apply time —
+is the mutable pointer VRI exists to reject, so the ordering constraint is the indicator working
+rather than an inconvenience.
+
+**Also recorded: the images cannot be built on the workstation.** There is no container runtime
+installed locally, so image builds belong to the pipeline, which is where KSI-CMT-RMV and
+KSI-SVC-VRI need them to happen anyway — signing, digest pinning and provenance are pipeline
+properties, and a locally built image would satisfy none of them.

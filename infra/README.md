@@ -44,6 +44,35 @@ terraform init -backend-config=backend.hcl
 terraform plan
 ```
 
+## Applying the AWS root
+
+The AWS root applies in two phases. This is not a convenience — KSI-SVC-VRI
+requires task definitions reference images by digest, and a digest cannot be
+looked up for an image that does not exist yet.
+
+```sh
+# Phase 1: network, database, registry, identities. No services.
+terraform apply
+
+# Build and push both images to the repositories phase 1 created, tagged
+# with the value of app_image_tag (default "v1"). Tags are immutable, so a
+# rebuild needs a new tag.
+
+# Phase 2: the ECS services, pinned to the digests those tags resolve to.
+terraform apply -var deploy_services=true
+```
+
+Then run the migration once, which creates the schema and the two IAM-auth
+database roles. It is idempotent, so running it again is a no-op:
+
+```sh
+aws ecs run-task \
+  --cluster fedramp-20x-ksi \
+  --task-definition fedramp-20x-ksi-migrate \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[<app subnet ids>],securityGroups=[<migrate sg id>],assignPublicIp=DISABLED}"
+```
+
 ## Required variables
 
 Neither `backend.hcl` nor any `.tfvars` file is committed; both are
@@ -53,6 +82,8 @@ gitignored because they carry account-specific values.
 |---|---|---|
 | `billing_alert_email` | `aws`, `gcp` | No default. Set via `TF_VAR_billing_alert_email`. |
 | `billing_account_id` | `gcp` | No default. From `gcloud billing accounts list`. |
+| `deploy_services` | `aws` | Defaults to `false`. See the two phases above. |
+| `app_image_tag` | `aws` | Defaults to `v1`. The tag whose digest the services pin to. |
 
 ## GCP authentication
 
@@ -73,3 +104,12 @@ The state bucket and the central log store persist across sessions. Most
 other resources are expected to be destroyed and rebuilt, so cost tracks
 usage rather than standing infrastructure. Both clouds have a $50/month
 budget alert as a tripwire — see `aws/billing.tf` and `gcp/billing.tf`.
+
+The application environment is where the standing cost actually lives:
+roughly 115 to 125 USD per month if left running, dominated by the load
+balancer, RDS, and six interface endpoints at about 7 USD each. The endpoints
+cost more than the NAT gateway they replace and are bought deliberately —
+they are what makes KSI-CNA-RNT's "no internet route at all" claim true.
+
+**Destroy it between sessions.** The residual is a few dollars, mostly KMS
+keys and retained snapshots.

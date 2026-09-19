@@ -1,0 +1,62 @@
+# app
+
+The application the assessment is about.
+
+Two services, deliberately small but real. They exist because several
+determinations need something genuine to point at, not because the product
+itself matters:
+
+- **KSI-SVC-VRI** validates integrity against image digests, which requires
+  images built from real source rather than a stock upstream image.
+- **KSI-SCR-MON** monitors dependencies for vulnerabilities, which requires a
+  real dependency manifest with real transitive dependencies.
+- **KSI-CMT-RMV** claims components are replaced rather than patched, which is
+  only demonstrable if there is a build to replace them from.
+- **KSI-CNA-MAT** claims lateral movement is limited by per-service
+  segmentation, which needs two services that are genuinely distinct.
+
+| Service | Ingress | What it does |
+|---|---|---|
+| `api` | ALB, HTTPS | Records and reads synthetic customer measurements in Postgres |
+| `worker` | None | Periodically extracts recent rows to S3 for the GCP analytics pipeline |
+
+The two never talk to each other. That is the point: MAT's segmentation claim
+is tested by confirming a connection between them fails.
+
+## Constraints both services are built to
+
+These come from the design matrix, not from preference.
+
+**No password authentication to the database.** KSI-SVC-VCM requires RDS IAM
+authentication, so both services mint a short-lived IAM auth token at connect
+time. Neither holds a database password, and the application user has password
+authentication disabled server-side.
+
+**TLS continues to the task.** KSI-SVC-SIN requires TLS not be terminated at
+the load balancer, so `api` serves HTTPS itself. The certificate is fetched from
+Secrets Manager at startup and written to a tmpfs mount, never baked into the
+image and never on a writable disk.
+
+**Read-only root filesystem, non-root user.** KSI-CNA-MAT's container hardening
+row. Anything either service writes goes to the tmpfs mount at `/tmp`.
+
+**Explicitly declared everything.** KSI-CNA-DFP requires command, entrypoint,
+user and ports be stated rather than inherited, so the Dockerfiles set them and
+the task definitions restate them.
+
+## Dependencies
+
+`requirements.txt` in each service pins exact versions with hashes.
+KSI-SVC-VRI's build row requires lockfiles with hashes and a build that fails on
+mismatch, which is what `--require-hashes` in the Dockerfile gives.
+
+## Running locally
+
+Neither service runs usefully without AWS credentials and a reachable database,
+because both authenticate with IAM rather than a password. The realistic local
+check is a build:
+
+```sh
+docker build -t ksi-api app/api
+docker build -t ksi-worker app/worker
+```

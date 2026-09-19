@@ -1,0 +1,4 @@
+# Direct dependencies of the worker service. The worker has no HTTP surface,
+# so it carries neither a web framework nor a server.
+psycopg[binary]
+boto3

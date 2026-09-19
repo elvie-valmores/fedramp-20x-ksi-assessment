@@ -29,10 +29,19 @@ pinned catalog, with the reasoning recorded.
 
 The design phase is closed. What remains is the build.
 
-## What has not been done
+## Where the build has reached
 
-None of the infrastructure exists yet. No Terraform has been written, no collectors built, no
-environment applied. The repository starts from an empty state.
+The build is in progress, and `README.md` carries the current status table. As of 2026-09-19:
+
+- **Applied and live** — the state backend, AWS and GCP foundations, the inventory generator, the
+  central log store, the query layer, and AWS-side log normalization and detection.
+- **Written, planned, not yet applied** — the AWS application environment: VPC with no internet
+  route, ECS Fargate services, RDS, load balancer and web firewall, keys, registry and posture
+  services. Plus the two application services in `app/`.
+- **Not started** — the GCP analytics pipeline, the CI/CD pipeline, the three workflows,
+  policy-as-code, the SDR emitter, and the 380 check definitions.
+
+The build order below is the plan; the status table in `README.md` is what has actually happened.
 
 ---
 
