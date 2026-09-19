@@ -18,6 +18,7 @@ from functools import lru_cache
 
 import boto3
 import psycopg
+from botocore.exceptions import BotoCoreError, ClientError
 
 LOG = logging.getLogger("db")
 
@@ -68,13 +69,27 @@ def _auth_token() -> str:
 @contextmanager
 def connect():
     """Yield a connection, committing on success and rolling back on error."""
+    # Minting the token is an SDK call, not a database call, so it raises
+    # botocore errors rather than psycopg ones -- a throttled
+    # GenerateDBAuthToken or a credential-refresh blip against the task
+    # metadata endpoint. Caught here and wrapped: uncaught, it would reach
+    # the api's handlers, which catch only DatabaseUnavailable, and become
+    # a 500 carrying a botocore traceback. That is the information leak
+    # this class exists to prevent, arriving by the one path that skipped
+    # it. In the worker it would unwind cycle() and exit the process.
+    try:
+        token = _auth_token()
+    except (BotoCoreError, ClientError) as exc:
+        LOG.error("could not mint database auth token: %s", exc.__class__.__name__)
+        raise DatabaseUnavailable("database unavailable") from exc
+
     try:
         conn = psycopg.connect(
             host=os.environ["DB_HOST"],
             port=int(os.environ["DB_PORT"]),
             dbname=os.environ["DB_NAME"],
             user=os.environ["DB_USER"],
-            password=_auth_token(),
+            password=token,
             # verify-full, not require. `require` encrypts without checking
             # who is on the other end, which rds.force_ssl also accepts --
             # so the server-side setting alone does not give authenticity.

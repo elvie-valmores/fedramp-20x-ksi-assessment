@@ -108,27 +108,67 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 }
 
 # The worker is a job rather than a service, so it has no target group and
-# no request metrics. Its health signal is whether it is running at all.
-resource "aws_cloudwatch_metric_alarm" "worker_running_count" {
+# no request metrics.
+#
+# The obvious alarm -- RunningTaskCount from ECS/ContainerInsights -- is a
+# trap here, and a review caught it: Container Insights is disabled on the
+# cluster, so that metric is never published and the alarm would sit in
+# INSUFFICIENT_DATA forever while appearing to watch something. The api has
+# HealthyHostCount as a fallback that does not depend on Insights; the
+# worker has no equivalent, so it needs a signal of its own.
+#
+# The signal used instead is the worker's own heartbeat. Every cycle logs
+# exactly one of two lines -- it landed records, or it looked and the
+# window was empty -- which is a direct measurement of the job doing its
+# work rather than an inference from the platform that it exists. That is
+# also the better evidence for KSI-CNA-EIS's third layer, running health,
+# and it follows KSI-MLA-RVL's rule that a nil result counts only when the
+# looking was recorded.
+resource "aws_cloudwatch_log_metric_filter" "worker_cycle" {
   count = local.deploy_count
 
-  alarm_name        = "fedramp-20x-ksi-worker-not-running"
-  alarm_description = "The worker has no running task for 15 minutes. Extracts to the analytics pipeline have stopped."
+  name           = "fedramp-20x-ksi-worker-cycle"
+  log_group_name = aws_cloudwatch_log_group.worker.name
 
-  namespace   = "ECS/ContainerInsights"
-  metric_name = "RunningTaskCount"
-  statistic   = "Minimum"
+  # Matches both terminal lines of cycle() in app/worker/main.py.
+  pattern = "?landed ?\"extract window empty\""
 
-  dimensions = {
-    ClusterName = aws_ecs_cluster.main.name
-    ServiceName = aws_ecs_service.worker[0].name
+  metric_transformation {
+    name      = "WorkerCycles"
+    namespace = "fedramp-20x-ksi"
+    value     = "1"
+    unit      = "Count"
+
+    # Without this, a period with no cycles publishes no data point at all
+    # rather than a zero, and the alarm cannot tell "stopped" from "not
+    # reporting".
+    default_value = 0
   }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_not_cycling" {
+  count = local.deploy_count
+
+  alarm_name        = "fedramp-20x-ksi-worker-not-cycling"
+  alarm_description = "The worker has completed no extract cycle in 45 minutes. Extracts to the analytics pipeline have stopped."
+
+  namespace   = "fedramp-20x-ksi"
+  metric_name = aws_cloudwatch_log_metric_filter.worker_cycle[0].metric_transformation[0].name
+  statistic   = "Sum"
 
   comparison_operator = "LessThanThreshold"
   threshold           = 1
-  period              = 300
-  evaluation_periods  = 3
-  treat_missing_data  = "notBreaching"
+
+  # The worker cycles every 15 minutes, so three empty periods means it
+  # has missed three consecutive cycles rather than been briefly slow.
+  period             = 900
+  evaluation_periods = 3
+
+  # Breaching, not notBreaching. A worker publishing nothing is precisely
+  # the condition this alarm exists to catch, so missing data is the
+  # signal rather than the absence of one -- the mistake the replaced
+  # alarm made.
+  treat_missing_data = "breaching"
 
   alarm_actions = [aws_sns_topic.detection_interim.arn]
   ok_actions    = [aws_sns_topic.detection_interim.arn]

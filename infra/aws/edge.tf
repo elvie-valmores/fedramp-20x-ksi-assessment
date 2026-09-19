@@ -422,6 +422,51 @@ resource "aws_cloudwatch_log_group" "waf" {
   kms_key_id        = aws_kms_key.logs.arn
 }
 
+# CloudWatch Logs will not accept vended logs from the delivery service
+# without a resource policy saying so. The console creates this silently
+# when you configure WAF logging by hand, which is why it is easy to miss
+# in Terraform -- and the failure mode is that PutLoggingConfiguration is
+# accepted and nothing is ever delivered, taking out KSI-CNA-RVP's stated
+# evidence source while the BlockedRequests alarm keeps reporting healthy.
+#
+# Scoped to the aws-waf-logs-* prefix rather than every log group in the
+# account: the delivery service has no business writing to the container
+# or flow log groups.
+data "aws_iam_policy_document" "waf_log_delivery" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+
+    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:aws-waf-logs-*:*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+}
+
+resource "aws_cloudwatch_log_resource_policy" "waf_log_delivery" {
+  policy_name     = "fedramp-20x-ksi-waf-log-delivery"
+  policy_document = data.aws_iam_policy_document.waf_log_delivery.json
+}
+
 resource "aws_wafv2_web_acl_logging_configuration" "main" {
   resource_arn            = aws_wafv2_web_acl.main.arn
   log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
@@ -440,4 +485,6 @@ resource "aws_wafv2_web_acl_logging_configuration" "main" {
       name = "cookie"
     }
   }
+
+  depends_on = [aws_cloudwatch_log_resource_policy.waf_log_delivery]
 }

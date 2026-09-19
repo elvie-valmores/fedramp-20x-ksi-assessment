@@ -23,6 +23,11 @@ itself matters:
 The two never talk to each other. That is the point: MAT's segmentation claim
 is tested by confirming a connection between them fails.
 
+**The worker's landings are at-least-once.** Its extract window is wider than
+its interval so that no row is missed, which means rows in the overlap land
+twice. The analytics side deduplicates on `id`. This is stated here because it
+is a contract between the two clouds, not an implementation detail of one.
+
 ## Constraints both services are built to
 
 These come from the design matrix, not from preference.

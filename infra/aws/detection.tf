@@ -174,3 +174,92 @@ resource "aws_lambda_permission" "allow_eventbridge_invoke_detection" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.run_detection_query.arn
 }
+
+# --- Who may publish to the interim topic ---
+#
+# Added when a review found the GuardDuty rule in posture.tf targeting this
+# topic with nothing granting EventBridge permission to publish to it. That
+# failure is silent: the rule matches, the delivery fails with
+# FailedInvocations, and the detection path looks configured while
+# producing nothing. The EventBridge-to-Lambda path next to it has its
+# aws_lambda_permission, which is what made the asymmetry visible.
+#
+# Setting a topic policy REPLACES the default one, which allows the account
+# owner. So the owner statement is restated here rather than inherited --
+# without it the normalization Lambda's publish and ordinary console
+# management both break.
+data "aws_iam_policy_document" "detection_interim" {
+  statement {
+    sid    = "AllowAccountOwner"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "SNS:Publish",
+      "SNS:Subscribe",
+      "SNS:GetTopicAttributes",
+      "SNS:SetTopicAttributes",
+      "SNS:ListSubscriptionsByTopic",
+      "SNS:DeleteTopic",
+      "SNS:AddPermission",
+      "SNS:RemovePermission",
+    ]
+
+    resources = [aws_sns_topic.detection_interim.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceOwner"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  # EventBridge, for the GuardDuty findings rule.
+  statement {
+    sid    = "AllowEventBridgePublish"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.detection_interim.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  # CloudWatch, for the health and posture alarms.
+  statement {
+    sid    = "AllowCloudWatchAlarmPublish"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.detection_interim.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "detection_interim" {
+  arn    = aws_sns_topic.detection_interim.arn
+  policy = data.aws_iam_policy_document.detection_interim.json
+}

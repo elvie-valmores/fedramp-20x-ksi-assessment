@@ -470,11 +470,18 @@ resource "aws_ecs_cluster" "main" {
 
   configuration {
     execute_command_configuration {
-      # ECS Exec gives a shell inside a running task. Off: it is a remote
-      # access path into the application tier, and KSI-CNA-MAT counts
-      # reachable endpoints as attack surface whether or not anyone
-      # intends to use them.
-      logging = "NONE"
+      # This field does NOT disable ECS Exec -- it only selects where exec
+      # session I/O is recorded. Exec availability is controlled by
+      # enable_execute_command on the service, which is absent below and
+      # therefore false.
+      #
+      # So the posture is: Exec is off by omission, and if anyone turns it
+      # on with ecs:UpdateService they get an interactive shell in the api
+      # task. DEFAULT rather than NONE means that session is at least
+      # recorded to the task's configured log destination. NONE would mean
+      # a shell in the application tier leaving no trace, which is the
+      # opposite of what KSI-MLA-LET asks of this surface.
+      logging = "DEFAULT"
     }
   }
 }
@@ -823,9 +830,11 @@ resource "aws_ecs_service" "api" {
     container_port   = local.api_port
   }
 
-  # Wait for the target group before counting a task healthy, so a
-  # deployment that never becomes reachable rolls back rather than
-  # reporting success.
+  # Suppress health checks for the first 60 seconds of a task's life, so
+  # a task is not killed for failing a check while it is still fetching
+  # its certificate and binding. This is startup tolerance, not the
+  # rollback mechanism -- deployment_circuit_breaker below is what rolls a
+  # bad deployment back.
   health_check_grace_period_seconds = 60
 
   deployment_circuit_breaker {
@@ -839,9 +848,11 @@ resource "aws_ecs_service" "api" {
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 
-  # Terraform declares the task definition; ECS updates it on deploy.
-  # Without this, every apply after a deploy would try to roll the service
-  # back to the revision in state.
+  # desired_count only. The task definition is deliberately NOT ignored:
+  # this flow pins images by digest, so Terraform is the thing that should
+  # decide which revision runs, and an apply correcting a drifted revision
+  # is the behaviour KSI-SVC-ACM wants. What is ignored is the count, which
+  # a scaling action may legitimately have changed.
   lifecycle {
     ignore_changes = [desired_count]
   }
@@ -861,8 +872,10 @@ resource "aws_ecs_service" "worker" {
   task_definition = aws_ecs_task_definition.worker[0].arn
   launch_type     = "FARGATE"
 
-  # One. The worker's extract window overlaps deliberately, and two
-  # instances would land the same rows twice.
+  # One. Two instances would multiply the duplicate landings described in
+  # app/worker/main.py -- they do not cause them. The overlapping window
+  # means the landing is at-least-once even with a single instance, and
+  # the analytics side deduplicates on the record id.
   desired_count = 1
 
   network_configuration {

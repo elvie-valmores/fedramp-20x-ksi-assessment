@@ -69,6 +69,23 @@ def land(records: list[dict], bucket: str, prefix: str, region: str) -> str:
     Partitioned by date so the analytics side can read a day without
     scanning everything, matching the partitioning the log corpus already
     uses.
+
+    **This is at-least-once delivery, and every row lands more than once.**
+    The extract window (20 minutes) is deliberately wider than the interval
+    (15 minutes), so consecutive cycles overlap by five minutes and any row
+    written in that overlap is landed twice. A retry after a failed write
+    lands it again.
+
+    That is a deliberate trade -- a window equal to the interval would drop
+    rows written during the extract itself, and losing customer data is
+    worse than duplicating it -- but it is a contract the analytics side
+    has to honour: **deduplicate on `id`, which is the table's primary key
+    and stable across landings.** The object key is wall-clock based and
+    carries no watermark, so it cannot be used for this.
+
+    The alternative, a persisted high-water mark, would make delivery
+    closer to exactly-once but needs durable state the worker does not
+    have; it restarts with no memory, and ECS replaces it freely.
     """
     now = datetime.now(timezone.utc)
     key = (
@@ -137,8 +154,8 @@ def main() -> None:
     prefix = os.environ["EXTRACT_PREFIX"]
     region = os.environ["AWS_REGION"]
     interval = int(os.environ["EXTRACT_INTERVAL_SECONDS"])
-    # Overlaps the interval deliberately. A window exactly equal to the
-    # interval drops rows written during the extract itself.
+    # Wider than the interval on purpose; see land() for what that costs
+    # and what the analytics side has to do about it.
     window_minutes = int(os.environ["EXTRACT_WINDOW_MINUTES"])
 
     LOG.info("worker started, extracting every %ds", interval)

@@ -67,11 +67,18 @@ resource "aws_secretsmanager_secret" "task_tls" {
   description = "Certificate and key the api task serves on the internal hop"
   kms_key_id  = aws_kms_key.secrets.arn
 
-  # Zero would delete immediately and is tempting for an environment that
-  # is destroyed every session, but it also means a mistaken destroy is
-  # unrecoverable. Seven days is the shortest window AWS allows that still
-  # leaves a way back.
-  recovery_window_in_days = 7
+  # Zero, meaning delete immediately with no recovery window.
+  #
+  # The instinct is to set seven days as a safety net against a mistaken
+  # destroy. That instinct is wrong here and would break the next session:
+  # a scheduled-for-deletion secret still holds its name, so the following
+  # `terraform apply` fails with InvalidRequestException rather than
+  # recreating it. In an environment destroyed deliberately every session,
+  # a recovery window is a guaranteed blocker rather than a safety net.
+  #
+  # Nothing is lost. The secret holds a certificate this configuration
+  # regenerates from scratch on every apply.
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "task_tls" {
