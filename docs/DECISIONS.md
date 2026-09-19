@@ -3958,3 +3958,55 @@ rather than an inconvenience.
 installed locally, so image builds belong to the pipeline, which is where KSI-CMT-RMV and
 KSI-SVC-VRI need them to happen anyway — signing, digest pinning and provenance are pipeline
 properties, and a locally built image would satisfy none of them.
+
+---
+
+## 2026-09-19 — The AWS account's free-tier plan blocks three named services (open question)
+
+**What the first apply found.** The environment was applied to prove the Terraform survives contact
+with the real API. Most of it did: the VPC with no internet route, all seven endpoints with their
+restrictive policies, the load balancer, the web firewall and its managed rule groups, the ECS
+cluster, four customer-managed keys, the registries, the imported certificate and Secrets Manager all
+created without complaint. Every IAM policy document, endpoint policy and WAF rule set — none of
+which `terraform plan` validates — was accepted.
+
+Four resources failed, all for the same reason. The account is on the **new AWS free-tier plan**:
+
+- `aws_guardduty_detector` — `SubscriptionRequiredException` (403)
+- `aws_securityhub_account` — `SubscriptionRequiredException` (403)
+- `aws_inspector2_enabler` — `SubscriptionRequiredException` (403)
+- `aws_db_instance` — `FreeTierRestrictionError`, backup retention of 7 days exceeds the free-tier
+  maximum
+
+RDS failing cascaded: the `api_task` and `migrate_task` inline policies reference the instance's
+resource id and its managed master secret, so neither was created.
+
+**Why this is not a configuration detail.** All three blocked services are named in the design
+matrix's environment table and are load-bearing:
+
+- **Inspector** is the vulnerability scanner shared component, consumed by nine indicators. The
+  2026-09 entry rejecting basic ECR scanning did so precisely because it covers OS packages only and
+  would leave the application dependencies unscanned — which is what KSI-SCR-MON exists to monitor.
+- **Security Hub** is the whole benchmark basis for KSI-CNA-IBP and supplies two of the three finding
+  sources KSI-SVC-EIS names.
+- **GuardDuty** is the detection source KSI-IAM-SUS is determined against.
+
+The RDS cap bites differently but is not cosmetic either: KSI-RPL-ABO compares the backup retention
+against the recovery point objective declared in the objective register, and a one-day maximum
+changes what that register can honestly claim.
+
+**Not decided yet, and deliberately not decided quietly.** The options are to move the account off
+the free-tier plan, or to re-determine the affected indicators against what a free-tier account can
+actually evidence. The second is a real answer rather than a defeat — a provider whose platform
+cannot supply a finding source has a genuine limitation to declare, which is the same shape as the
+GCP benchmark gap already recorded under KSI-CNA-IBP. What is not acceptable is leaving the design
+naming three services the environment cannot stand up.
+
+**Also found and fixed.** The load balancer writes an `ELBAccessLogTestFile` into its access log
+bucket at creation, and that single 90-byte object made `DeleteBucket` fail with `BucketNotEmpty`,
+breaking the first teardown. The access log bucket now carries `force_destroy`. The central log store
+deliberately does not, and is Object Locked, because destroying that one should be hard.
+
+**Residual after teardown.** Four customer-managed keys in `PendingDeletion` for seven days, at
+roughly one dollar per key per month prorated. No load balancer, no endpoints, no database, no
+non-default VPC.

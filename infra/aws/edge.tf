@@ -113,6 +113,18 @@ resource "aws_lb" "main" {
 # logs land here and are pulled into the corpus by the normalization path.
 resource "aws_s3_bucket" "alb_logs" {
   bucket = "fedramp-20x-ksi-alb-logs-${data.aws_caller_identity.current.account_id}"
+
+  # The load balancer writes an ELBAccessLogTestFile the moment it is
+  # created, to prove it can. That single 90-byte object is enough to make
+  # DeleteBucket fail with BucketNotEmpty, which broke the first teardown
+  # of this environment -- so in an environment destroyed every session,
+  # this bucket cannot be deleted without it.
+  #
+  # Safe here in a way it would not be generally: the contents are request
+  # metadata with a 30-day expiry, not the audit record. The log store in
+  # log_corpus.tf deliberately has no force_destroy and is Object Locked,
+  # because destroying that one should be hard.
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "alb_logs" {
