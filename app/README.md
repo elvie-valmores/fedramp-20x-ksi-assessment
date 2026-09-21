@@ -19,8 +19,13 @@ itself matters:
 |---|---|---|
 | `api` | ALB, HTTPS | Records and reads synthetic customer measurements in Postgres |
 | `worker` | None | Periodically extracts recent rows to S3 for the GCP analytics pipeline |
+| `analytics` | None | Runs on GCP. Reads those extracts across clouds, loads BigQuery |
 
-The two never talk to each other. That is the point: MAT's segmentation claim
+`analytics` runs on the other cloud entirely and shares no code with the other
+two — it never touches the application database, so it carries neither
+`common/db.py` nor the RDS certificate authority.
+
+The two AWS services never talk to each other. That is the point: MAT's segmentation claim
 is tested by confirming a connection between them fails.
 
 **The worker's landings are at-least-once.** Its extract window is wider than

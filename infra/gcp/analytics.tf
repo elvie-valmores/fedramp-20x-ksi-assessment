@@ -1,0 +1,298 @@
+# The analytics store, and the things that hold data on the GCP side.
+#
+# This is the reason the persona spans two clouds at all. The design matrix
+# is honest that a real two-person team would more likely pick one; the
+# second cloud is here because cross-cloud normalization is harder and
+# demonstrates more, not because the persona would organically build it.
+#
+# Four determinations are built here:
+#
+#   KSI-SVC-SIN  -- customer-managed keys across every store, dataset IAM
+#                   bound to declared roles with no primitive roles, public
+#                   access prevention and uniform bucket-level access
+#   KSI-CNA-RNT  -- the second resource category: resources with no network
+#                   interface, bounded by resource policy rather than by
+#                   firewall rule
+#   KSI-RPL-RRO  -- the analytics store recorded as reconstructible rather
+#                   than restorable, and the landing zone as regenerable
+#   KSI-SVC-VRI  -- the registry that holds the pipeline image, with
+#                   immutable tags
+
+# --- APIs ---
+#
+# Declared rather than clicked. KSI-SVC-ACM's build row 1 is "all
+# machine-based resources declared in code, no console-created resources",
+# and an API enabled by hand is exactly the kind of state that exists
+# without appearing anywhere in declared state.
+resource "google_project_service" "analytics" {
+  for_each = toset([
+    "artifactregistry.googleapis.com",
+    "cloudkms.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "run.googleapis.com",
+    "securitycenter.googleapis.com",
+    "sts.googleapis.com",
+  ])
+
+  project = var.gcp_project_id
+  service = each.value
+
+  # Leave the API enabled if this resource is destroyed. Disabling an API
+  # on teardown breaks anything else in the project still using it, and
+  # re-enabling has a propagation delay that makes the next apply flaky.
+  disable_on_destroy = false
+}
+
+# --- Keys ---
+#
+# KSI-SVC-SIN build row 1 asks for four to five keys by data class across
+# both clouds. The AWS side has four; these are the GCP counterparts for
+# the classes that exist here. The same reasoning applies: a key is a blast
+# radius, so the classes follow who may decrypt.
+
+resource "google_kms_key_ring" "main" {
+  name     = "fedramp-20x-ksi"
+  location = var.gcp_region
+
+  depends_on = [google_project_service.analytics]
+}
+
+resource "google_kms_crypto_key" "analytics" {
+  name     = "analytics"
+  key_ring = google_kms_key_ring.main.id
+
+  # KSI-SVC-ASM build row 3: automatic annual rotation on every
+  # customer-managed key. Expressed in seconds because that is the only
+  # unit the API takes.
+  rotation_period = "31536000s" # 365 days
+
+  # The environment is destroyed between sessions and keys are among the
+  # things the cost posture deliberately preserves. 30 days is the GCP
+  # minimum destroy window and applies if the key is ever removed.
+  destroy_scheduled_duration = "2592000s" # 30 days
+
+  lifecycle {
+    # Destroying a key makes everything encrypted under it permanently
+    # unreadable. The AWS side gets the same protection from a deletion
+    # window; GCP needs it stated.
+    prevent_destroy = true
+  }
+
+  labels = {
+    data_class = "analytics"
+  }
+}
+
+resource "google_kms_crypto_key" "artifacts" {
+  name                       = "artifacts"
+  key_ring                   = google_kms_key_ring.main.id
+  rotation_period            = "31536000s"
+  destroy_scheduled_duration = "2592000s"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  labels = {
+    data_class = "artifacts"
+  }
+}
+
+# Each service encrypts with its own agent identity, so each needs its own
+# grant on the key it uses. Scoped per key rather than per key ring: a
+# grant on the ring would let the storage agent decrypt image layers.
+resource "google_kms_crypto_key_iam_member" "storage_analytics" {
+  crypto_key_id = google_kms_crypto_key.analytics.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com"
+}
+
+resource "google_kms_crypto_key_iam_member" "bigquery_analytics" {
+  crypto_key_id = google_kms_crypto_key.analytics.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:bq-${data.google_project.current.number}@bigquery-encryption.iam.gserviceaccount.com"
+}
+
+resource "google_kms_crypto_key_iam_member" "artifactregistry_artifacts" {
+  crypto_key_id = google_kms_crypto_key.artifacts.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-artifactregistry.iam.gserviceaccount.com"
+}
+
+# --- The landing zone ---
+#
+# Intermediate between the extract that leaves AWS and the load into
+# BigQuery. KSI-RPL-RRO records it as regenerable: nothing here is the only
+# copy of anything, because the source rows are still in the AWS database
+# and the pipeline can be re-run.
+
+resource "google_storage_bucket" "landing" {
+  name     = "${var.gcp_project_id}-landing"
+  location = var.gcp_region
+
+  # KSI-SVC-SIN build row 4. Uniform access means object ACLs cannot
+  # re-introduce per-object permissions that bucket policy does not know
+  # about -- the GCS equivalent of the exposure S3 public access blocks
+  # close.
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.analytics.id
+  }
+
+  versioning {
+    enabled = true
+  }
+
+  # KSI-SVC-PRR build row 3: lifecycle windows, so intermediate data is
+  # residue with an expiry rather than residue that accumulates.
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  lifecycle_rule {
+    condition {
+      age                = 7
+      with_state         = "ARCHIVED"
+      num_newer_versions = 1
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Access logs would go here in a production deployment. Audit Logs cover
+  # the admin-activity half already; data-access logging for GCS is
+  # enabled in audit.tf.
+
+  labels = {
+    data_class = "customer-data"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.storage_analytics]
+}
+
+# --- The analytics store ---
+
+resource "google_bigquery_dataset" "analytics" {
+  dataset_id  = "measurements"
+  location    = var.gcp_region
+  description = "Synthetic customer measurements, loaded from the AWS extract. Reconstructible rather than restorable -- see KSI-RPL-RRO."
+
+  default_encryption_configuration {
+    kms_key_name = google_kms_crypto_key.analytics.id
+  }
+
+  # KSI-SVC-SIN build row 5: dataset IAM bound to declared roles only, no
+  # primitive roles. `access` blocks here replace the default set, which
+  # would otherwise include the project's legacy owner/editor/viewer
+  # bindings -- those are the primitive roles the build row bars, and they
+  # are present by default rather than by declaration, which is also what
+  # KSI-CNA-DFP is written to catch.
+  access {
+    role          = "roles/bigquery.dataOwner"
+    user_by_email = "terraform-admin@${var.gcp_project_id}.iam.gserviceaccount.com"
+  }
+
+  access {
+    role          = "roles/bigquery.dataEditor"
+    user_by_email = google_service_account.pipeline.email
+  }
+
+  # Tables are dropped and reloaded by the pipeline rather than mutated,
+  # which is the analytics-side analogue of KSI-CMT-RMV's redeploy-rather-
+  # than-modify position.
+  delete_contents_on_destroy = true
+
+  labels = {
+    data_class = "customer-data"
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.bigquery_analytics]
+}
+
+resource "google_bigquery_table" "measurements" {
+  dataset_id = google_bigquery_dataset.analytics.dataset_id
+  table_id   = "measurements"
+
+  deletion_protection = false # this environment is meant to be rebuilt
+
+  encryption_configuration {
+    kms_key_name = google_kms_crypto_key.analytics.id
+  }
+
+  # Partitioned on the measurement time so a query for one day scans one
+  # day. The same reasoning as the log corpus's partition projection on the
+  # AWS side: the cost control is structural rather than a spend alarm.
+  time_partitioning {
+    type  = "DAY"
+    field = "recorded_at"
+  }
+
+  clustering = ["customer"]
+
+  # Declared explicitly rather than autodetected on load. An autodetected
+  # schema changes silently when the source changes, which would make
+  # KSI-SVC-ACM's drift question unanswerable for the one resource whose
+  # shape is set by data rather than by code.
+  schema = jsonencode([
+    {
+      name        = "id"
+      type        = "INTEGER"
+      mode        = "REQUIRED"
+      description = "Primary key from the source table. The deduplication key -- landings are at-least-once."
+    },
+    {
+      name = "customer"
+      type = "STRING"
+      mode = "REQUIRED"
+    },
+    {
+      name = "metric"
+      type = "STRING"
+      mode = "REQUIRED"
+    },
+    {
+      name = "value"
+      type = "NUMERIC"
+      mode = "REQUIRED"
+    },
+    {
+      name = "recorded_at"
+      type = "TIMESTAMP"
+      mode = "REQUIRED"
+    },
+  ])
+
+  labels = {
+    data_class = "customer-data"
+  }
+}
+
+# --- The registry ---
+
+resource "google_artifact_registry_repository" "pipeline" {
+  repository_id = "fedramp-20x-ksi"
+  location      = var.gcp_region
+  format        = "DOCKER"
+  description   = "Images for the analytics pipeline job."
+
+  kms_key_name = google_kms_crypto_key.artifacts.id
+
+  docker_config {
+    # KSI-SVC-VRI build row 4, the GCP half. Once a tag points at a digest
+    # it cannot be moved.
+    immutable_tags = true
+  }
+
+  depends_on = [
+    google_project_service.analytics,
+    google_kms_crypto_key_iam_member.artifactregistry_artifacts,
+  ]
+}

@@ -93,7 +93,8 @@ All three need working cloud credentials: an AWS profile, and
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Written; applied once and torn down |
-| Application environment, GCP | Not started |
+| GCP analytics pipeline | Written, never applied |
+| Cross-cloud federation (GCP → AWS) | Written, never applied |
 | CI/CD pipeline | Written, never run — needs the account upgrade first |
 
 Scope reductions are recorded in `docs/DECISIONS.md` as they are made, rather

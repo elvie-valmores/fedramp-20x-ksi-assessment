@@ -1,0 +1,7 @@
+# Direct dependencies of the analytics pipeline job. It talks to both
+# clouds: boto3 for the federated S3 read, the Google libraries for
+# landing and loading.
+boto3
+google-auth
+google-cloud-bigquery
+google-cloud-storage

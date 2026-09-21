@@ -4402,3 +4402,86 @@ than CI; the disclosure channel should survive an application outage, since a co
 disappears exactly when something is wrong inverts the intent; and it keeps an unauthenticated public
 path out of the application's request handling. A policy link is omitted entirely when no URL is
 supplied, because a dangling link implies a published policy that does not exist.
+
+---
+
+## 2026-09-20 — The cross-cloud path runs GCP-to-AWS, and carries no static credential
+
+**The direction is a decision, not an accident.** The AWS worker lands extracts in S3 and the GCP
+pipeline reads them, rather than the worker pushing into GCS. One federation exists instead of two,
+and the AWS side holds no Google credential at all.
+
+**How it authenticates.** The Cloud Run job holds a Google service account identity, asks Google for
+an identity token, and exchanges it with AWS STS for a short-lived session. KSI-IAM-SNU's durability
+hierarchy is satisfied on both ends: nothing static exists anywhere on this path. Unlike the GitHub
+federation, no OIDC provider resource is declared on the AWS side, because AWS already trusts
+`accounts.google.com` natively.
+
+**The trust matches the numeric ID, not the email.** A service account email can be deleted and
+recreated, and the recreated account would inherit trust granted to a different principal. The
+numeric unique ID is never reused. The audience is pinned to the same value, so a token minted for
+another purpose cannot be replayed here — KSI-SVC-VCM build row 1 is "no wildcards", and this is what
+that means in practice on this hop.
+
+**What the role can reach.** One prefix of one bucket, read-only, with listing scoped to the same
+prefix so it cannot enumerate what else exists. KSI-CNA-MAT's identity surface question — what a
+compromised resource reaches with the credentials it holds — has a one-line answer here.
+
+---
+
+## 2026-09-20 — The analytics load deduplicates, because the AWS side guarantees duplicates
+
+**The constraint inherited from AWS.** The worker's extract window is deliberately wider than its
+interval, so every row appears in at least two extract files. That trade was made on the grounds that
+losing customer data is worse than duplicating it, and it makes deduplication the analytics side's
+responsibility rather than an optional tidy-up.
+
+**Chosen.** Load into a staging table, then `MERGE` on the source primary key into the target. A
+plain append would duplicate every row in the overlap, and would do so silently.
+
+**What this buys beyond correctness.** The pipeline becomes idempotent: running it twice over the
+same data produces the same table. That is what lets the job read the whole extract prefix on every
+run rather than maintaining a watermark — and it has no durable state to maintain one with, since it
+starts cold on every scheduled execution.
+
+---
+
+## 2026-09-20 — Security Command Center is activated at project scope, and not in Terraform
+
+**Two limitations, both following from the same root cause** already recorded on 2026-09-18: the GCP
+project sits outside any organization.
+
+**First, scope.** Standard-tier activation is supported at project level, so the service is
+available. Google documents that certain detection modules and service integrations are unavailable
+at project scope because of the reduced access. The findings that arrive are genuine; the set is
+narrower than an organization-level activation would produce. This bounds KSI-SVC-EIS's GCP-side
+finding source and KSI-IAM-SUS's GCP detection path, and it is the same shape as the gap
+KSI-CNA-IBP already declares for the GCP benchmark mapping.
+
+**Second, provisioning.** The google provider exposes no resource for Standard-tier project
+activation — the paid tiers have one, the free tier does not. So this is an API enablement in
+declared state plus a console action.
+
+**That is an exception to KSI-SVC-ACM build row 1**, "no console-created resources", and it is
+recorded as one rather than quietly tolerated. The reason is that the platform exposes no declarative
+interface at this tier, which is a platform limit rather than a convenience. Wrapping a shell command
+in a `null_resource` was rejected: it would put something in declared state that does not describe
+the resource and cannot detect its drift, which is worse than an honest exception.
+
+---
+
+## 2026-09-20 — GCP audit logging is scoped to the stores that hold customer data
+
+**What is off by default.** Admin Activity logs are always on and cannot be disabled. Data Access
+logs are off for most services, which means reading every object in the landing bucket and querying
+every row in the dataset would leave no trace. KSI-MLA-LET records logged, monitored and audited as
+three distinct states per source; without Data Access logging the first state would be recorded
+falsely.
+
+**Chosen.** Data Access logging on Cloud Storage, BigQuery and Cloud KMS. Not `allServices`.
+
+**Why not project-wide.** Data Access logging bills by volume, and a blanket configuration logs the
+reads of the audit logs themselves. The three named services are the ones holding customer data or
+controlling access to it. Key use is included deliberately: KSI-SVC-SIN's claim is not only that data
+is encrypted but that decryption is controlled, and a decrypt nobody logged is a control nobody can
+evidence.

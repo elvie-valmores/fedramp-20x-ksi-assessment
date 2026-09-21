@@ -221,3 +221,65 @@ intended.
   impersonation as whoever runs it, and GitHub-to-GCP workload identity
   federation is not built. `drift.yml` says so rather than skipping a job
   silently.
+
+## The GCP analytics pipeline
+
+Applies in the same two phases as the AWS root, and for the same reason:
+`pipeline_image` must be pinned by digest, and a digest cannot be looked up
+for an image that does not exist. The variable has a validation rule that
+rejects a tag reference outright.
+
+```sh
+# Phase 1: keys, landing bucket, dataset, registry, identities
+cd infra/gcp
+terraform apply
+
+# Build and push the analytics image to the Artifact Registry repository
+# that phase 1 created.
+
+# Phase 2: the Cloud Run job and its schedule
+terraform apply -var deploy_pipeline=true -var pipeline_image='<region>-docker.pkg.dev/<project>/fedramp-20x-ksi/analytics@sha256:...'
+```
+
+### Wiring the two clouds together
+
+The pipeline reaches from GCP into the AWS extract bucket. No static
+credential exists on that path; the job exchanges a Google identity token
+for a short-lived AWS session. Establishing it means passing three values
+between the roots, in this order:
+
+```sh
+# 1. GCP first — the service account has to exist before AWS can trust it
+cd infra/gcp && terraform apply
+terraform output -raw pipeline_service_account_unique_id
+
+# 2. AWS creates the role that trusts that specific numeric ID
+cd ../aws
+TF_VAR_gcp_pipeline_sa_unique_id=<the numeric id> terraform apply
+terraform output -raw gcp_pipeline_role_arn
+terraform output -raw extract_bucket_name
+
+# 3. GCP gets told what to assume and what to read
+cd ../gcp
+TF_VAR_aws_extract_role_arn=<the role arn> \
+TF_VAR_aws_extract_bucket=<the bucket name> \
+terraform apply
+```
+
+The AWS trust matches the service account's **numeric unique ID**, not its
+email. An email can be deleted and recreated; the numeric ID never repeats,
+so the trust cannot be re-pointed by creating an account with a familiar
+name.
+
+### Manual steps on the GCP side
+
+Two things are not in declared state, both recorded as exceptions in
+`docs/DECISIONS.md` rather than quietly tolerated:
+
+- **Security Command Center Standard** is activated per project through the
+  console. The provider has a resource for the paid tiers and none for the
+  free one. Project-scope activation also means some detection modules are
+  unavailable, which bounds KSI-SVC-EIS and KSI-IAM-SUS on the GCP side.
+- **The analytics image cannot be built by CI yet.** GitHub-to-GCP workload
+  identity federation is not built, so the image is pushed by hand until it
+  is. The AWS images are built by the pipeline already.
