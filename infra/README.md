@@ -173,3 +173,51 @@ they are what makes KSI-CNA-RNT's "no internet route at all" claim true.
 
 **Destroy it between sessions.** The residual is a few dollars, mostly KMS
 keys and retained snapshots.
+
+## The pipeline
+
+Two workflows in `.github/workflows/`, both authenticating by OIDC. There are
+no AWS access keys anywhere in this project, which is KSI-IAM-SNU's position
+rather than a convenience.
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `build-and-push.yml` | push to `main` under `app/`, or dispatch | scans dependencies, builds both images, signs them keylessly, verifies the signature, emits a change event |
+| `drift.yml` | daily at 07:00 UTC, or dispatch | `terraform plan -detailed-exitcode` against declared state; drift fails the run |
+
+### Repository variables to set
+
+These are GitHub **variables**, not secrets — none of them is sensitive, and
+the role ARNs are useless without the OIDC trust that names this repository
+and branch.
+
+| Variable | Value |
+|---|---|
+| `AWS_BUILD_ROLE` | `terraform output -raw github_build_role_arn` |
+| `AWS_DRIFT_ROLE` | `terraform output -raw github_drift_role_arn` |
+| `TF_STATE_BUCKET` | same bucket as `backend.hcl` |
+| `BILLING_ALERT_EMAIL` | the address the budget alert uses |
+| `APP_DOMAIN` | the application domain, or leave unset |
+
+### The trust is scoped to one branch
+
+Both roles trust exactly `repo:<owner>/<repo>:ref:refs/heads/main`, with
+`StringEquals` rather than `StringLike`. The common form of this pattern uses
+`repo:<owner>/<repo>:*`, which would let a pull request from a fork assume the
+role — the standard way this is exploited. KSI-SVC-VCM's build row 1 bars
+wildcards here for that reason.
+
+A consequence worth knowing: workflows on branches other than `main` cannot
+assume either role, so a pull request will not be able to push images. That is
+intended.
+
+### What the pipeline cannot do yet
+
+- **It cannot apply Terraform.** The drift role can plan and is explicitly
+  denied secret values. Apply remains with a human identity under the dated
+  exception recorded in `docs/DECISIONS.md` (2026-09-19), which closes when
+  KSI-IAM-JIT's elevation workflow lands.
+- **Drift detection covers AWS only.** The GCP root authenticates by
+  impersonation as whoever runs it, and GitHub-to-GCP workload identity
+  federation is not built. `drift.yml` says so rather than skipping a job
+  silently.

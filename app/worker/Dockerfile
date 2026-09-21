@@ -26,6 +26,15 @@ RUN groupadd --gid 10001 app \
 COPY --from=builder /opt/venv /opt/venv
 COPY common/rds-ca-bundle.pem /etc/ssl/rds/rds-ca-bundle.pem
 
+# The commit this image was built from, recorded on the image itself.
+# KSI-CMT-RMV build row 4 requires every image digest be traceable to the
+# commit that produced it; the pipeline also emits SLSA provenance, and this
+# label is the same fact readable with a plain `docker inspect`.
+ARG SOURCE_COMMIT=unknown
+LABEL org.opencontainers.image.revision="$SOURCE_COMMIT" \
+      org.opencontainers.image.source="https://github.com/elvie-valmores/fedramp-20x-ksi-assessment" \
+      org.opencontainers.image.title="fedramp-20x-ksi-worker"
+
 WORKDIR /srv
 COPY common/ ./common/
 COPY worker/main.py ./

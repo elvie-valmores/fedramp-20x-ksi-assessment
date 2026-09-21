@@ -92,9 +92,9 @@ All three need working cloud credentials: an AWS profile, and
 | Collector framework | 3 of 9 mechanisms implemented |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
-| Application environment, AWS | Written and planned; not yet applied |
+| Application environment, AWS | Written; applied once and torn down |
 | Application environment, GCP | Not started |
-| CI/CD pipeline | Not started |
+| CI/CD pipeline | Written, never run — needs the account upgrade first |
 
 Scope reductions are recorded in `docs/DECISIONS.md` as they are made, rather
 than discovered later by a reader.

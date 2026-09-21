@@ -1,0 +1,130 @@
+# Scheduled drift detection across the declared state.
+#
+# KSI-SVC-ACM build row 3: "Scheduled plan in check mode across both clouds.
+# Exit status treated as the drift signal."
+#
+# The mechanism is `terraform plan -detailed-exitcode`, which returns 0 for
+# no changes, 2 for changes present, and 1 for an error. That three-way
+# distinction is the whole point: a run that fails and a run that finds drift
+# are different findings, and collapsing them would mean a broken pipeline
+# reads as a clean environment.
+#
+# This workflow can plan and cannot apply. The drift role holds read-only
+# permissions plus state access, and carries an explicit deny on reading
+# secret values.
+#
+# A declared limitation, recorded here because it is easy to misread the
+# green checkmark: the environment is applied and destroyed per session, so
+# for most of the time there is nothing standing to drift. A clean result
+# when nothing is deployed says the declared state matches an empty
+# environment. That is not the same claim as a continuously running
+# deployment showing no drift, and the job summary says so on every run.
+
+name: drift
+
+on:
+  schedule:
+    # 07:00 UTC daily. The three-day cadence at Class C is the requirement
+    # (VDR-TFR-MVX); checking daily means a drift finding is at most a day
+    # old rather than at most three.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  aws:
+    name: aws declared state
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: assume the drift role
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_DRIFT_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: drift-${{ github.run_id }}
+
+      - name: set up terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.10.5
+          # The wrapper rewrites stdout and, more importantly here, masks
+          # the exit code this job exists to read.
+          terraform_wrapper: false
+
+      - name: initialise
+        working-directory: infra/aws
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=aws/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="use_lockfile=true" \
+            -backend-config="encrypt=true"
+
+      - name: plan in check mode
+        id: plan
+        working-directory: infra/aws
+        env:
+          TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL }}
+          TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
+        run: |
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode -out=/dev/null > plan.txt 2>&1
+          code=$?
+          set -e
+
+          echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          tail -c 60000 plan.txt
+
+          case "$code" in
+            0) echo "result=clean"   >> "$GITHUB_OUTPUT" ;;
+            2) echo "result=drift"   >> "$GITHUB_OUTPUT" ;;
+            *) echo "result=error"   >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Every run records a result, including the clean ones. KSI-MLA-RVL's
+      # position is that absence of a finding is only evidence if the
+      # looking was recorded, and a drift check that logs nothing when it
+      # finds nothing produces no evidence that it ran.
+      - name: record the result
+        if: always()
+        run: |
+          {
+            echo "### AWS drift check"
+            echo ""
+            echo "- result: \`${{ steps.plan.outputs.result }}\` (exit ${{ steps.plan.outputs.exitcode }})"
+            echo "- checked: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`"
+            echo ""
+            echo "A clean result reflects the environment as it stands now."
+            echo "Under apply-and-destroy the environment is frequently torn"
+            echo "down, in which case this confirms declared state matches an"
+            echo "empty environment — not that a running deployment is"
+            echo "undrifted. See docs/DECISIONS.md on the cadence limitation."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Drift fails the run. KSI-SVC-ACM treats exit status as the signal,
+      # so a drift finding that left the workflow green would be a signal
+      # nobody receives.
+      - name: fail on drift or error
+        if: steps.plan.outputs.result != 'clean'
+        run: |
+          echo "::error::drift check returned '${{ steps.plan.outputs.result }}'"
+          exit 1
+
+  # The GCP half of "across both clouds" is deliberately absent rather than
+  # stubbed. The gcp root authenticates by impersonating a service account
+  # as whoever runs it, and no workload identity federation from GitHub to
+  # GCP has been built yet — that is KSI-IAM-SNU's cross-cloud half.
+  #
+  # A job that skipped silently would make this workflow look like it covers
+  # both clouds. It covers one, and this comment is the declaration.
