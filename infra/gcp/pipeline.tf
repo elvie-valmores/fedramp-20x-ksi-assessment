@@ -147,6 +147,16 @@ resource "google_cloud_run_v2_job" "pipeline" {
           name  = "AWS_ROLE_ARN"
           value = var.aws_extract_role_arn
         }
+        # The audience the identity token must carry. This has to equal
+        # what the AWS trust policy pins accounts.google.com:aud to, which
+        # is this service account's numeric unique ID -- not its email.
+        # Passed explicitly rather than derived in the job, because the
+        # two values must agree across two roots and a derivation that
+        # drifts from the policy fails only at run time.
+        env {
+          name  = "GCP_SA_UNIQUE_ID"
+          value = google_service_account.pipeline.unique_id
+        }
         env {
           name  = "AWS_REGION"
           value = "us-east-1"

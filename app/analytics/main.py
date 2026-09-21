@@ -28,7 +28,6 @@ import os
 from datetime import datetime, timezone
 
 import boto3
-import google.auth
 import google.auth.transport.requests
 from google.cloud import bigquery, storage
 from google.oauth2 import id_token as google_id_token
@@ -39,22 +38,30 @@ LOG = logging.getLogger("analytics")
 def aws_session() -> boto3.Session:
     """Exchange a Google identity token for a short-lived AWS session.
 
-    The audience is the service account's own unique ID, which is what the
-    AWS trust policy pins. Using anything else -- a URL, a fixed string --
-    would mean a token minted for some other purpose could be replayed
-    here.
+    The audience is the service account's numeric unique ID, passed in by
+    Terraform, which is what the AWS trust policy pins. Using anything else
+    -- the account email, a URL, a fixed string -- means the token's aud
+    claim does not match the policy condition and the exchange is refused.
     """
     role_arn = os.environ["AWS_ROLE_ARN"]
 
-    credentials, _ = google.auth.default()
+    # The audience, supplied by Terraform from the service account's own
+    # unique ID.
+    #
+    # This must equal what the AWS trust policy pins
+    # accounts.google.com:aud to, exactly. It is read from the environment
+    # rather than derived here -- an earlier version derived it from the
+    # credentials object and got the service account *email*, which the
+    # policy does not match, so every assume-role would have failed with an
+    # access denial that named nothing useful. Deriving a value that has to
+    # agree with a policy in another repository root is how that happens.
+    #
+    # No fallback. A wrong or missing audience should fail here, loudly,
+    # rather than silently attempt a token the policy will reject.
+    audience = os.environ["GCP_SA_UNIQUE_ID"]
+
     request = google.auth.transport.requests.Request()
-
-    # The audience must match what the AWS role's condition expects.
-    audience = credentials.service_account_email if hasattr(
-        credentials, "service_account_email"
-    ) else None
-
-    token = google_id_token.fetch_id_token(request, audience or role_arn)
+    token = google_id_token.fetch_id_token(request, audience)
 
     sts = boto3.client("sts", region_name=os.environ["AWS_REGION"])
     assumed = sts.assume_role_with_web_identity(

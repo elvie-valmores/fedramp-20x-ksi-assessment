@@ -69,14 +69,13 @@ resource "google_kms_crypto_key" "analytics" {
   # The environment is destroyed between sessions and keys are among the
   # things the cost posture deliberately preserves. 30 days is the GCP
   # minimum destroy window and applies if the key is ever removed.
+  #
+  # Deliberately no prevent_destroy lifecycle block. It reads as prudent
+  # and is not: it would make `terraform destroy` fail for the entire
+  # root, blocking teardown of everything else, to guard an operation that
+  # is already reversible -- GCP schedules key destruction rather than
+  # performing it, and the window above is that guard.
   destroy_scheduled_duration = "2592000s" # 30 days
-
-  lifecycle {
-    # Destroying a key makes everything encrypted under it permanently
-    # unreadable. The AWS side gets the same protection from a deletion
-    # window; GCP needs it stated.
-    prevent_destroy = true
-  }
 
   labels = {
     data_class = "analytics"
@@ -88,10 +87,6 @@ resource "google_kms_crypto_key" "artifacts" {
   key_ring                   = google_kms_key_ring.main.id
   rotation_period            = "31536000s"
   destroy_scheduled_duration = "2592000s"
-
-  lifecycle {
-    prevent_destroy = true
-  }
 
   labels = {
     data_class = "artifacts"
