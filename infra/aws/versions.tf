@@ -18,6 +18,12 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    # Holds the disclosure file's expiry as a value that changes on a
+    # declared rotation rather than on every plan. See edge.tf.
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 
   # Bucket, key, region and locking are supplied at `terraform init` time via

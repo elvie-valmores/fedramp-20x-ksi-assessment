@@ -279,7 +279,7 @@ resource "aws_lb_listener" "https" {
   # still available and still the default in places, which is why this is
   # stated.
   ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn = aws_acm_certificate.public.arn
+  certificate_arn = local.listener_certificate_arn
 
   default_action {
     type             = "forward"
@@ -499,4 +499,93 @@ resource "aws_wafv2_web_acl_logging_configuration" "main" {
   }
 
   depends_on = [aws_cloudwatch_log_resource_policy.waf_log_delivery]
+}
+
+
+# --- The vulnerability disclosure file ---
+#
+# KSI-PIY-RVD build row 2: security.txt at the well-known path, carrying
+# contact, policy link, preferred languages and a maintained expiry. The
+# determination treats an expired file as a failure in its own right, on the
+# grounds that the format carries an expiry deliberately and a stale file
+# signals a stale program.
+#
+# Served by the load balancer as a fixed response rather than by the
+# application. Three reasons: the build row is provisioned Terraform rather
+# than CI, the file must be reachable whether or not the application is
+# healthy (a disclosure channel that disappears during an outage is the
+# opposite of the intent), and it keeps a public unauthenticated path out of
+# the application's request handling entirely.
+#
+# Only published when a domain is set. On the load balancer's own AWS
+# hostname the file would be well-formed and pointless, since RVD wants it
+# discoverable on the offering's domain.
+
+# The expiry, as a value that changes on a declared rotation rather than on
+# every plan.
+#
+# The obvious implementation -- timestamp() -- is a trap here. It
+# re-evaluates on every plan, so the resource shows a permanent diff, and
+# KSI-SVC-ACM's drift detection treats a scheduled plan's exit status as the
+# drift signal. A resource that always differs makes that signal permanently
+# positive and therefore useless. time_rotating changes only when the
+# rotation period has actually elapsed.
+resource "time_rotating" "security_txt" {
+  count = var.app_domain == "" ? 0 : 1
+
+  rotation_days = 90
+}
+
+locals {
+  security_contact = coalesce(
+    var.security_contact != "" ? var.security_contact : null,
+    var.app_domain != "" ? "mailto:security@${var.app_domain}" : null,
+    "unset",
+  )
+
+  # RFC 9116 orders nothing, but Contact and Expires are the required
+  # fields. Policy is omitted entirely when no URL is supplied, rather than
+  # pointing at a page that does not exist -- a dangling policy link is
+  # worse than an absent one, since it implies a published policy.
+  security_txt = var.app_domain == "" ? "" : join("\n", compact([
+    "Contact: ${local.security_contact}",
+    "Expires: ${time_rotating.security_txt[0].rotation_rfc3339}",
+    "Preferred-Languages: en",
+    var.security_policy_url != "" ? "Policy: ${var.security_policy_url}" : "",
+    "",
+    "# Published from declared state. The expiry rotates every 90 days on",
+    "# apply; see infra/aws/edge.tf and docs/DECISIONS.md (2026-09-19).",
+    "",
+  ]))
+}
+
+resource "aws_lb_listener_rule" "security_txt" {
+  count = var.app_domain == "" ? 0 : 1
+
+  listener_arn = aws_lb_listener.https.arn
+
+  # Low priority number means evaluated early. Nothing else competes for
+  # this path, but the well-known path should never fall through to the
+  # application by accident.
+  priority = 10
+
+  action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      status_code  = "200"
+      message_body = local.security_txt
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/.well-known/security.txt"]
+    }
+  }
+
+  tags = {
+    Name = "fedramp-20x-ksi-security-txt"
+  }
 }

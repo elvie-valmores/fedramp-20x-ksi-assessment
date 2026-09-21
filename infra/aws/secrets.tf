@@ -25,17 +25,22 @@
 # terminate at the load balancer. That needs a certificate the task can
 # serve.
 #
-# This is a self-signed certificate rather than an ACM-issued one, and the
-# reason is a hard constraint rather than a preference: ACM issues public
-# certificates only after validating control of a domain name, and this
-# persona owns no domain. AWS Private CA would issue a real internal
-# certificate and costs roughly 400 USD per month, which is more than three
-# times the entire environment's standing cost.
+# This certificate is self-signed, and the 2026-09-19 decision records why
+# that is the right answer rather than a concession: the load balancer does
+# not validate the certificate its targets present, and AWS documents that
+# load-balancer-to-target traffic inside a VPC is authenticated at the packet
+# level regardless. A trusted chain here would be verified by nothing in the
+# path. Peer authenticity on this hop is established by platform identity
+# under KSI-SVC-VCM, not by this certificate.
 #
-# What is lost is stated rather than glossed: KSI-SVC-ASM's build row 4
-# wants ACM-issued certificates with automatic renewal, and a self-signed
-# certificate has neither a chain of trust nor managed renewal. Recorded in
-# docs/DECISIONS.md.
+# It carries a one-year validity, and under apply-and-destroy it is
+# regenerated whenever the environment is rebuilt. The seam is the same one
+# the disclosure file's expiry carries: a deployment left standing for over a
+# year without reapplying would serve an expired certificate. The mechanism
+# is correct; the environment's uptime pattern is what bounds it.
+#
+# The load balancer's public certificate is a different certificate entirely
+# and is ACM-issued -- see below.
 resource "tls_private_key" "task" {
   algorithm   = "ECDSA"
   ecdsa_curve = "P256"
@@ -90,9 +95,34 @@ resource "aws_secretsmanager_secret_version" "task_tls" {
   })
 }
 
-# The load balancer needs the same certificate in ACM to terminate the
-# public side. Imported rather than issued, for the reason above.
+# --- The load balancer's public certificate ---
+#
+# Two possible sources, and which one is used depends on whether a domain
+# has been chosen.
+#
+# With a domain: the real certificate, issued by ACM through DNS validation
+# and held in infra/bootstrap so that tearing this environment down does not
+# destroy something a human validated by hand. Looked up rather than passed
+# between roots, so the two stay decoupled.
+#
+# Without a domain: the self-signed certificate above, imported. This is the
+# fallback the project ran on before a domain was available, kept so the
+# environment remains applyable while the domain work is outstanding rather
+# than blocking every apply on it.
+data "aws_acm_certificate" "issued" {
+  count = var.app_domain == "" ? 0 : 1
+
+  domain   = var.app_domain
+  statuses = ["ISSUED"]
+
+  # Most recent, because renewal issues a new certificate alongside the old
+  # one and both are ISSUED for a period.
+  most_recent = true
+}
+
 resource "aws_acm_certificate" "public" {
+  count = var.app_domain == "" ? 1 : 0
+
   private_key      = tls_private_key.task.private_key_pem
   certificate_body = tls_self_signed_cert.task.cert_pem
 
@@ -101,6 +131,15 @@ resource "aws_acm_certificate" "public" {
   }
 
   tags = {
-    Name = "fedramp-20x-ksi-public"
+    Name = "fedramp-20x-ksi-public-fallback"
   }
+}
+
+locals {
+  # What the listener actually serves.
+  listener_certificate_arn = (
+    var.app_domain == ""
+    ? aws_acm_certificate.public[0].arn
+    : data.aws_acm_certificate.issued[0].arn
+  )
 }

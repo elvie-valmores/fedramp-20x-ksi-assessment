@@ -4010,3 +4010,395 @@ deliberately does not, and is Object Locked, because destroying that one should 
 **Residual after teardown.** Four customer-managed keys in `PendingDeletion` for seven days, at
 roughly one dollar per key per month prorated. No load balancer, no endpoints, no database, no
 non-default VPC.
+
+---
+
+## 2026-09-19 — Resolved: the account moves to the Paid plan, no determinations change
+
+**Supersedes the open question recorded earlier today.**
+
+**What was verified.** AWS replaced its new-account model on 15 July 2025. Accounts created after
+that date choose a Free plan or a Paid plan at signup, and the Free plan restricts a subset of
+services. GuardDuty, Inspector and Security Hub short-term trials are among them, available only on
+the Paid plan. The `SubscriptionRequiredException` responses were the restriction working as
+designed, not a capability the architecture lacks.
+
+**What upgrading actually costs: nothing.** AWS's own Free Tier FAQ states it will not charge the
+payment method until the account upgrades, that the payment method does not need re-entering, and
+that remaining Free Tier credits automatically apply to future bills until they expire twelve months
+after account creation. This account was created 2026-07-31, so credits run to roughly 2027-07-31
+and will absorb most of the early build months.
+
+**Chosen: Option A.** Move to the Paid plan. All three services then work as designed and no
+determination changes. KSI-SVC-EIS keeps both of its finding sources, KSI-CNA-IBP keeps its AWS
+benchmark basis, KSI-SCR-MON keeps dependency scanning, KSI-IAM-SUS keeps its detection source, and
+the objective register keeps its 7-day retention declaration.
+
+**Why this is the faithful answer and not the expensive one.** A two-person team running a production
+SaaS and pursuing FedRAMP certification is not on a free-tier account. Being on one was the
+unrealistic detail, not paying to leave it. Since upgrading is free and credits carry forward, the
+usual tension between faithful and cheap does not arise here.
+
+**Why Option C was rejected despite being reasonable.** Substituting CI dependency scanning plus
+basic ECR scan-on-push for Inspector would have covered much of the ground. But it leaves no
+substitute for Security Hub's CIS benchmark — an open-source scanner asserting a benchmark is this
+project grading itself, materially weaker than a managed service doing it — and no substitute for
+provider-native threat detection, which is exactly what KSI-CNA-EIS's reading of "assessment by
+managed services with the collector meta-assessing them" depends on. Taking a large, avoidable scope
+cut to avoid a cost that turns out to be zero would have been the wrong trade.
+
+**Cost effect.** Security Hub Essentials is priced per resource unit, Inspector per image scan at
+roughly nine cents initial and a cent per rescan, GuardDuty per event volume. With no EC2 instances,
+two repositories and low traffic, that is roughly 3 to 8 USD per month on top of the existing
+estimate. The apply-and-destroy model and the 115 to 125 USD standing figure are unchanged.
+
+---
+
+## 2026-09-19 — A deadline the error message did not reveal
+
+**Found while verifying the plan question.** The Free plan lasts at most six months, or until the
+credits are exhausted, whichever comes first. If the account has not upgraded by the end of that
+period, AWS closes it after a grace period and the resources are deleted.
+
+**This account was created 2026-07-31**, so the six-month clock runs out around 2027-01-31.
+
+**Why it matters more than the blocked services did.** Everything the cost posture deliberately
+preserves across teardowns lives in this account: the Terraform state backend, the evidence storage,
+the Object Locked log store, the database snapshots and the KMS keys. Account closure takes all of
+it, including the log store that compliance-mode Object Lock was specifically chosen to make
+undeletable.
+
+**So the upgrade is not optional and is not only about the three services.** It is the condition for
+the account continuing to exist. The service restrictions surfaced the deadline early, which is the
+only fortunate part.
+
+**Recorded because the build session could not have found this.** The API returned a service-level
+rejection; the account lifecycle behind it is not visible in that error. Verifying what "upgrade your
+account plan" actually meant is what surfaced it, and that verification happened only because the
+question was carried back to the design conversation rather than settled at the keyboard.
+
+---
+
+## 2026-09-19 — Upgrade before creating the Organization, not by creating it
+
+**The trap.** AWS's Free Tier FAQ states that if the account upgrades to the Paid plan *by joining an
+AWS Organization or setting up a Control Tower landing zone*, the Free Tier credits expire
+immediately and the account becomes ineligible to earn more.
+
+**Why this project is exposed to it specifically.** IAM Identity Center requires AWS Organizations,
+and Identity Center is load-bearing for the identity architecture — KSI-IAM-SNU, APM, AAM, ELP and
+JIT all rest on it. Creating the Organization is therefore a certainty, not an option.
+
+**Chosen order.** Upgrade to the Paid plan through the Billing console first, as a deliberate
+standalone action. Create the Organization afterwards.
+
+**What the wrong order costs.** Up to 200 USD in credits, immediately, for no benefit. Nothing about
+the error would explain it, and the credits would simply be gone.
+
+**Note for the build.** This is an ordering constraint on a manual console action, not something
+Terraform can enforce. It belongs in the runbook rather than in code.
+
+---
+
+## 2026-09-19 — The certificate problem resolves through a domain the project already has
+
+**The constraint as recorded.** The task-side TLS certificate is self-signed, because ACM issues
+public certificates only after validating domain control and the persona owns no domain, while AWS
+Private CA is roughly 400 USD per month. The internal hop therefore had confidentiality but no chain
+of trust and no managed renewal, against KSI-SVC-ASM build row 4.
+
+**What changes it.** A personal domain is already owned and managed at Cloudflare. Pointing a
+subdomain at this project allows ACM to issue a real certificate through DNS validation, at no cost.
+
+**Chosen.** Use a subdomain of the existing domain. ASM build row 4 is then satisfied properly —
+managed issuance, automatic renewal, a real chain of trust — rather than carrying a self-signed
+workaround as a declared limitation.
+
+**A second indicator benefits.** KSI-PIY-RVD requires a `security.txt` served at the well-known path
+on the offering's domain, along with a monitored contact. Without a domain that determination had
+nowhere real to publish. With one, the disclosure program becomes genuinely discoverable in the way
+the format expects, and the expiry and contact-liveness checks have a real target.
+
+**The 400 USD Private CA figure never applies.** It was the cost of solving this the hard way, and
+the hard way is not needed.
+
+---
+
+## 2026-09-19 — What the first apply actually validated
+
+**Worth recording separately from the failures, because it is the more significant result.**
+
+`terraform plan` validates almost nothing about whether AWS accepts a configuration. Policy documents
+in particular — IAM policies, VPC endpoint policies, KMS key policies, WAF rule sets — are only
+evaluated at apply time. All of them were accepted on first contact.
+
+Specifically validated: the VPC with no internet route on the private tiers across three tiers with
+distinct route tables; all seven endpoints, six interface and one S3 gateway, each with a restrictive
+principal-and-action policy; the load balancer with a TLS 1.3/1.2 listener and HTTP redirect; WAF
+with three managed rule groups, a rate-based rule and logging; the ECS cluster, four customer-managed
+keys with rotation, two registries with immutable tags, Secrets Manager, and flow logs.
+
+**So the network design, the segmentation model, the key model and the edge design are validated
+against the real platform**, not merely against a plan. The four failures were account-plan
+restrictions, not architectural faults, and the distinction matters: one is a setting, the other
+would have been a redesign.
+
+**The two bugs caught in review before the apply are the more instructive part.** An EventBridge rule
+targeting SNS with no topic policy, meaning findings would never have been delivered, and WAF logging
+with no CloudWatch Logs resource policy, meaning blocked-request records would never have been
+written. Both were configurations that apply cleanly, report healthy, and produce no evidence. That
+is the exact failure mode this project has been built to catch, and it appeared twice in the first
+substantial apply.
+
+---
+
+## 2026-09-19 — Task-side TLS stays self-signed, because nothing would validate a real certificate
+
+**The question.** KSI-SVC-ASM build row 4 wants managed certificates with automatic renewal. The
+load balancer listener is solved by a DNS-validated public certificate at no cost. The task-side
+certificate is not: a standard public certificate cannot be exported, and the container serves TLS
+itself on the internal hop because KSI-SVC-SIN requires TLS continued to the task rather than
+terminated at the load balancer. Exportable public certificates exist and cost per FQDN at issuance
+and again at renewal.
+
+**What settles it.** AWS documents that the load balancer establishes TLS to its targets using
+whatever certificate is installed there and **does not validate it** — self-signed or expired
+certificates work. It goes further: because the load balancer and its targets are both inside a VPC,
+that traffic is authenticated at the packet level and is not at risk of man-in-the-middle or
+spoofing even when the target certificate is not valid.
+
+**Chosen.** Self-signed on the task side.
+
+**Why buying the certificate would have been worse than not buying it.** An exportable certificate
+would cost money at issuance and at every renewal, and would require a rotation workflow, because
+the platform renews the certificate but the exported copy on the task does not update itself — a
+task would serve an expired certificate after 395 days. All of that to obtain authenticity that the
+only client on the hop does not check. Paying for a property nothing verifies is worse than
+declaring its absence.
+
+**How the limitation is stated.** Not as "a managed certificate was unaffordable." The hop carries
+confidentiality; authenticity on it rests on VPC packet-level authentication and network isolation,
+which is the platform's own documented behaviour, and a trusted chain would not be verified by
+anything in the path. Peer authenticity for this architecture is established by platform identity
+under KSI-SVC-VCM, not by certificates on this hop.
+
+---
+
+## 2026-09-19 — The domain is DNS-only, not proxied
+
+**The question.** Whether the application subdomain sits behind the DNS provider's proxy.
+
+**Chosen.** DNS-only.
+
+**Why.** Proxied mode places the DNS provider inside the offering boundary and terminates TLS there,
+which disturbs three determinations at once: KSI-CNA-RNT's versioned list of resources permitted
+inbound from the internet stops reading "the load balancer only," the provider becomes a third party
+under KSI-CNA-IBP's register, and KSI-SVC-VCM's path register gains a hop. What it buys is web
+application firewalling and denial-of-service protection that this architecture already has from WAF
+and Shield Standard, both already determined.
+
+Three determinations disturbed for capability already present is a poor trade. Recorded as a
+decision rather than left as the provider's default, because the default is proxied and silently
+accepting it would have changed the boundary without anyone deciding to.
+
+---
+
+## 2026-09-19 — The disclosure file's expiry is generated at apply time
+
+**The problem.** KSI-PIY-RVD treats an expired `security.txt` as a failure, on the grounds that the
+format carries an expiry deliberately and a stale file signals a stale program. Nothing in the
+design reissued it, so the check would eventually fail against a file nobody was maintaining.
+
+**Chosen.** Compute the expiry from the apply timestamp in declared state. Every apply refreshes it.
+
+**Why this rather than a scheduled job.** Under apply-and-destroy the environment is reapplied
+whenever it is used, so the file self-maintains while the project is active, with no new scheduled
+component and no new failure mode. A scheduled reissue job would be machinery that exists only to
+maintain a single text file.
+
+**The seam, declared.** Apply frequency is not a reliable expiry driver. A continuously running
+deployment would need a scheduled reissue, because an environment that stays up for a year without
+reapplying would let the file lapse. Same shape as the 3-day cadence limitation: the mechanism is
+correct and the environment's uptime pattern is what bounds it.
+
+---
+
+## 2026-09-19 — Image signing is keyless, and enforcement is sequence-based with the bypass closed by IAM
+
+**Mechanism chosen: keyless signing with the pipeline's federated identity**, rather than a managed
+signing service with signing profiles. Keyless means no signing key exists to store, protect or
+rotate, which matches the position established under KSI-IAM-SNU rather than reopening it. A managed
+signing service would introduce key material and a rotation obligation for no gain here.
+
+**The enforcement problem, stated plainly.** The container service has no admission control for
+image signatures. A pipeline gate satisfies KSI-SVC-VRI build row 3 in sequence — verification
+happens before deployment — but it does not enforce at the platform, and a direct service update
+bypasses it.
+
+**How the gap is narrowed rather than merely declared.** KSI-CMT-RMV already requires that only the
+pipeline principal may push images or apply declared state. Extending that to service updates by IAM
+policy means the bypass requires holding the pipeline principal, which is itself the thing being
+protected. The remaining exposure is a compromised pipeline principal, which is the same exposure
+every other pipeline-enforced control in this project carries.
+
+**Declared as:** verification is sequence-enforced rather than admission-enforced, because the
+platform provides no admission control, and the bypass path is closed by identity policy instead.
+That is honest and it is materially different from leaving the bypass open.
+
+---
+
+## 2026-09-19 — Pipeline-only apply waits, as a dated exception rather than a blocked build
+
+**The conflict.** KSI-CMT-RMV requires apply to be permitted only to the pipeline principal,
+enforced by role rather than convention. Today a human identity applies. Moving the human path to
+KSI-IAM-JIT's elevation workflow is the design's answer, and that workflow is not built.
+
+**Why not simply build JIT first.** The dependency is circular. The pipeline is needed to build
+images, images are needed for the application environment, and JIT's own state machine would be
+deployed through the pipeline. Blocking the pipeline on JIT blocks JIT.
+
+**Chosen.** The human identity retains apply as a recorded entry in the exception register, carrying
+a reason and an explicit end condition: the exception closes when KSI-IAM-JIT build step 5 lands.
+
+**Why this is not a quiet compromise.** The exception register already exists as a mechanism, used
+the same way for benchmark exceptions under KSI-CNA-IBP and accepted risks under KSI-SCR-MIT, and
+every entry in it carries a reason and a review date. This project has consistently refused undated
+exceptions and consistently accepted dated ones with a named closing condition. This is the latter.
+
+---
+
+## 2026-09-19 — Cloud Identity gets its own subdomain, and deliberately not the apex
+
+**Why this needed care.** The identity architecture places Google Cloud Identity as the workforce
+identity provider, which requires a verified domain. Verifying a domain for Cloud Identity puts
+Google in control of identity for addresses on it.
+
+**The conflict that makes the apex wrong.** The apex of the available domain is in use for a
+personal email migration away from Google. Verifying it for Cloud Identity would work directly
+against that, and would entangle a portfolio project's identity boundary with personal
+correspondence.
+
+**Chosen.** A dedicated subdomain for Cloud Identity, distinct from both the apex and the
+application subdomain.
+
+**Sequencing consequence.** Five indicators rest on this identity architecture — KSI-IAM-SNU, APM,
+AAM, ELP and JIT — and none can be built against a personal account rather than a Cloud Identity
+tenant. This therefore belongs before or alongside the pipeline work, not after it.
+
+---
+
+## 2026-09-19 — Repository events reach the corpus through the pipeline's existing identity
+
+**The question.** KSI-CMT-LMC requires commit and pull request events delivered to the central store
+and normalized. The mechanism was unspecified.
+
+**Rejected: a webhook into an API endpoint.** It creates a new public ingress path into the account
+and requires a shared webhook secret, which is a new credential in KSI-SVC-ASM's scope and a new
+rotation obligation — both for a delivery mechanism.
+
+**Chosen.** The pipeline emits events to the event bus using the federated identity it already
+holds. No new ingress, no new secret, and it reuses federation already determined under KSI-IAM-SNU
+and KSI-SVC-VCM rather than introducing a parallel path.
+
+**The seam, declared.** This captures events that trigger a workflow run, not every repository
+event. Branch protection already routes changes through pull requests, so coverage is good rather
+than total, and the difference is stated rather than assumed away.
+
+---
+
+## 2026-09-19 — External feed sources named
+
+**Why naming them matters.** KSI-SCR-MON's determination turns on advisories being correlated
+against the dependency inventory automatically rather than merely subscribed to. A determination
+that cites unnamed feeds cannot be built or checked.
+
+**Named.** OSV for ecosystem advisories, with the GitHub Advisory Database as a second source, since
+the language ecosystems in the pinned manifests are covered by both. Vendor security bulletins for
+provider-side advisories. `endoflife.date` for the published support windows that KSI-SCR-MIT's
+end-of-support checking compares against.
+
+**One left open deliberately.** KSI-SCR-MON build row 4 covers service change and deprecation
+notifications, on the reading that a changed provider default is a vulnerability under the statutory
+definition and produces no advisory. The obvious source is the provider's health API, and full
+programmatic access to it has historically required a paid support plan rather than the basic tier.
+**Verify against current documentation before designing around it.** If it does require a paid plan,
+that is a cost decision of the same kind as the account plan question resolved today, and it should
+be decided rather than assumed in either direction.
+
+---
+
+## 2026-09-19 — Certificate validation records are created by hand, not by a provider plugin
+
+**The question.** Whether DNS validation records for certificate issuance are created manually or
+through the DNS provider's Terraform integration.
+
+**Chosen.** Manually, for now.
+
+**Why.** The integration requires an API token for the DNS provider. That is a new credential inside
+KSI-SVC-ASM's scope with its own rotation obligation, and it places a third party inside the
+Terraform execution path, which reaches KSI-CNA-IBP's third-party register and KSI-SCR-MON's
+monitoring scope. Real scope expansion across three determinations, for an action performed once per
+certificate.
+
+**Revisit condition.** If certificate churn makes manual validation genuinely painful, the trade
+changes and this should be reconsidered as a decision rather than drifting into it.
+
+---
+
+## 2026-09-20 — The application certificate is issued in bootstrap, not in the application root
+
+**A build decision following from a design one.** The 2026-09-19 entry chose manual DNS validation
+over the provider's Terraform integration, to avoid a third-party API token inside the Terraform
+execution path. It did not say which root issues the certificate, and the answer is not the obvious
+one.
+
+**Why not the aws root.** That root is destroyed between sessions. A certificate declared there dies
+with it, and every rebuild would need a human to create validation records and wait for issuance
+before the environment could come up at all. Manual validation and apply-and-destroy are individually
+fine and together turn a five-minute apply into a manual gate, every session.
+
+**Chosen.** Issue it in `infra/bootstrap`, which is applied once and rarely touched, and have the aws
+root find it with a data source. The certificate then outlives the environment that consumes it, and
+the consuming root cannot destroy it. ACM charges nothing to hold a certificate, so persisting it
+carries no standing cost.
+
+**Deliberately no validation resource.** `aws_acm_certificate_validation` blocks the apply until
+issuance completes, which with hand-created records means the apply hangs while someone opens a
+browser. The records are emitted as an output instead and issuance proceeds asynchronously.
+
+**The renewal trap, recorded because it is silent.** ACM re-validates through the same DNS records
+when it auto-renews. Deleting them after issuance — the natural instinct, since they look like
+one-time setup — breaks renewal roughly thirteen months later with no warning. The output says so
+and so does `infra/README.md`.
+
+**A fallback is kept, and is not an end state.** With no domain set the load balancer still imports
+the self-signed certificate and the disclosure file is not published, so the environment remains
+applyable while the domain work is outstanding. That is scaffolding for an unfinished migration, not
+a supported configuration, and it is stated as such in the README.
+
+---
+
+## 2026-09-20 — The disclosure file's expiry rotates, rather than tracking every apply
+
+**Refines the 2026-09-19 decision** to compute `security.txt`'s expiry from the apply timestamp.
+
+**The trap in the obvious implementation.** `timestamp()` in Terraform re-evaluates on every plan, so
+any resource carrying it shows a permanent diff. KSI-SVC-ACM's drift detection is a scheduled plan in
+check mode whose exit status *is* the drift signal. A resource that always differs makes that signal
+permanently positive, which does not merely add noise — it removes the project's ability to
+distinguish drift from its own configuration. One indicator's implementation detail would have
+quietly disabled another indicator's evidence.
+
+**Chosen.** A rotating timestamp with a ninety-day period. The value changes only when the period has
+actually elapsed, so plans are clean in between and the expiry still moves forward on its own.
+
+**Same intent, kept.** The 2026-09-19 reasoning holds: no new scheduled component exists only to
+maintain one text file, and the file self-maintains while the project is active. The declared seam is
+unchanged and is now precise rather than approximate — a deployment left standing more than ninety
+days without reapplying would let the file lapse.
+
+**Served by the load balancer, not the application.** The build row is provisioned Terraform rather
+than CI; the disclosure channel should survive an application outage, since a contact route that
+disappears exactly when something is wrong inverts the intent; and it keeps an unauthenticated public
+path out of the application's request handling. A policy link is omitted entirely when no URL is
+supplied, because a dangling link implies a published policy that does not exist.
