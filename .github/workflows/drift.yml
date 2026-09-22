@@ -78,8 +78,36 @@ jobs:
           TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL }}
           TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
         run: |
+          # Scoped to the resources that persist between sessions.
+          #
+          # The application environment is destroyed between sessions by
+          # design, so an unscoped plan proposes to add everything that is
+          # declared but not standing -- exit 2, which this job treats as
+          # drift. That failed every scheduled run and made the signal
+          # unreadable. boundary.py owns the split and teardown.sh consumes
+          # the other half of it.
+          # A read loop rather than `mapfile`, which needs bash 4. The
+          # runners have bash 5, but this also runs on a macOS workstation
+          # where bash is 3.2, and a step that cannot be rehearsed locally
+          # is a step that gets debugged in CI.
+          targets=()
+          while IFS= read -r line; do
+            targets+=("$line")
+          done < <(./boundary.py --persistent --target-flags)
+
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "::error::persistence boundary returned nothing; state may be empty"
+            exit 1
+          fi
+
+          echo "checking ${#targets[@]} persistent resources"
+
+          # Deliberately not xargs: it collapses the command's exit status
+          # into 123 for anything between 1 and 125, and the exit status is
+          # the entire signal this job exists to read.
           set +e
-          terraform plan -input=false -no-color -detailed-exitcode -out=/dev/null > plan.txt 2>&1
+          terraform plan -input=false -no-color -detailed-exitcode -out=/dev/null \
+            "${targets[@]}" > plan.txt 2>&1
           code=$?
           set -e
 
@@ -105,11 +133,15 @@ jobs:
             echo "- result: \`${{ steps.plan.outputs.result }}\` (exit ${{ steps.plan.outputs.exitcode }})"
             echo "- checked: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`"
             echo ""
-            echo "A clean result reflects the environment as it stands now."
-            echo "Under apply-and-destroy the environment is frequently torn"
-            echo "down, in which case this confirms declared state matches an"
-            echo "empty environment — not that a running deployment is"
-            echo "undrifted. See docs/DECISIONS.md on the cadence limitation."
+            echo "Scope: the resources that persist between sessions — the"
+            echo "log store, Athena, Glue, CloudTrail, the Config recorder,"
+            echo "both Lambdas and the budget guardrail."
+            echo ""
+            echo "The application environment is NOT covered. It is destroyed"
+            echo "between sessions by design, so it is checked only while it"
+            echo "stands. A clean result here says the persistent resources"
+            echo "match what is declared; it says nothing about a running"
+            echo "deployment. See docs/DECISIONS.md, 2026-09-22."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Drift fails the run. KSI-SVC-ACM treats exit status as the signal,

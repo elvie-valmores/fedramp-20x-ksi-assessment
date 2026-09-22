@@ -4776,3 +4776,44 @@ environment is up — which should be stated plainly under KSI-SVC-ACM rather th
 
 **Whatever is chosen, the workflow's summary text must be corrected.** It currently tells the reader
 something the mechanism cannot do.
+
+---
+
+## 2026-09-22 — Resolved: drift is scoped to the persistence boundary
+
+**Resolves the open question recorded earlier today.** Option 1 chosen: the daily plan is scoped to
+the resources that persist between sessions.
+
+**What KSI-SVC-ACM now claims.** That the persistent resources — the Object Locked log store, Athena,
+Glue, CloudTrail, the Config recorder, both Lambdas and the budget guardrail — are checked daily
+against declared state, and that the application environment is checked only while it stands. That is
+narrower than the previous claim and, unlike it, true. It should be stated in the determination
+rather than left to be inferred from the workflow.
+
+**One boundary, two consumers, one implementation.** `infra/aws/boundary.py` derives both halves from
+the five-file split and is consumed by `teardown.sh --ephemeral` and by `drift.yml --persistent`. A
+boundary implemented twice is a boundary that diverges, and the two failure modes are silent in
+opposite directions: a resource the teardown forgets bills forever, and a resource the drift check
+forgets stops being watched. Neither would report itself.
+
+**Verified against the condition it exists for**, rather than reasoned about — which is the mistake
+the original summary text made. Run locally against the torn-down environment:
+
+```
+unscoped:  terraform plan -detailed-exitcode  ->  2   (would fail the run)
+scoped:    terraform plan -detailed-exitcode  ->  0   ("No changes")
+```
+
+**Two implementation notes worth keeping**, both of which would have produced a control that looked
+right and did not work:
+
+- **Not `xargs`.** It collapses the command's exit status into 123 for anything between 1 and 125,
+  and the exit status is the entire signal this job reads. Drift would have been reported as error,
+  permanently.
+- **Not `mapfile`.** It needs bash 4, and while the runners have bash 5, the workstation has 3.2. A
+  step that cannot be rehearsed locally is a step that gets debugged in CI, which is how both of
+  today's other faults survived as long as they did. A portable read loop runs in both places and was
+  tested in both.
+
+**The summary text is corrected.** It now states the scope and says plainly that the application
+environment is not covered, instead of describing an outcome the mechanism cannot produce.

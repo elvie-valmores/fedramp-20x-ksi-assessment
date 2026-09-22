@@ -19,22 +19,11 @@
 # record, it carries Object Lock in compliance mode, and it is meant to
 # outlive every rebuild. So the teardown is scoped with -target instead.
 #
-# THE PERSISTENCE BOUNDARY IS THE FILE SPLIT
+# THE PERSISTENCE BOUNDARY
 #
-# Five files hold everything that survives a teardown, and -- verified, not
-# assumed -- nothing in them references a resource declared outside them.
-# The evidence layer has no dependency on the application environment, which
-# is what makes a clean scoped teardown possible at all:
-#
-#   log_corpus.tf         the Object Locked store, Athena, Glue
-#   log_normalization.tf  the OCSF normalization Lambda
-#   detection.tf          the detection query Lambda and its alarms
-#   inventory.tf          CloudTrail and the Config recorder
-#   billing.tf            the budget guardrail
-#
-# Everything else is the application environment and is rebuilt on the next
-# apply. Derive the target list from that split rather than maintaining a
-# hand-written list that silently rots as resources are added.
+# Five files hold everything that survives; everything else is rebuilt on the
+# next apply. `boundary.py` derives both halves from that split and is shared
+# with the drift workflow, which checks the half this script does not touch.
 #
 # WHAT IT LEAVES BEHIND
 #
@@ -47,46 +36,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-KEEP="log_corpus.tf log_normalization.tf detection.tf inventory.tf billing.tf"
-
 : "${TF_VAR_billing_alert_email:?set TF_VAR_billing_alert_email}"
 
 echo "==> deriving the target list from the persistence boundary"
 
-targets=$(python3 - "$KEEP" <<'PY'
-import glob, re, subprocess, sys
-
-keep = set(sys.argv[1].split())
-
-# (type, name) -> declaring file
-declared = {}
-for path in glob.glob("*.tf"):
-    for m in re.finditer(r'^resource\s+"([^"]+)"\s+"([^"]+)"', open(path).read(), re.M):
-        declared[(m.group(1), m.group(2))] = path
-
-addresses = subprocess.run(
-    ["terraform", "state", "list"], capture_output=True, text=True, check=True
-).stdout.split()
-
-unmapped, targets = [], []
-for address in addresses:
-    if address.startswith("data."):
-        continue
-    m = re.match(r"^([a-z0-9_]+)\.([A-Za-z0-9_-]+)", address)
-    path = declared.get((m.group(1), m.group(2))) if m else None
-    if path is None:
-        unmapped.append(address)
-    elif path not in keep:
-        targets.append(address)
-
-# A resource in state that no .tf declares is drift, an orphan, or a rename.
-# Guessing which is not this script's job -- stop and let a human look.
-if unmapped:
-    sys.exit("unmapped resources in state, refusing to guess:\n  " + "\n  ".join(unmapped))
-
-print("\n".join(targets))
-PY
-)
+# boundary.py owns the split, because drift.yml consumes the other half of
+# it and the two must agree. See the header of that file.
+targets=$(./boundary.py --ephemeral)
 
 count=$(printf '%s\n' "$targets" | grep -c . || true)
 if [[ "$count" -eq 0 ]]; then
@@ -102,7 +58,7 @@ xargs -0 terraform plan -destroy -input=false -out=.teardown.tfplan < .teardown.
 
 echo
 echo "==> review the plan above. Nothing from these files should appear:"
-echo "    ${KEEP}"
+echo "    $(./boundary.py --files)"
 echo
 read -r -p "apply this teardown? [y/N] " reply
 [[ "$reply" == "y" || "$reply" == "Y" ]] || { echo "aborted"; rm -f .teardown.args .teardown.tfplan; exit 1; }
