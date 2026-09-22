@@ -82,8 +82,13 @@ applied. The `cloudkms`, `run`, `artifactregistry` and `cloudscheduler` APIs are
 
 **What was proven this session.** Phase 1 verified live before teardown: inventory self-test passing
 on both clouds including its negative control, 5 of 5 collector checks, no internet route on the
-private tiers, database private and encrypted with IAM auth. Then `drift` verified end to end — exit
-0, "No changes" — which it had never done before.
+private tiers, database private and encrypted with IAM auth.
+
+`drift` now works, which it never had. It is scoped to the persistence boundary via
+`infra/aws/boundary.py` and verified green **against a torn-down environment** — 43 persistent
+resources, "No changes", exit 0 — which is the condition every scheduled run between sessions faces.
+The OIDC provider and drift role live in `pipeline_identity.tf` on the persistent side, so the
+identity that runs the check no longer goes down with the environment it is not checking.
 
 **What was fixed this session.** Two controls that were configured, deployed and completely
 non-functional: the GitHub OIDC trust pinned the legacy subject claim, and behind it the drift role
@@ -105,9 +110,11 @@ phase 2 rather than tearing down in between.
 
 | Question | Where |
 |---|---|
-| Daily drift fails whenever the environment is down. Scope it to the persistent set? | 2026-09-22 entry, recommendation on record |
 | Move `registry.tf` and the `artifacts` key into the persistent set so images survive teardown? | below |
 | The analytics image has no build path at all | below |
+
+*(The drift-versus-teardown question raised earlier the same day is closed — drift is now scoped to
+the persistence boundary and verified green against a torn-down environment.)*
 
 **On registry persistence.** ECR repositories and the artifacts key cost roughly a dollar a month and
 are currently destroyed every session, so every session that wants phase 2 must rebuild images first.
