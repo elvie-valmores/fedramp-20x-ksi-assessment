@@ -56,8 +56,12 @@ Gathers the evidence the assessment needs. Roughly 380 pieces of evidence
 reduce to nine ways of gathering it, so the framework implements the nine
 mechanisms and each individual check is a JSON file in `collector/checks/`.
 
-Three mechanisms are implemented. The other six are registered but raise a
+Four mechanisms are implemented. The other five are registered but raise a
 clear error explaining what they are waiting on.
+
+`self_test.py` runs each assertion twice — against a workflow that should
+satisfy it and one that should not — because a check that cannot fail is not
+a check.
 
 ## Running it
 
@@ -89,7 +93,7 @@ All three need working cloud credentials: an AWS profile, and
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 3 of 9 mechanisms implemented |
+| Collector framework | 4 of 9 mechanisms implemented, all self-tested |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 applied and verified 2026-09-22; torn down after. Phase 2 needs images |

@@ -1,4 +1,4 @@
-"""The six mechanisms that have no implementation yet.
+"""The mechanisms that have no implementation yet.
 
 Each one waits on infrastructure or tooling that does not exist in this
 repo yet. They are registered anyway so that routing a check to one
@@ -37,13 +37,6 @@ class RegisterRead(_NotYetBuilt):
 
     name = "register_read"
     depends_on = "the consolidated resource register"
-
-
-class PipelineConfigRead(_NotYetBuilt):
-    """Would inspect CI/CD pipeline configuration."""
-
-    name = "pipeline_config_read"
-    depends_on = "a CI/CD pipeline, which this repo does not have yet"
 
 
 class DeliberateTest(_NotYetBuilt):

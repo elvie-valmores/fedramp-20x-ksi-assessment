@@ -1,0 +1,12 @@
+{
+  "id": "iam-snu-cfg-build-permissions-declared",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The image build workflow declares its token permissions rather than inheriting the repository default",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "permissions_declared"
+  }
+}

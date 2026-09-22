@@ -1,0 +1,15 @@
+{
+  "id": "cmt-rmv-cfg-publish-limited-to-default-branch",
+  "indicator": "KSI-CMT-RMV",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "Images are published only from the default branch, matching the subject the OIDC trust policy pins",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "triggers_limited_to",
+    "branches": [
+      "main"
+    ]
+  }
+}

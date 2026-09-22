@@ -1,0 +1,14 @@
+{
+  "id": "scr-mon-cfg-dependencies-audited",
+  "indicator": "KSI-SCR-MON",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The build workflow audits dependencies against advisory data",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "step_present",
+    "job": "scan-dependencies",
+    "step": "audit dependencies"
+  }
+}

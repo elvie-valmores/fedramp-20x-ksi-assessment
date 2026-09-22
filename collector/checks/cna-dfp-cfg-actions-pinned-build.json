@@ -1,0 +1,12 @@
+{
+  "id": "cna-dfp-cfg-actions-pinned-build",
+  "indicator": "KSI-CNA-DFP",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "Every third-party action in the image build workflow is pinned to a commit SHA",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "actions_pinned_to_sha"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "scr-mit-cfg-manifest-integrity-checked",
+  "indicator": "KSI-SCR-MIT",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The build workflow rejects a dependency manifest without hashes before installing anything",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "step_precedes",
+    "job": "scan-dependencies",
+    "before": "require hashed",
+    "after": "install scanner"
+  }
+}

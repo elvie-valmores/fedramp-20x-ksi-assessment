@@ -52,8 +52,10 @@ The build is in progress, and `README.md` carries the current status table. As o
   build, signing and push remain unproven and both ECR repositories are still empty. See the three
   2026-09-22 entries in `DECISIONS.md`.
 - **Not started** — the three workflows, policy-as-code, the SDR emitter, and the remaining check
-  definitions. 5 of roughly 380 exist. 3 of 9 collector mechanisms are implemented; the other six are
-  registered and raise a clear error naming what they wait on.
+  definitions. 15 of roughly 380 exist. 4 of 9 collector mechanisms are implemented and self-tested;
+  the other five are registered and raise a clear error naming what they wait on. Two of those five
+  are now unblocked by work done since they were written — see the 2026-09-22 entry in
+  `DECISIONS.md`.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
 GCP root each apply in two phases, because KSI-SVC-VRI requires images referenced by digest and a

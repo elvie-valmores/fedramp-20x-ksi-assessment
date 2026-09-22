@@ -1,0 +1,14 @@
+{
+  "id": "svc-vri-cfg-image-signed",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The build workflow signs every image it publishes",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "step_present",
+    "job": "build",
+    "step": "sign the image"
+  }
+}

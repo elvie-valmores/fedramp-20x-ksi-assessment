@@ -5011,3 +5011,50 @@ ID and changes every time the environment is rebuilt, so the record pointing `ca
 updated each session. The certificate validation record is one-time; the application record is not.
 KSI-PIY-RVD's `security.txt` is therefore reachable only while the environment stands, which is the
 same shape as the collector cadence limitation and should be declared the same way.
+
+---
+
+## 2026-09-22 — The pipeline mechanism is built, and two "not yet" notes had gone stale
+
+**Built: `pipeline_config_read`,** the fourth of nine evidence mechanisms, with ten check definitions
+against the two real workflows. All fifteen checks in `collector/checks/` now pass.
+
+**Its recorded dependency was out of date.** `not_yet_built.py` said it waited on "a CI/CD pipeline,
+which this repo does not have yet". The pipeline was built on 2026-09-20 and the note was never
+revisited, so a mechanism that had been unblocked for two days still reported itself as waiting.
+Re-reading the blocked list found a second one in the same state:
+`declared_versus_live_comparison` waits on "a reader for Terraform state", and the state has been in
+S3 and readable throughout. Both are stale notes rather than real blocks. The remaining four —
+register read, deliberate test, record store, effective access analysis — are genuinely blocked on
+components that do not exist or decisions not taken.
+
+**It reads the committed files, not the GitHub API.** GitHub runs what is on the default branch, so
+the file under assessment and the file on disk are the same artifact. That means these checks need no
+network, no credentials, and no standing environment — they keep working with everything torn down,
+which is most of the time.
+
+**What the ten checks cover.** Actions pinned to commit SHAs in both workflows (KSI-CNA-DFP), no
+static cloud credential referenced in either (KSI-IAM-SNU), token permissions declared rather than
+inherited, dependency auditing present (KSI-SCR-MON), manifest integrity checked before anything is
+installed (KSI-SCR-MIT), images signed and **the signature verified before the digest is recorded**
+(KSI-SVC-VRI), and publishing confined to the default branch (KSI-CMT-RMV).
+
+**Order is asserted, not just presence.** `step_precedes` exists because in a build pipeline the
+ordering is the control. Scanning after publishing still scans, but it reports on an artifact already
+pushed; verifying a signature after recording the digest verifies something already deployable. Both
+would satisfy a presence check and neither is the thing the determination claims.
+
+**Every assertion has a negative control.** `collector/self_test.py` runs each of the six assertions
+against a good workflow and a deliberately broken one, and reports an assertion that passes both as
+broken rather than as passing. Ten green checks are otherwise indistinguishable from ten checks that
+cannot fail — and four controls this month were found configured, deployed and inert while reporting
+nothing. All six discriminate.
+
+**One dependency trap closed on the way.** The mechanism parses YAML, and PyYAML was present only as
+a transitive dependency of a Google library. It is now pinned in `requirements.txt` directly: a
+version bump elsewhere could have removed it, and the failure would have surfaced as a collector that
+could not read the pipeline.
+
+**A YAML trap worth knowing.** In YAML 1.1, which PyYAML implements, the bare word `on` is a boolean.
+A workflow's `on:` key therefore parses as `True`, not as the string `"on"`, and every naive lookup of
+`workflow["on"]` misses it silently. The parser normalises this once so no handler has to know.
