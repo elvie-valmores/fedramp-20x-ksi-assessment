@@ -4485,3 +4485,241 @@ reads of the audit logs themselves. The three named services are the ones holdin
 controlling access to it. Key use is included deliberately: KSI-SVC-SIN's claim is not only that data
 is encrypted but that decryption is controlled, and a decrypt nobody logged is a control nobody can
 evidence.
+
+---
+
+## 2026-09-22 — What the interrupted session of 2026-09-21 actually did, and the teardown it never reached
+
+**Written by the session that picked up afterwards.** The previous session ended mid-workflow with
+the environment standing and nothing recorded, so the first task was reconstructing it from evidence
+rather than from notes. Recorded here because a session that leaves no record leaves the repository
+asserting the opposite of what is true in the account, and the next reader has no way to tell.
+
+**How it was reconstructed.** S3 object-version history on `aws/terraform.tfstate` gives a timestamped
+size curve, and CloudTrail gives the matching API calls. Together they date every phase to the minute
+without any note having been written:
+
+| Time (EDT) | What | State size |
+|---|---|---|
+| 19:05–19:31 | apply | 273KB → 433KB |
+| 19:36–19:59 | destroy, down to the persistent set | 433KB → 137KB |
+| 20:00–20:14 | apply again | 137KB → 452KB |
+
+The final apply **completed**. A plan against the written configuration returns "No changes", there
+are no orphaned network interfaces, no stale lock object and no duplicate target groups. The session
+was cut short after the apply, not during it — which is why nothing was broken and nothing was
+recorded.
+
+**One false alarm worth recording so it is not re-investigated.** `aws acm list-certificates` returns
+an empty list while the load balancer plainly has a working HTTPS listener. The CLI defaults to
+filtering on RSA key types, and the imported certificate is EC-prime256v1, so it is hidden from the
+list but returned by `describe-certificate`. Nothing is wrong.
+
+---
+
+## 2026-09-22 — Phase 1 verified against the project's own evidence machinery before teardown
+
+**Why verify rather than simply destroy.** The environment was standing and about to be torn down.
+Anything not checked while it was up could not be checked at all until the next apply, and the point
+of the project is that claims are evidenced rather than asserted. The verification used the
+project's own collectors, not ad-hoc commands, so it exercised the assessment machinery and the
+infrastructure in the same pass.
+
+**What passed.**
+
+- **Inventory generator** — 75 resources across both clouds from the live cloud APIs.
+- **Inventory self-test** — the one that matters, because it is the negative control. It seeds a
+  watched resource type and an unwatched one in each cloud, polls AWS Config and Cloud Asset
+  Inventory, and confirms the watched seed appears *and* the unwatched one does not. PASS on both
+  clouds, both directions. KSI-PIY-GIV's liveness and accuracy claims hold.
+- **Collector checks** — 5 of 5, including the Athena query over the normalized corpus returning
+  rows. The normalization and detection path is live, not merely deployed.
+- **Edge** — HTTPS listener serves over HTTP/2; HTTP returns a 301 to `https://...:443/`. The 503
+  behind it is correct: phase 1 has no ECS services, so the target group is empty.
+- **Routing** — the `app` and `data` route tables carry `10.20.0.0/16` and nothing else. Only
+  `public` holds a `0.0.0.0/0`. KSI-CNA-RNT's "no internet route at all" is true of the tiers that
+  claim it, confirmed against the live route tables rather than against the configuration that
+  declared them.
+- **Database** — not publicly accessible, encrypted, IAM authentication enabled, 7-day retention.
+  The retention figure is the one the free plan previously capped, so this also confirms the Paid
+  plan upgrade took effect.
+
+**What this closes.** The 2026-09-19 brief listed the network, segmentation, key and edge design as
+validated by the first apply. This adds the evidence layer: the collectors run against real
+infrastructure and return real answers, and the inventory's negative control works. That was the
+open question the brief could not answer.
+
+---
+
+## 2026-09-22 — Teardown is scoped by the file split, and is a script rather than a remembered command
+
+**The problem this solves.** The cost posture says "destroy it between sessions" and no procedure was
+ever written down. Three apply/destroy cycles have now happened, each reconstructed at the keyboard,
+and the previous session's was recoverable only from S3 version history. A cost discipline that
+depends on remembering an undocumented command is a cost discipline that will lapse.
+
+**Why `terraform destroy` does not work.** It is refused outright. `aws_s3_bucket.log_store` carries
+`prevent_destroy = true`, and Terraform aborts the entire plan rather than skipping the one resource:
+`Error: Instance cannot be destroyed`. The guard is correct — the log store is the audit record,
+carries Object Lock in compliance mode, and is meant to outlive every rebuild — so the teardown is
+scoped with `-target` and the guard stays.
+
+**Chosen: derive the target list from the file split, not from a hand-maintained list.** Five files
+hold everything that survives — `log_corpus.tf`, `log_normalization.tf`, `detection.tf`,
+`inventory.tf`, `billing.tf` — and everything else is the application environment. `infra/aws/teardown.sh`
+maps each resource in state back to the file that declares it and targets the complement. 123 of 163
+managed resources, with the other 40 preserved.
+
+**Why a derived list rather than an enumerated one.** An enumerated list rots. A resource added to
+`compute.tf` next month would silently survive every future teardown and bill indefinitely, and
+nothing would report it. Deriving from the file split means a new resource is destroyed by default
+and only a deliberate placement in one of the five named files exempts it. The script refuses to run
+if any resource in state maps to no file at all, rather than guessing what a rename or an orphan
+meant.
+
+**The property that makes this possible, verified rather than assumed.** Nothing in the five
+preserved files references a resource declared outside them. The evidence layer has no dependency on
+the application environment. That is worth re-checking before moving a resource between files,
+because it is the thing that makes a clean scoped teardown possible at all.
+
+**A trap checked and found already avoided.** The teardown schedules four customer-managed KMS keys
+for deletion. Had the log store been encrypted with the `logs` key, its contents would have become
+permanently unreadable seven days later — an immutable audit record destroyed by the routine that was
+supposed to be cheap. It is encrypted with SSE-S3 instead, so the risk does not exist. Recorded
+because the next person to edit `kms.tf` or `log_corpus.tf` needs to know this is load-bearing and
+not an oversight.
+
+**Known residue, unchanged.** Each cycle leaves four KMS keys in `PendingDeletion` for seven days at
+roughly 1 USD each. Twelve keys were live in the account at the time of writing: four in use and
+eight already pending from earlier cycles. They clear on their own.
+
+---
+
+## 2026-09-22 — The GitHub trust policy pins the immutable subject, because that is what GitHub sends
+
+**Both workflows had already run and both had failed**, which is not what the previous session's
+absence of a record implied and not what this session first concluded. `build-and-push` ran on the
+push of `2d6ecd0` at 00:20 UTC and failed after 5m19s; `drift` ran on schedule at 12:18 UTC and
+failed after 40s. Both failed at the same step, `assume the build/drift role`, with
+`Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+
+**Why this was nearly missed.** CloudTrail lookups keyed on the role name return only IAM management
+events — the `CreateRole` and `PutRolePolicy` calls Terraform made — and show no sessions, which
+reads as "nothing ever tried". The federation attempts are `sts.amazonaws.com` events under
+`AssumeRoleWithWebIdentity`, a different lookup entirely. Absence of a finding was treated as
+evidence before the looking had been recorded, which is the failure this project has a working rule
+against. The rule applies to its own diagnosis too.
+
+**The cause, from the event itself rather than inferred.** The recorded `userName` on the denied
+calls is the subject GitHub actually presented:
+
+```
+repo:elvie-valmores@181586876/fedramp-20x-ksi-assessment@1375137942:ref:refs/heads/main
+```
+
+The trust policy pinned the documented form:
+
+```
+repo:elvie-valmores/fedramp-20x-ksi-assessment:ref:refs/heads/main
+```
+
+`gh api /repos/<owner>/<name>/actions/oidc/customization/sub` confirms why:
+`use_immutable_subject` is `true`, and `sub_claim_prefix` is exactly the numbered prefix above. The
+numbers are the owner ID and the repository ID, confirmed independently against the repository API.
+
+**Chosen: pin the immutable subject.** `local.github_subject` now builds
+`repo:<owner>@<owner_id>/<name>@<repo_id>:ref:refs/heads/main` from four hardcoded values, and both
+roles use it. Still `StringEquals`, still a specific ref, still no wildcard — KSI-SVC-VCM build row 1
+is unchanged in substance and stronger in fact.
+
+**Why not the other fix.** GitHub allows `use_immutable_subject` to be turned off, which restores the
+legacy form and would have made the existing policy match. That is remediating the measurement rather
+than the condition, and this project has a working rule against it. The legacy subject is the one
+that can be re-pointed by deleting an account or repository and recreating it with a familiar name;
+the immutable one cannot. Turning the protection off to match a stale configuration would have
+weakened the control to make a check go green.
+
+**This is the same decision already made on the other federation, arrived at independently by the
+platform.** `cross_cloud.tf` matches the GCP service account's *numeric unique ID* rather than its
+email, and the 2026-09-20 entry records the reasoning: "A service account email can be deleted and
+recreated, and the recreated account would inherit trust granted to a different principal. The
+numeric ID is never reused." GitHub has since applied that reasoning to its own subject claim. The
+project had the principle right on one hop and the stale form on the other.
+
+**The failure mode worth naming.** This is a control that was configured, deployed, and completely
+non-functional, reporting nothing until someone read the workflow history. Both roles existed, both
+policies were valid, the OIDC provider was correct, and `terraform plan` was clean — the
+configuration was internally consistent and externally wrong. Nothing in the infrastructure could
+have detected it, because the mismatch only exists at the moment a token is presented.
+
+**Not yet applied.** The fix plans to 2 in-place trust-policy updates. It has to be applied while the
+environment is standing, and `pipeline.tf` is in the destroyable set, so it lands on the next apply
+if not before.
+
+---
+
+## 2026-09-22 — The drift role reads one secret value, reversing an earlier deny
+
+**Reverses the `NeverReadSecretValues` deny** in `infra/aws/pipeline.tf`, and records why rather than
+deleting it quietly.
+
+**What the original decision said.** "Refreshing a secret's state reads its metadata, never its
+value. Stated as an explicit deny so that a later widening of the read grant above cannot quietly
+pick it up." The reasoning was sound and the mechanism — an explicit `Deny` rather than merely
+omitting the `Allow` — was the careful choice.
+
+**Why it was wrong.** The premise holds for `aws_secretsmanager_secret` and fails for
+`aws_secretsmanager_secret_version`. Refreshing a version calls `GetSecretValue`; there is no
+metadata-only read of a version. The project holds a version of exactly one secret, `task_tls`, so
+every drift plan hit the deny and exited 1.
+
+**What that cost, which is the part worth noticing.** `terraform plan -detailed-exitcode` returns 0
+for clean, 2 for drift and 1 for error, and the workflow treats anything but 0 as a failed run. So
+the deny did not narrow drift detection — it eliminated it. KSI-SVC-ACM's signal never existed. A
+guard protecting a claim the system could not keep blocked the control it was meant to protect, and
+nothing reported that, because an erroring drift check and a drifting one look the same from
+outside.
+
+**Chosen: grant the read, scoped to the one secret, and keep the guard for every other.** The deny
+becomes `NotResource`-scoped rather than deleted, so its original intent — that a later widening
+cannot quietly pick up secret values — still holds for everything else in the account, including the
+RDS-managed master password, which is the genuinely sensitive secret here and which nothing in the
+pipeline has any reason to read. The decrypt grant is scoped to the secrets key and conditioned on
+`kms:ViaService`, so the key cannot be used directly.
+
+**What this costs, stated rather than buried.** The drift principal can read the task TLS private
+key. That is accepted because the certificate is self-signed, Terraform generates it on every apply,
+and the task-side TLS hop is already a declared stopgap under KSI-SVC-ASM. It would not be
+acceptable for a secret the project did not generate itself, and the narrowed deny is what stops
+this from becoming a general grant later.
+
+**Why not the alternative.** Taking the secret version out of Terraform's management would have kept
+least privilege and full drift coverage together, and is the better answer in a system where the
+secret matters. It is a real change to `secrets.tf` and touches KSI-SVC-ASM's task-TLS story, so it
+is recorded here as the option not taken rather than silently passed over.
+
+---
+
+## 2026-09-22 — Four read permissions the drift role never had
+
+**Found the same way**, by reading a drift run's output rather than by review. With the trust policy
+fixed, the plan got far enough to report four `AccessDenied` errors in one pass:
+
+| Action | Why the policy missed it |
+|---|---|
+| `budgets:ListTagsForResource` | the grant had `budgets:Describe*` and `View*`, no `List*` |
+| `athena:GetWorkGroup` | no `athena` entry existed at all |
+| `inspector2:BatchGetAccountStatus` | the grant had `Get*` and `List*`; the action begins `BatchGet` |
+| `secretsmanager:DescribeSecret` | no `secretsmanager` entry existed at all |
+
+**The pattern worth naming.** Three of the four are verb-prefix wildcards that look complete and are
+not. `Describe*`, `Get*`, `List*` reads as "every read action", and AWS action names do not
+consistently begin with those verbs — `ListTagsForResource` is a read that `Describe*` misses, and
+`BatchGetAccountStatus` is a read that `Get*` misses. A policy written by enumerating verbs will keep
+developing holes of this shape as resource types are added.
+
+**Only discoverable by running it.** `terraform validate` passes, `terraform plan` from a privileged
+identity passes, and the policy is syntactically fine. The gap exists only for the drift principal,
+only at refresh time. This is the second control in two days found non-functional while appearing
+correctly configured — the first being the OIDC subject mismatch earlier today. Both were invisible
+to every check short of executing the thing.

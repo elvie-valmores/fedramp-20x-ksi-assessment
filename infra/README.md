@@ -174,6 +174,57 @@ they are what makes KSI-CNA-RNT's "no internet route at all" claim true.
 **Destroy it between sessions.** The residual is a few dollars, mostly KMS
 keys and retained snapshots.
 
+### Tearing down
+
+```sh
+cd infra/aws
+TF_VAR_billing_alert_email=<the address> ./teardown.sh
+```
+
+It derives the target list, shows a plan, and asks before applying.
+
+**Do not use plain `terraform destroy`.** It is refused, by design.
+`aws_s3_bucket.log_store` carries `prevent_destroy = true` and Terraform
+aborts the whole plan rather than skipping that one resource:
+
+```
+Error: Instance cannot be destroyed
+Resource aws_s3_bucket.log_store has lifecycle.prevent_destroy set...
+```
+
+That guard is correct. The log store is the audit record, it carries Object
+Lock in compliance mode, and it outlives every rebuild. Do not remove it to
+make a destroy go through — scope the destroy instead, which is what the
+script does.
+
+**The persistence boundary is the file split.** Five files hold everything
+that survives, and everything else is rebuilt on the next apply:
+
+| File | What persists |
+|---|---|
+| `log_corpus.tf` | the Object Locked store, Athena, Glue |
+| `log_normalization.tf` | the OCSF normalization Lambda |
+| `detection.tf` | the detection query Lambda and its alarms |
+| `inventory.tf` | CloudTrail and the Config recorder |
+| `billing.tf` | the budget guardrail |
+
+The script maps each resource in state back to the file that declares it and
+targets the complement — currently 123 of 163 managed resources. It derives
+that list rather than carrying a written one, because a written list rots: a
+resource added to `compute.tf` later would silently survive every teardown
+and bill forever. A resource in state that no file declares stops the script
+rather than being guessed at.
+
+Nothing in the five preserved files references a resource declared outside
+them. Re-check that before moving a resource between files; it is what makes
+a clean scoped teardown possible.
+
+**What it leaves.** Four customer-managed KMS keys enter `PendingDeletion`
+for seven days at about 1 USD each, and are not reused — the next apply
+creates new ones. The log store is encrypted with SSE-S3 rather than with
+those keys, which is why scheduling them for deletion cannot orphan the audit
+record. That is deliberate and load-bearing.
+
 ## The pipeline
 
 Two workflows in `.github/workflows/`, both authenticating by OIDC. There are

@@ -31,15 +31,38 @@ The design phase is closed. What remains is the build.
 
 ## Where the build has reached
 
-The build is in progress, and `README.md` carries the current status table. As of 2026-09-19:
+The build is in progress, and `README.md` carries the current status table. As of 2026-09-22:
 
-- **Applied and live** — the state backend, AWS and GCP foundations, the inventory generator, the
-  central log store, the query layer, and AWS-side log normalization and detection.
-- **Written, planned, not yet applied** — the AWS application environment: VPC with no internet
-  route, ECS Fargate services, RDS, load balancer and web firewall, keys, registry and posture
-  services. Plus the two application services in `app/`.
-- **Not started** — the GCP analytics pipeline, the CI/CD pipeline, the three workflows,
-  policy-as-code, the SDR emitter, and the 380 check definitions.
+- **Persisting between sessions** — the state backend, the Object Locked log store, CloudTrail, the
+  Config recorder, Athena and Glue, the normalization and detection Lambdas, the budget guardrails,
+  and the GCP foundations (asset feed, Pub/Sub, budget). 40 AWS resources plus 7 GCP ones.
+- **Built and verified, but not standing** — the AWS application environment, phase 1. It applies in
+  about fifteen minutes and is torn down after each session. Last verified 2026-09-22: inventory
+  self-test passing on both clouds including its negative control, 5 of 5 collector checks passing,
+  no internet route on the private tiers, database private and encrypted. **Do not assume it is
+  running** — check before building anything that talks to it.
+- **Written, never applied** — the GCP analytics pipeline (`infra/gcp/analytics.tf`,
+  `infra/gcp/pipeline.tf`), and the cross-cloud role in `infra/aws/cross_cloud.tf`, which is gated to
+  zero resources until the GCP pipeline service account exists.
+- **Run, and failing** — the CI/CD pipeline. `build-and-push` and `drift` have both executed and both
+  failed at the same step: the GitHub OIDC trust policy pinned the legacy subject claim while the
+  repository sends GitHub's newer *immutable* subject, which carries numeric owner and repository IDs.
+  The fix is written in `infra/aws/pipeline.tf` and plans to two in-place trust-policy updates; it has
+  not been applied, because `pipeline.tf` is in the destroyable set and the environment is down. Both
+  ECR repositories are still empty as a result. See the 2026-09-22 entry in `DECISIONS.md`.
+- **Not started** — the three workflows, policy-as-code, the SDR emitter, and the remaining check
+  definitions. 5 of roughly 380 exist. 3 of 9 collector mechanisms are implemented; the other six are
+  registered and raise a clear error naming what they wait on.
+
+**The two phase gates, both real and both the indicators working correctly.** The AWS root and the
+GCP root each apply in two phases, because KSI-SVC-VRI requires images referenced by digest and a
+digest cannot be looked up before the image exists. Phase 2 on both clouds is therefore blocked on
+CI, and CI is blocked on nothing but configuration — which makes it the critical path.
+
+**The analytics image has no path to existing yet.** `build-and-push.yml` builds `api` and `worker`
+only, there is no GitHub-to-GCP workload identity federation, and there is no container runtime on
+the workstation. `infra/README.md` says the image is "pushed by hand until then", which is not
+currently possible. Resolve this before planning GCP phase 2.
 
 The build order below is the plan; the status table in `README.md` is what has actually happened.
 
@@ -208,6 +231,14 @@ does not exist or every subject is non-machine.
 
 **State limitations rather than narrowing scope to avoid them.** Every partial in this project is a
 declared cost decision, platform limit or scope exclusion, not a gap discovered late.
+
+**Record the session before ending it, and if one ends without a record, reconstruct it.** A session
+that applies infrastructure and writes nothing leaves the repository asserting the opposite of what
+is true in the account. This has happened once, on 2026-09-21. It is recoverable: S3 object-version
+history on `aws/terraform.tfstate` gives a timestamped size curve of every apply and destroy, and
+CloudTrail `lookup-events` on a named resource gives the matching calls. Together they date each
+phase to the minute. Reconstruct first, then act — the 2026-09-22 entries in `DECISIONS.md` show the
+method.
 
 ---
 

@@ -92,10 +92,23 @@ All three need working cloud credentials: an AWS profile, and
 | Collector framework | 3 of 9 mechanisms implemented |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
-| Application environment, AWS | Written; applied once and torn down |
+| Application environment, AWS | Phase 1 applied and verified 2026-09-22; torn down after. Phase 2 needs images |
 | GCP analytics pipeline | Written, never applied |
-| Cross-cloud federation (GCP → AWS) | Written, never applied |
-| CI/CD pipeline | Written, never run — needs the account upgrade first |
+| Cross-cloud federation (GCP → AWS) | Written, never applied — gated on the GCP service account existing |
+| CI/CD pipeline | Both workflows have run and both failed on the OIDC trust policy. Fix written, not applied |
+
+**Nothing is standing between sessions** except the state backend, the log
+store, CloudTrail, the Config recorder, Athena and the two Lambdas. The
+application environment is rebuilt each session with `terraform apply` and
+removed with `infra/aws/teardown.sh`; see `infra/README.md`. Phase 1 was last
+verified on 2026-09-22 — inventory self-test and collector checks passing on
+both clouds, no internet route on the private tiers, database private and
+encrypted. The evidence is in `docs/DECISIONS.md`.
+
+The AWS account is on the Paid plan, so GuardDuty, Security Hub and Inspector
+work as designed. The account was created 2026-07-31 and **must not be left on
+the Free plan past roughly 2027-01-31**, which is a condition of it continuing
+to exist at all rather than a service question — see `docs/DECISIONS.md`.
 
 Scope reductions are recorded in `docs/DECISIONS.md` as they are made, rather
 than discovered later by a reader.

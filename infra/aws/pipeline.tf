@@ -16,7 +16,42 @@ locals {
   # From the repository's own origin remote. Hardcoded rather than a
   # variable because it is not environment-specific -- a different value
   # here would mean a different project's pipeline could assume this role.
-  github_repository = "elvie-valmores/fedramp-20x-ksi-assessment"
+  github_owner = "elvie-valmores"
+  github_name  = "fedramp-20x-ksi-assessment"
+
+  # The numeric owner and repository IDs, which are the load-bearing half of
+  # the subject claim below.
+  #
+  # GitHub now issues *immutable* subject claims: the subject carries these
+  # IDs alongside the names, and the IDs are what make it immutable. A login
+  # or a repository can be renamed, deleted and recreated, and the recreated
+  # one would inherit trust granted to a different principal. The numeric IDs
+  # are never reused.
+  #
+  # This is the same decision this project already made on the other
+  # federation. cross_cloud.tf matches the GCP service account's numeric
+  # unique ID rather than its email, for exactly this reason, and records
+  # why. GitHub has since made that choice on its users' behalf.
+  #
+  # Re-derive with:
+  #   gh api /repos/<owner>/<name> --jq '{owner: .owner.id, repo: .id}'
+  #
+  # Confirm the form the repository actually sends with:
+  #   gh api /repos/<owner>/<name>/actions/oidc/customization/sub
+  #
+  # `use_immutable_subject: true` means the prefix below is what arrives. If
+  # that setting is ever false, the subject reverts to the legacy
+  # `repo:<owner>/<name>` form and these conditions stop matching. Fix it by
+  # turning the setting back on, not by widening the condition -- the legacy
+  # form is the one that can be re-pointed by recreating a repository with a
+  # familiar name.
+  github_owner_id = "181586876"
+  github_repo_id  = "1375137942"
+
+  # repo:<owner>@<owner_id>/<name>@<repo_id>:ref:refs/heads/main
+  #
+  # Both roles are assumed only from the default branch, so both use this.
+  github_subject = "repo:${local.github_owner}@${local.github_owner_id}/${local.github_name}@${local.github_repo_id}:ref:refs/heads/main"
 }
 
 # GitHub publishes its OIDC configuration at a well-known URL and AWS
@@ -71,7 +106,7 @@ data "aws_iam_policy_document" "github_build_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.github_repository}:ref:refs/heads/main"]
+      values   = [local.github_subject]
     }
   }
 }
@@ -192,7 +227,7 @@ data "aws_iam_policy_document" "github_drift_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.github_repository}:ref:refs/heads/main"]
+      values   = [local.github_subject]
     }
   }
 }
@@ -220,7 +255,15 @@ data "aws_iam_policy_document" "github_drift" {
     actions = [
       "acm:Describe*",
       "acm:List*",
+      # Athena's workgroup read. Absent entirely until 2026-09-22, which is
+      # one of the four gaps that made every drift run error rather than
+      # report.
+      "athena:Get*",
+      "athena:List*",
       "budgets:Describe*",
+      # ListTagsForResource, which Terraform calls on every budget refresh.
+      # `Describe*` and `View*` do not cover it.
+      "budgets:List*",
       "budgets:View*",
       "cloudtrail:Describe*",
       "cloudtrail:Get*",
@@ -245,6 +288,9 @@ data "aws_iam_policy_document" "github_drift" {
       "guardduty:List*",
       "iam:Get*",
       "iam:List*",
+      # BatchGetAccountStatus is how the enabler resource reads its own
+      # state, and it matches neither `Get*` nor `List*`.
+      "inspector2:BatchGet*",
       "inspector2:Get*",
       "inspector2:List*",
       "kms:Describe*",
@@ -258,6 +304,13 @@ data "aws_iam_policy_document" "github_drift" {
       "rds:List*",
       "s3:Get*",
       "s3:List*",
+      # Metadata about the secret, not its contents. DescribeSecret and
+      # GetResourcePolicy return the ARN, rotation config and resource
+      # policy; neither returns secret material. GetSecretValue is
+      # deliberately NOT here -- see the note below the statement.
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:ListSecrets",
       "securityhub:Describe*",
       "securityhub:Get*",
       "sns:Get*",
@@ -289,14 +342,57 @@ data "aws_iam_policy_document" "github_drift" {
     ]
   }
 
-  # Refreshing a secret's state reads its metadata, never its value. Stated
-  # as an explicit deny so that a later widening of the read grant above
-  # cannot quietly pick it up.
+  # Reading the one secret whose *version* is in state.
+  #
+  # This reverses the original premise of the deny below, which held that
+  # "refreshing a secret's state reads its metadata, never its value". That
+  # is true of `aws_secretsmanager_secret` and false of
+  # `aws_secretsmanager_secret_version`: refreshing a version calls
+  # GetSecretValue. With the deny in force the plan errored on every run, so
+  # KSI-SVC-ACM's drift signal did not exist at all -- the control was
+  # blocked by a guard protecting a claim it could not keep.
+  #
+  # Scoped to the single secret Terraform holds a version of, and the
+  # decrypt is further conditioned on the call arriving through Secrets
+  # Manager rather than directly against the key.
+  #
+  # What this costs, stated rather than buried: the drift principal can read
+  # the task TLS private key. That is accepted because the certificate is
+  # self-signed, Terraform generates it itself on every apply, and the
+  # task-side TLS hop is already a declared stopgap under KSI-SVC-ASM. It
+  # would not be acceptable for a secret the project did not generate.
   statement {
-    sid       = "NeverReadSecretValues"
-    effect    = "Deny"
+    sid       = "ReadTheOneSecretVersionInState"
+    effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = ["*"]
+    resources = [aws_secretsmanager_secret.task_tls.arn]
+  }
+
+  statement {
+    sid       = "DecryptThatSecretOnly"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.secrets.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${var.aws_region}.amazonaws.com"]
+    }
+  }
+
+  # The original guard, kept and narrowed rather than deleted.
+  #
+  # Its intent was that a later widening of the read grant above could not
+  # quietly pick up secret values. That intent still holds for every secret
+  # but the one named above -- including the RDS-managed master password,
+  # which is the genuinely sensitive one in this account and which nothing
+  # here has any reason to read.
+  statement {
+    sid           = "NeverReadAnyOtherSecretValue"
+    effect        = "Deny"
+    actions       = ["secretsmanager:GetSecretValue"]
+    not_resources = [aws_secretsmanager_secret.task_tls.arn]
   }
 }
 
