@@ -4858,3 +4858,45 @@ into one.
 
 **If drift is ever widened** to cover the application environment, the deny is what will stop it.
 That is the moment to re-take the decision, not to delete the line.
+
+---
+
+## 2026-09-22 — The Organization and Identity Center exist, in the right order and the right region
+
+**Completes the ordering constraint recorded on 2026-09-19**, which held that the account must move
+to the Paid plan as a standalone action *before* creating the Organization, because upgrading by
+joining one expires the Free Tier credits immediately and permanently. The upgrade happened on
+2026-09-19 and the Organization on 2026-09-22, so the constraint held and the credits survive.
+
+**What exists.**
+
+| | |
+|---|---|
+| Organization | `o-yyhciflg3u`, feature set `ALL` |
+| Management account | `437672023758`, the only account |
+| Identity Center instance | `ssoins-7223046591f7f9f9`, `ACTIVE` |
+| Identity store | `d-90667e73f9` |
+| Home region | `us-east-1` |
+
+**Feature set `ALL` rather than consolidated billing**, because Identity Center requires it. Switching
+afterwards requires every member account to approve, which is cheap with one account and expensive
+later.
+
+**The home region was verified rather than assumed.** `sso-admin list-instances` is regional and
+returns one instance in `us-east-1` and none in `us-west-2` or `eu-west-1`. An Identity Center
+instance has one home region per organization and moving it means deleting the instance and
+rebuilding every assignment, so a mismatch would have been discovered late and been costly. Every
+other resource in this project is in `us-east-1`.
+
+**Deliberately not done by hand.** No users, groups or permission sets were created in the console.
+The design declares groups and permission set assignments in Terraform, because SCIM group sync is
+not supported and the assignments are what several determinations rest on. The console action was
+enablement only.
+
+**Still blocked, and on what.** Wiring Google Cloud Identity as the SAML IdP with SCIM provisioning
+needs a verified domain in Cloud Identity, which needs the domain decision that is still outstanding.
+Until then Identity Center exists with no external identity source, and KSI-IAM-SNU, APM, AAM, ELP
+and JIT remain unbuildable — but the prerequisite they were all waiting on is now in place.
+
+**AWS root and break-glass stay native**, per the identity design, and are not routed through
+Identity Center.

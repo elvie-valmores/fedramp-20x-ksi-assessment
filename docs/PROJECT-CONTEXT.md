@@ -129,6 +129,13 @@ runtime on the workstation. `infra/README.md` says the image is "pushed by hand 
 not currently possible by any route. GCP phase 2 is unreachable until this is resolved — most likely
 by adding the federation and a third matrix entry.
 
+**AWS Organization and Identity Center now exist** — `o-yyhciflg3u` (feature set `ALL`) and
+`ssoins-7223046591f7f9f9` in `us-east-1`, with identity store `d-90667e73f9`. Created 2026-09-22,
+after the Paid-plan upgrade, so the Free Tier credits survived. Nothing was created in the console
+beyond enablement; groups and permission set assignments belong in Terraform. The IAM cluster
+(SNU, APM, AAM, ELP, JIT) is still blocked on wiring Google Cloud Identity as the SAML IdP, which
+needs the outstanding domain decision.
+
 **Cheapest unblocked progress:** GCP phase 1. It costs pennies at rest and yields
 `pipeline_service_account_unique_id`, which is what `infra/aws/cross_cloud.tf` is gated on — that role
 is currently `count = 0` and will stay that way until the GCP service account exists.
