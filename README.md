@@ -95,7 +95,7 @@ All three need working cloud credentials: an AWS profile, and
 | Application environment, AWS | Phase 1 applied and verified 2026-09-22; torn down after. Phase 2 needs images |
 | GCP analytics pipeline | Written, never applied |
 | Cross-cloud federation (GCP → AWS) | Written, never applied — gated on the GCP service account existing |
-| CI/CD pipeline | Both workflows have run and both failed on the OIDC trust policy. Fix written, not applied |
+| CI/CD pipeline | `drift` verified working end to end 2026-09-22 (clean, exit 0). `build-and-push` not yet re-run |
 
 **Nothing is standing between sessions** except the state backend, the log
 store, CloudTrail, the Config recorder, Athena and the two Lambdas. The

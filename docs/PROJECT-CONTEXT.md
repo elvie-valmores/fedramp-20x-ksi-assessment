@@ -44,12 +44,13 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Written, never applied** — the GCP analytics pipeline (`infra/gcp/analytics.tf`,
   `infra/gcp/pipeline.tf`), and the cross-cloud role in `infra/aws/cross_cloud.tf`, which is gated to
   zero resources until the GCP pipeline service account exists.
-- **Run, and failing** — the CI/CD pipeline. `build-and-push` and `drift` have both executed and both
-  failed at the same step: the GitHub OIDC trust policy pinned the legacy subject claim while the
-  repository sends GitHub's newer *immutable* subject, which carries numeric owner and repository IDs.
-  The fix is written in `infra/aws/pipeline.tf` and plans to two in-place trust-policy updates; it has
-  not been applied, because `pipeline.tf` is in the destroyable set and the environment is down. Both
-  ECR repositories are still empty as a result. See the 2026-09-22 entry in `DECISIONS.md`.
+- **Partly proven** — the CI/CD pipeline. Both workflows had been failing on two separate, compounding
+  faults: the OIDC trust pinned the legacy subject claim while this repository sends GitHub's
+  *immutable* form, and behind that the drift role lacked four read permissions plus a deny that made
+  every plan exit 1. Both are fixed and applied. **`drift` now runs clean end to end** — verified
+  2026-09-22, exit 0, "No changes". `build-and-push` has not been re-run since the fix, so image
+  build, signing and push remain unproven and both ECR repositories are still empty. See the three
+  2026-09-22 entries in `DECISIONS.md`.
 - **Not started** — the three workflows, policy-as-code, the SDR emitter, and the remaining check
   definitions. 5 of roughly 380 exist. 3 of 9 collector mechanisms are implemented; the other six are
   registered and raise a clear error naming what they wait on.
