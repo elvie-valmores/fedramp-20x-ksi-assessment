@@ -9,6 +9,12 @@ application environment, rebuilt on the next apply:
     detection.tf          the detection query Lambda and its alarms
     inventory.tf          CloudTrail and the Config recorder
     billing.tf            the budget guardrail
+    pipeline_identity.tf  the OIDC provider and the drift role
+
+The last of those is not about cost -- an OIDC provider and IAM roles are
+free. It is there because the drift check runs while the application
+environment is down, so the identity that runs it cannot go down with it. A
+correct plan executed by a principal that does not exist is still no signal.
 
 Two consumers, opposite halves:
 
@@ -41,6 +47,7 @@ import subprocess
 import sys
 
 PERSISTENT_FILES = {
+    "pipeline_identity.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",

@@ -4817,3 +4817,44 @@ right and did not work:
 
 **The summary text is corrected.** It now states the scope and says plainly that the application
 environment is not covered, instead of describing an outcome the mechanism cannot produce.
+
+---
+
+## 2026-09-22 — The drift identity moves to the persistent side, and the secret grant reverts
+
+**Found by running the scoped check rather than by reviewing it.** The first CI run after scoping
+failed with `The web identity token provided could not be validated` — which is what AWS returns when
+no OIDC provider is registered in the account at all, not a trust mismatch. The teardown had
+destroyed `aws_iam_openid_connect_provider.github` and both roles, because they were written in
+`pipeline.tf`, which is on the ephemeral side.
+
+**The error in the reasoning.** That `pipeline.tf` is destroyable was noted earlier the same day and
+not connected when the drift scope was chosen. Scoping the plan was necessary and not sufficient: a
+correct plan executed by a principal that does not exist is still no signal. The control was fixed in
+the half that was examined and broken in the half that was not.
+
+**Chosen.** `pipeline_identity.tf` holds the OIDC provider, the drift role and its policy, and
+`boundary.py` lists it on the persistent side. Nothing about this is a cost decision — an OIDC
+provider and IAM roles are free, and the only reason they were being destroyed nightly is the file
+they happened to be written in.
+
+**The build role deliberately stays ephemeral.** It grants push to repositories and use of a key that
+are themselves torn down, so it has nothing to do while they are gone, and keeping it on the
+persistent side would mean holding references to resources that do not exist. That asymmetry is the
+point: the half of the pipeline that must work while the environment is down is exactly the half that
+does not depend on the environment.
+
+**A grant reverted, which is the welcome half.** Earlier today the `NeverReadSecretValues` deny was
+removed so an unscoped plan could refresh `aws_secretsmanager_secret_version.task_tls`, at the cost of
+letting the drift principal read a private key. Scoping removed the reason: `secrets.tf` is
+ephemeral, so a scoped plan never refreshes a secret version and never needs to read one. The deny is
+whole again and the metadata grants are gone with it.
+
+**Worth noting as a pattern.** The secret grant was a real cost accepted for a real reason, and the
+reason turned out to be an artifact of a scope that was itself wrong. Fixing the scope dissolved the
+trade-off rather than resolving it. It is worth asking, when a decision requires accepting a cost,
+whether the constraint forcing it is itself correct — here it was not, and two decisions collapsed
+into one.
+
+**If drift is ever widened** to cover the application environment, the deny is what will stop it.
+That is the moment to re-take the decision, not to delete the line.
