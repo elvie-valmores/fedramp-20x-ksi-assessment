@@ -81,7 +81,10 @@ terraform output certificate_validation_records
 
 # 2. Create those records as CNAMEs at the DNS provider, by hand.
 #    LEAVE THEM IN PLACE — ACM re-validates through the same records on
-#    renewal, so deleting them breaks renewal ~13 months later, silently.
+#    renewal, so deleting them breaks it at the next renewal, silently.
+#    The certificate issued 2026-09-22 is valid 197 days, not the ~13 months
+#    long assumed here, so renewal begins around 2027-02-06. Read the dates
+#    off the certificate; public lifetimes are shortening.
 
 # 3. Wait for ACM to issue. Then the aws root can find it.
 cd ../aws

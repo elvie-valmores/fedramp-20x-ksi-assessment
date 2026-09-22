@@ -58,7 +58,12 @@ output "certificate_validation_records" {
 
     Create these and LEAVE THEM IN PLACE. ACM re-validates through the same
     records when it auto-renews, so deleting them after issuance breaks
-    renewal roughly thirteen months later, silently.
+    renewal at the next renewal, silently. Measured on the certificate
+    actually issued for caliper.elvievalmores.com on 2026-09-22: 197 days
+    of validity, expiring 2027-04-07, so renewal begins around 2027-02-06.
+    Not the ~13 months this once said -- public certificate lifetimes have
+    been shortening, so read the dates off the certificate rather than
+    assuming a duration.
   EOT
 
   value = var.app_domain == "" ? [] : [

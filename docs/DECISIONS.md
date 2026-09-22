@@ -4368,7 +4368,7 @@ browser. The records are emitted as an output instead and issuance proceeds asyn
 
 **The renewal trap, recorded because it is silent.** ACM re-validates through the same DNS records
 when it auto-renews. Deleting them after issuance — the natural instinct, since they look like
-one-time setup — breaks renewal roughly thirteen months later with no warning. The output says so
+one-time setup — breaks renewal at the next renewal with no warning. The output says so
 and so does `infra/README.md`.
 
 **A fallback is kept, and is not an end state.** With no domain set the load balancer still imports
@@ -5058,3 +5058,45 @@ could not read the pipeline.
 **A YAML trap worth knowing.** In YAML 1.1, which PyYAML implements, the bare word `on` is a boolean.
 A workflow's `on:` key therefore parses as `True`, not as the string `"on"`, and every naive lookup of
 `workflow["on"]` misses it silently. The parser normalises this once so no handler has to know.
+
+---
+
+## 2026-09-22 — The certificate issued, and two things the certificate itself corrected
+
+**Issued.** `caliper.elvievalmores.com`, Amazon-issued, DNS validation `SUCCESS`, after the
+validation CNAME was created by hand at Cloudflare per the 2026-09-19 decision. KSI-SVC-ASM build row
+4 now has a real chain of trust on the public listener rather than the self-signed fallback, and
+KSI-PIY-RVD has a real domain to publish `security.txt` on.
+
+**Correction: the certificate is valid 197 days, not thirteen months.** `NotBefore 2026-09-21`,
+`NotAfter 2027-04-07`. Three places in this repository warned that deleting the validation record
+"breaks renewal roughly thirteen months later" — a figure carried from how long ACM public
+certificates used to last. Public certificate lifetimes have been shortening across the industry, and
+the measured value is a little over six months. All three are corrected to read the dates off the
+certificate rather than assume a duration.
+
+**Why the error mattered more than the number.** The warning's purpose is to stop someone deleting
+the validation record after issuance, on the reasoning that it looks like one-time setup. A warning
+that says "this breaks in about a year" invites deferral in a way that "this breaks in four months"
+does not. Renewal begins around **2027-02-06**.
+
+**Open question: managed renewal under apply-and-destroy.** The issued certificate reports
+`InUseBy: []` and `RenewalEligibility: INELIGIBLE`. The second may mean nothing here — that field
+governs the `RenewCertificate` API, which applies to private certificates — so this is recorded as a
+question rather than a finding.
+
+The concern behind it is real regardless. ACM's managed renewal is documented as applying to
+certificates associated with an integrated AWS service, and under this project's cost posture the
+load balancer exists only during working sessions. For most of any given month the certificate is
+associated with nothing. If association is genuinely required at renewal time, then the automatic
+renewal that KSI-SVC-ASM build row 4 claims would not happen, and the failure would be silent and
+roughly four months out.
+
+**What to do about it, cheaply.** Verify the behaviour before 2027-02-06 — the mitigation, if needed,
+is only to have the environment standing during the renewal window, which is a note in the runbook
+rather than a design change. Recorded now because the deadline is real, the check is five minutes,
+and the alternative is discovering it from an expired certificate.
+
+**The shape is familiar.** This is the fifth thing this month that was configured correctly, reported
+healthy, and might not do what its determination claims — and like the others, it is only visible by
+reading what the system actually produced rather than what the configuration says it should.
