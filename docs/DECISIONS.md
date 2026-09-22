@@ -4958,3 +4958,56 @@ the analytics image, once there is a way to build one.
 
 **Still outstanding on GCP:** Security Command Center Standard remains a console activation, as
 recorded on 2026-09-20. The API is now enabled, which is the declarable half.
+
+---
+
+## 2026-09-22 — The offering is named, and the two subdomains follow from it
+
+**Extends the 2026-09-19 decisions** on using a subdomain of an existing domain and on giving Cloud
+Identity its own subdomain, by settling what those subdomains are actually called.
+
+**The offering is "Caliper".** Until now the product had no name anywhere in the design — it was "the
+application", and the SDR's offering had no identity. The name is grounded in what the code already
+does rather than invented around it: the API accepts `{customer, metric, value, recorded_at}` and
+reads it back, the worker extracts it, the GCP pipeline loads it into BigQuery. It is a metrics
+ingestion and analytics platform, and a caliper is a precision measuring instrument.
+
+| | |
+|---|---|
+| Offering | `caliper.elvievalmores.com` |
+| Workforce identity | `corp.elvievalmores.com` |
+| Apex | untouched — GitHub Pages, ProtonMail MX |
+
+**Why a product name at all, having gone this far without one.** The first proposal was
+`ksi.elvievalmores.com`, which labels the assessment rather than the product. Paired with `corp.` for
+workforce identity it would have been half-realistic: a company with a corporate identity domain
+whose product is named after the compliance framework it is being assessed against. Realism applied
+to one half and not the other is worse than either extreme, because an inconsistency invites a reader
+to ask which parts of the persona are load-bearing.
+
+**Why `corp.` rather than `id.`, `sso.` or `accounts.`** This subdomain becomes the identifier for
+every workforce principal, and those strings appear in SAML assertions, Identity Center, CloudTrail
+and throughout the SDR's evidence. `corp.` reads as an organisation people belong to;
+`id.`/`sso.`/`accounts.` describe infrastructure. It is also the long-standing convention for a
+workforce tenant carved off an apex in use for something else, which is exactly the situation the
+2026-09-19 entry described.
+
+**The asymmetry that drove the care.** The application subdomain is trivially reversible — a new
+certificate and a new record. The Cloud Identity subdomain becomes a tenant's primary domain, and
+changing it later means migrating every principal and redoing SAML and SCIM. The two were treated as
+one choice and they are not.
+
+**Deliberately not renamed: the Terraform resources.** Everything stays `fedramp-20x-ksi-*`. The repo
+is the assessment; Caliper is the thing assessed. Renaming live resources to match a documentation
+name would be destructive churn for no benefit, and the two names having different scopes is correct
+rather than untidy.
+
+**Certificate requested**, not yet issued. `aws_acm_certificate.app` exists in `infra/bootstrap` for
+`caliper.elvievalmores.com`, pending the hand-created DNS validation record — per the 2026-09-19
+decision that validation is manual rather than through a DNS provider plugin.
+
+**A limitation to record once the record exists.** The load balancer's hostname carries a generated
+ID and changes every time the environment is rebuilt, so the record pointing `caliper` at it must be
+updated each session. The certificate validation record is one-time; the application record is not.
+KSI-PIY-RVD's `security.txt` is therefore reachable only while the environment stands, which is the
+same shape as the collector cadence limitation and should be declared the same way.
