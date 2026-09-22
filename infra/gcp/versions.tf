@@ -6,6 +6,14 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+
+    # Only for google_project_service_identity, which creates a service
+    # agent before first use of its service. The GA provider has no
+    # equivalent. See analytics.tf.
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
+    }
   }
 
   # State lives in the same S3 bucket the AWS roots use, under a different

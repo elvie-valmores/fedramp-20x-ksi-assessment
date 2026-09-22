@@ -12,3 +12,13 @@ provider "google" {
   # both act as the same identity.
   impersonate_service_account = "terraform-admin@${var.gcp_project_id}.iam.gserviceaccount.com"
 }
+
+# Same identity and the same two-hop auth as above. Declared separately
+# because a provider block cannot be shared between two providers, not
+# because anything about the authentication differs.
+provider "google-beta" {
+  project = var.gcp_project_id
+  region  = var.gcp_region
+
+  impersonate_service_account = "terraform-admin@${var.gcp_project_id}.iam.gserviceaccount.com"
+}

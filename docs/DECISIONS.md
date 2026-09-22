@@ -4900,3 +4900,61 @@ and JIT remain unbuildable — but the prerequisite they were all waiting on is 
 
 **AWS root and break-glass stay native**, per the identity design, and are not routed through
 Identity Center.
+
+---
+
+## 2026-09-22 — GCP phase 1 applied, and the two faults it took to get there
+
+**Applied.** 30 resources. Landing bucket, BigQuery dataset and table, Artifact Registry repository,
+two KMS keys and their key ring, two service accounts, Data Access audit configuration on the three
+named services, and six APIs enabled. `terraform plan` returns "No changes", which refreshes every
+resource against the live API and is therefore the verification, not a substitute for it.
+
+Audit configuration confirmed live and matching the 2026-09-20 decision: `storage` DATA_READ and
+DATA_WRITE, `bigquery` DATA_READ and DATA_WRITE, `cloudkms` DATA_READ. Not `allServices`.
+
+**Fault one: `roles/editor` cannot set IAM policy.** The apply created keys and service accounts and
+then failed on every IAM binding — `cloudkms.cryptoKeys.setIamPolicy` denied, and project policy
+updates forbidden. This is deliberate in GCP: editor can create and delete almost anything but cannot
+grant, precisely so that an automation identity cannot escalate itself.
+
+**Resolved by granting `roles/cloudkms.admin` and `roles/resourcemanager.projectIamAdmin`**, and the
+second deserves naming rather than burying. Combined with the `roles/editor` it already held,
+`projectIamAdmin` makes `terraform-admin` effectively owner-equivalent, because the ability to set
+project IAM is the ability to grant itself anything. There is no way around it: declaring project IAM
+in Terraform requires the Terraform identity to be able to set project IAM. The alternative was
+dropping the audit configs from declared state, and those are KSI-MLA-LET's Data Access logging,
+chosen deliberately two days ago. The working rule applies — state the limitation rather than narrow
+the scope to avoid it. **The provisioning identity's blast radius is now the whole project**, and
+KSI-CNA-MAT and KSI-IAM-ELP should say so rather than let a reader assume otherwise.
+
+**Fault two: service agents do not exist until they are induced.** With IAM fixed, the same three
+grants failed differently: `Service account service-<n>@gs-project-accounts... does not exist`, and
+the same for BigQuery's encryption agent and Artifact Registry's. The file constructed all three
+addresses from the project number. The strings were correct. The accounts were not there, because GCP
+creates a service agent on first use of its service, and a CMEK grant is not a use.
+
+**Chosen: read the identities rather than construct them.**
+`data.google_storage_project_service_account` and `data.google_bigquery_default_service_account`
+return the agent and create it as a side effect, which both induces the account and ties the grant to
+the identity instead of to a guess about its name.
+
+**Artifact Registry needed the beta provider.** It has no inducing data source and the GA provider
+has no `google_project_service_identity`. So `google-beta` is declared, impersonating the same
+service account, used for exactly one resource. That is preferable to running
+`gcloud beta services identity create` by hand: a declarative interface exists here, and the
+Security Command Center exception was recorded precisely because for that one it does not. An
+exception is for a platform limit, not for a provider being inconvenient.
+
+**Both faults share a shape with the two found in AWS earlier today.** The configuration was
+internally consistent, `terraform validate` passed, and a plan looked clean — the fault existed only
+at the moment of execution, against the real API. Four for four today.
+
+**What this unblocks.** `pipeline_service_account_unique_id` is `104894493962317106056`.
+`infra/aws/cross_cloud.tf` is gated on exactly that value and has been `count = 0` since it was
+written; it can now be applied. The Artifact Registry repository at
+`us-central1-docker.pkg.dev/fedramp-20x-ksi-assessment/fedramp-20x-ksi` also now exists to receive
+the analytics image, once there is a way to build one.
+
+**Still outstanding on GCP:** Security Command Center Standard remains a console activation, as
+recorded on 2026-09-20. The API is now enabled, which is the declarable half.

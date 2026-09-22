@@ -96,22 +96,47 @@ resource "google_kms_crypto_key" "artifacts" {
 # Each service encrypts with its own agent identity, so each needs its own
 # grant on the key it uses. Scoped per key rather than per key ring: a
 # grant on the ring would let the storage agent decrypt image layers.
+#
+# The identities are read, not constructed. Their addresses are derivable
+# from the project number and writing them out that way is what this file
+# did until 2026-09-22 -- which produced three correct-looking strings and
+# a failed apply, because a service agent does not exist until its service
+# is first used and `Service account ... does not exist` is a 400, not a
+# retryable condition. Reading each one creates it as a side effect, and
+# ties the grant to the identity rather than to a guess about its name.
+data "google_storage_project_service_account" "gcs" {}
+
+data "google_bigquery_default_service_account" "bq" {}
+
+# Artifact Registry has no data source that induces its agent, and the GA
+# provider has no google_project_service_identity. This is the one place
+# the beta provider is used, and it is used rather than running
+# `gcloud beta services identity create` by hand because a declarative
+# interface exists here -- unlike Security Command Center's free tier,
+# which is a recorded exception for exactly the opposite reason.
+resource "google_project_service_identity" "artifactregistry" {
+  provider = google-beta
+  service  = "artifactregistry.googleapis.com"
+
+  depends_on = [google_project_service.analytics]
+}
+
 resource "google_kms_crypto_key_iam_member" "storage_analytics" {
   crypto_key_id = google_kms_crypto_key.analytics.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com"
+  member        = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}"
 }
 
 resource "google_kms_crypto_key_iam_member" "bigquery_analytics" {
   crypto_key_id = google_kms_crypto_key.analytics.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:bq-${data.google_project.current.number}@bigquery-encryption.iam.gserviceaccount.com"
+  member        = "serviceAccount:${data.google_bigquery_default_service_account.bq.email}"
 }
 
 resource "google_kms_crypto_key_iam_member" "artifactregistry_artifacts" {
   crypto_key_id = google_kms_crypto_key.artifacts.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-artifactregistry.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.artifactregistry.email}"
 }
 
 # --- The landing zone ---
