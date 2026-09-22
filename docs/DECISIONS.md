@@ -4723,3 +4723,56 @@ identity passes, and the policy is syntactically fine. The gap exists only for t
 only at refresh time. This is the second control in two days found non-functional while appearing
 correctly configured — the first being the OIDC subject mismatch earlier today. Both were invisible
 to every check short of executing the thing.
+
+---
+
+## 2026-09-22 — Open question: the daily drift check and apply-and-destroy are in direct conflict
+
+**Not resolved. Recorded for the design conversation**, in the same way the free-tier plan question
+was on 2026-09-19, because the answer changes what KSI-SVC-ACM can claim rather than how something is
+built.
+
+**The conflict.** `drift.yml` runs at 07:00 UTC daily and fails the run on anything but a clean plan.
+The cost posture tears the application environment down between sessions. With it down, the plan
+proposes to add the 123 resources that are declared but not standing.
+
+**Measured, not predicted.** Run locally against the torn-down environment immediately after the
+teardown on 2026-09-22:
+
+```
+terraform plan -detailed-exitcode  ->  2
+```
+
+Exit 2 is drift, and the workflow fails on it. So every scheduled run between sessions fails.
+
+**The workflow's own summary text asserts the opposite** — it tells the reader that under
+apply-and-destroy a clean result "confirms declared state matches an empty environment". That is
+wrong, and wrong in the direction that matters: it describes an outcome the mechanism cannot produce
+and would reassure a reader who never ran it. The comment was written from reasoning rather than from
+a run.
+
+**Why this is not merely noise.** This project's own rule, recorded on 2026-09-20 against the
+`security.txt` timestamp: a signal that is always positive "does not merely add noise — it removes
+the project's ability to distinguish drift from its own configuration". A daily failure that is
+expected is a daily failure nobody reads, and the one run that means something arrives looking
+identical to the three hundred that did not.
+
+**The options, none yet chosen.**
+
+1. **Scope the drift plan to the persistent set.** The same five-file boundary `teardown.sh` already
+   derives. The claim becomes "the resources that persist are checked daily for drift", which is true,
+   verifiable and narrower than the current claim. One boundary would then serve both teardown and
+   drift, which is an argument for it beyond convenience.
+2. **Run drift only while the environment stands.** Dispatch-only, no schedule, invoked as part of a
+   session. Honest, but it stops being a standing control and becomes a manual check, which is a
+   material weakening of KSI-SVC-ACM.
+3. **Declare the limitation and accept the failures.** Cheapest, and the worst of the three: it
+   knowingly leaves a control emitting a signal that cannot be read.
+
+**Recommendation on the record: option 1.** It keeps a genuine daily signal, it is the only option
+that does not weaken the determination, and it reuses a boundary that already exists and is already
+tested. What it costs is that drift over the application environment is only checked while that
+environment is up — which should be stated plainly under KSI-SVC-ACM rather than left implicit.
+
+**Whatever is chosen, the workflow's summary text must be corrected.** It currently tells the reader
+something the mechanism cannot do.

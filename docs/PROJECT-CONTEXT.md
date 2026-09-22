@@ -69,6 +69,65 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
+## Resume here — state as of 2026-09-22, end of session
+
+**Nothing is standing in AWS.** The application environment was torn down with
+`infra/aws/teardown.sh`: 123 destroyed, 40 preserved. Verified after the fact — load balancer,
+database, VPC and all seven endpoints gone; log store present with Object Lock `COMPLIANCE`/7 days,
+CloudTrail, Config recorder, Athena and both Lambdas intact. Twelve customer-managed KMS keys sit in
+`PendingDeletion` and clear on their own.
+
+**GCP has foundations only** — 7 resources. The analytics pipeline is written and has never been
+applied. The `cloudkms`, `run`, `artifactregistry` and `cloudscheduler` APIs are not yet enabled.
+
+**What was proven this session.** Phase 1 verified live before teardown: inventory self-test passing
+on both clouds including its negative control, 5 of 5 collector checks, no internet route on the
+private tiers, database private and encrypted with IAM auth. Then `drift` verified end to end — exit
+0, "No changes" — which it had never done before.
+
+**What was fixed this session.** Two controls that were configured, deployed and completely
+non-functional: the GitHub OIDC trust pinned the legacy subject claim, and behind it the drift role
+lacked four read permissions plus carried a deny whose premise was false for secret versions. Both
+are applied. Neither was visible to `terraform validate`, to `terraform plan` from a privileged
+identity, or to code review. Both were found only by running the thing and reading the output.
+
+### The next thing to do
+
+**Re-run `build-and-push`.** It has not run since the trust fix, so image build, dependency scanning,
+keyless signing, digest pinning and push are all unproven, and both ECR repositories are empty. It is
+the gate on AWS phase 2 and on most of the CMT cluster.
+
+**It needs the environment standing**, because ECR and the pipeline roles are both in the destroyable
+set. So that work is a session that applies phase 1 first, and ideally carries straight through to
+phase 2 rather than tearing down in between.
+
+### Open decisions, none urgent, all recorded in DECISIONS.md
+
+| Question | Where |
+|---|---|
+| Daily drift fails whenever the environment is down. Scope it to the persistent set? | 2026-09-22 entry, recommendation on record |
+| Move `registry.tf` and the `artifacts` key into the persistent set so images survive teardown? | below |
+| The analytics image has no build path at all | below |
+
+**On registry persistence.** ECR repositories and the artifacts key cost roughly a dollar a month and
+are currently destroyed every session, so every session that wants phase 2 must rebuild images first.
+Moving them into the persistent set would make phase 2 reachable immediately on any apply. It changes
+the persistence boundary that `teardown.sh` derives and that the 2026-09-22 teardown entry documents,
+so it is a deliberate decision rather than a tidy-up. Note `registry.tf` depends on
+`aws_kms_key.artifacts` in `kms.tf`, so both move or neither does.
+
+**On the analytics image.** `build-and-push.yml`'s matrix is `[api, worker]`; `app/analytics/` is not
+in it. There is no GitHub-to-GCP workload identity federation in `infra/gcp`. There is no container
+runtime on the workstation. `infra/README.md` says the image is "pushed by hand until then", which is
+not currently possible by any route. GCP phase 2 is unreachable until this is resolved — most likely
+by adding the federation and a third matrix entry.
+
+**Cheapest unblocked progress:** GCP phase 1. It costs pennies at rest and yields
+`pipeline_service_account_unique_id`, which is what `infra/aws/cross_cloud.tf` is gated on — that role
+is currently `count = 0` and will stay that way until the GCP service account exists.
+
+---
+
 ## The files in `/docs`
 
 | File | What it is |
