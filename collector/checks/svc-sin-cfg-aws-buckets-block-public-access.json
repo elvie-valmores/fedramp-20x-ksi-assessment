@@ -1,0 +1,13 @@
+{
+  "id": "svc-sin-cfg-aws-buckets-block-public-access",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No S3 bucket in the account permits public access: all four public access block settings on every bucket",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "s3_buckets_block_public_access",
+    "region": "us-east-1"
+  }
+}

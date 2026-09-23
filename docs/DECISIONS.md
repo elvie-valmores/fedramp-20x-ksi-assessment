@@ -5818,3 +5818,118 @@ It was proven able to fail. A probe reference from `registry.tf` to `aws_vpc_end
 reported as `registry.tf:203 -> aws_vpc_endpoint.s3 (network.tf)` with exit 1, then the probe was
 removed. `drift.yml` runs `--check` before its plan, so a crossing is reported as a crossing instead
 of as drift.
+
+---
+
+## 2026-09-23 — Live-is-declared built, exclusions are verified rules, and what the inventory held
+
+**Built: `live_is_declared`**, the reverse direction of declared versus live. It serves KSI-SVC-ACM
+row 17, "every machine-based resource in the inventory appears in declared state". The live side is
+the KSI-PIY-GIV inventory, because the row names it as the source. The declared side is the union of
+the named roots' state: `aws` together with `bootstrap`, because the bootstrap root holds what the
+other root stands on.
+
+**Exclusions are rules verified against the provider, never name patterns.** Each exclusion is
+written into the check definition with its reason, and has one of two shapes:
+
+- **A predicate the mechanism asks the owning service about.** Is this role's IAM path
+  `/aws-service-role/`? Is this VPC the default? Is this key AWS-managed, or a customer key in
+  `PendingDeletion`? Is this service account in a domain Google owns?
+- **An exact match on one named identity.**
+
+A role named `AWSServiceRoleForAnything` at an ordinary path is not excused, and the self-test
+asserts that. An exclusion anyone could satisfy by choosing a name would be a hole with a reason
+attached.
+
+**The report of unused exclusions paid for itself immediately.** The first GCP run matched named
+exclusions against the inventory's `name` field, which on GCP is a display name ("Terraform Admin").
+Both exclusions went unused, and the report said so. GCP exclusions now match the full resource ID,
+which no one can rename.
+
+**Result.** GCP: 12 live resources, 9 declared, 3 excused, passes. AWS: 54 live resources, 53
+accounted for, **fails on one**, and it is right to.
+
+| Excused (AWS) | Count | Rule |
+|---|---|---|
+| Service-linked roles | 11 | IAM path is `/aws-service-role/` |
+| KMS keys | 18 | 3 AWS-managed, 15 `PendingDeletion` from teardowns |
+| Default VPC, its subnets, its default security group | 8 | `IsDefault`; only the group named `default` |
+| `terraform-admin` user | 1 | by name, and see the finding below |
+
+**The project VPC's default security group is deliberately not excused.** Nothing declares it
+(`aws_default_security_group` is absent), so while the environment stands its rules are whatever AWS
+defaults to, not code. The check will fail on it at every phase 1, and that is correct. The remedy is
+to declare it with no rules. Recorded in the open items.
+
+---
+
+**Finding: the inventory lists a resource that does not exist.** The one unaccounted resource is
+`sg-0ac03881f5bd7c3b7`, the default security group of the project VPC destroyed at 17:28 EDT. Config
+recorded the VPC's deletion. It never recorded the deletion of the VPC's default group, which went
+implicitly with the VPC. Five hours later, `SelectResourceConfig` still reports the group as present,
+and EC2 answers `InvalidGroup.NotFound`. The check reports it with that note rather than silently
+excusing it.
+
+This belongs to KSI-PIY-GIV, not here. The inventory, which is Config-backed by the 2026-09-1x
+decision, lists a resource that is gone, and every teardown may leave another one. Not fixed. The
+choices are to verify existence for types known to be deleted implicitly, to filter security groups
+whose VPC relationship points at a deleted VPC, or to accept Config's lag and state it. Check again
+next session to see whether Config catches up on its own.
+
+**Finding: `terraform-admin` on AWS is an IAM user with `AdministratorAccess`, a static access key
+active since 2026-09-17, and no MFA device.** It is the identity every local apply in this project
+runs as, including today's. No AWS-side decision about it is recorded. The GCP `terraform-admin`,
+by contrast, is recorded (2026-09-22) and has no user-managed keys. It is impersonated.
+
+This is the kind of credential KSI-IAM-SNU's durability hierarchy rates lowest, held by the
+highest-privilege identity in the account. Identity Center now exists, so short-lived credentials
+through `aws sso login` and an administrative permission set are available. **Not acted on**, because
+changing the operator's own access is the user's call. It is excused from `live_is_declared` only,
+and the exclusion's reason says so.
+
+**Finding: the default Compute Engine service account holds `roles/editor` on the project.** Google
+created it when the Compute Engine API was enabled. Nothing in this project uses Compute Engine. So
+it is a standing grant of edit on everything, with no declared operation behind it, which is the
+pattern KSI-IAM-ELP and KSI-CNA-MAT's blast-radius computation exist to surface. Not acted on.
+Removing the binding or disabling the account are both one command, and the choice is the user's.
+
+---
+
+**Four KSI-SVC-SIN checks, and a gap one of them found.**
+
+| Check | Row | Result |
+|---|---|---|
+| Every bucket denies non-TLS requests to itself and its objects | Build row 2, "TLS-only bucket policies". **No verify row checks it** | Failed on the Athena results bucket, which had no policy. Fixed; now 5 of 5 |
+| Every bucket blocks all four public access paths | 40 | 5 of 5 |
+| Log store Object Lock, `COMPLIANCE`, at least 7 days | 43 | Passes |
+| Trail logging with log file validation | 43 | Passes |
+
+The Athena results bucket now carries the same `DenyInsecureTransport` as the other four. It is
+persistent, in `log_corpus.tf`, and references nothing ephemeral (`boundary.py --check`). It was
+applied once, targeted, and plain HTTP is refused with an explicit deny. 67 resources now persist.
+
+**The bucket checks take their population from `s3:ListBuckets`**, not from a list in the check.
+"Every bucket" is the claim, and a list in the check would make it every bucket someone remembered
+to add.
+
+**Negative controls for the older handlers are still missing.** The new handlers are written as a
+fetch plus a pure judgement, and `self_test.py` gives each judgement configurations that are wrong in
+exactly one way. For the TLS judgement those are: an Allow, one principal, objects only, one action,
+and an inverted condition. A deliberately loose judgement was flagged on four of them. The
+pre-existing `cloud_api_config_read` handlers (Config recorder, asset feed), `log_query` and
+`inventory_reconciliation` have **no negative control** in the collector's self-test. An earlier
+statement today that every assertion has one was wrong, and is corrected in `PROJECT-CONTEXT.md`.
+
+**Found and left for a decision: four of five buckets are not encrypted with a customer-managed
+key.** SVC-SIN build row 1 says "customer-managed keys across all stores". The log store, the Config
+delivery bucket, the Athena results bucket and the state bucket all use SSE-S3. For the log store
+this was recorded and load-bearing on 2026-09-22. Every KMS key was then ephemeral, and an Object
+Locked store encrypted with a key the teardown deletes would become permanently unreadable.
+
+That premise changed the same day: the artifacts key persists. A persistent customer key for the
+evidence stores is now possible. It is not risk-free, because a key scheduled for deletion by anyone
+takes locked logs with it. That makes it a design decision, not a fix, and row 39's encryption check
+is not written until it is taken.
+
+**Also noted: no account-level S3 public access block.** Every bucket blocks public access
+individually, so nothing is exposed. But a bucket created tomorrow would not inherit the block.

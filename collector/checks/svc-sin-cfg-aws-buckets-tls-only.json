@@ -1,0 +1,13 @@
+{
+  "id": "svc-sin-cfg-aws-buckets-tls-only",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every S3 bucket in the account denies requests not made over TLS, for the bucket and its objects (build row 2)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "s3_buckets_deny_insecure_transport",
+    "region": "us-east-1"
+  }
+}

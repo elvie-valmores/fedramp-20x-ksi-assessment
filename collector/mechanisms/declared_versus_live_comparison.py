@@ -37,7 +37,7 @@ standing -- and, without refresh-only mode, proposes creating all of
 them. Targeting what is in state checks everything standing: the
 persistent set between sessions, the whole environment while it is up.
 
-Check params:
+Check params, for no_drift and declared_exists_live:
     root        "aws" or "gcp" -- the directory under infra/
     assertion   "no_drift" or "declared_exists_live"
     variables   TF_VAR_ names that must be set in the environment. Listed
@@ -49,12 +49,42 @@ The variables must match what the environment was applied with. Run
 against a standing phase 2 without deploy_services=true and the plan
 proposes destroying the services -- which is reported, correctly, as
 declared and live disagreeing under the configuration given.
+
+The reverse direction, live_is_declared, asks whether everything the
+inventory reports is declared somewhere. It reads the KSI-PIY-GIV
+inventory rather than querying the clouds itself -- the row names the
+inventory as its source -- and the union of the named roots' state,
+because the bootstrap root holds what the other roots stand on.
+
+Check params, for live_is_declared:
+    assertion   "live_is_declared"
+    provider    "aws" or "gcp"
+    region      (aws) / project_id (gcp) -- passed to the inventory
+    roots       directories under infra/ whose state counts as declared
+    exclusions  resources legitimately outside Terraform, each
+                {"resource_type", "rule", "reason"}. A rule is either
+                {"predicate": name}, verified against the provider (see
+                AwsPredicates and GcpPredicates), or an exact match for one
+                named decision: {"resource_id_equals": value}, or
+                {"name_equals": value} where the inventory's name is an
+                identifier and not a display name -- on GCP it is a display
+                name, which anyone with edit rights can change. Never a
+                name pattern: a role called
+                AWSServiceRoleForAnything is not thereby service-linked,
+                and an exclusion that can be satisfied by naming is a
+                hole with a reason attached.
+
+A live resource an exclusion's predicate cannot find is not excused. It
+is reported with a note that the provider says it does not exist, which
+means the inventory is wrong -- a finding for KSI-PIY-GIV, surfaced here
+rather than hidden by it.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -79,6 +109,8 @@ class DeclaredVersusLiveComparison(Mechanism):
 
     def run(self, check: CheckDefinition) -> CheckResult:
         assertion = check.params["assertion"]
+        if assertion == "live_is_declared":
+            return self._live_is_declared(check)
         if assertion not in ASSERTIONS:
             raise NotImplementedError(
                 f"declared_versus_live_comparison has no handler for "
@@ -97,6 +129,33 @@ class DeclaredVersusLiveComparison(Mechanism):
 
         passed, evidence, message = evaluate(assertion, _PLANS[root])
         evidence["root"] = root
+        return CheckResult(check.id, passed, evidence, message)
+
+    def _live_is_declared(self, check: CheckDefinition) -> CheckResult:
+        import _paths  # noqa: F401  (puts inventory/ on the import path)
+
+        provider = check.params["provider"]
+        if provider == "aws":
+            import aws_source
+
+            live = aws_source.generate(region=check.params["region"])
+            predicates = AwsPredicates(check.params["region"])
+        elif provider == "gcp":
+            import gcp_source
+
+            live = gcp_source.generate(project_id=check.params["project_id"])
+            predicates = GcpPredicates()
+        else:
+            raise ValueError(f"unsupported provider {provider!r}")
+
+        declared = set()
+        for root in check.params["roots"]:
+            declared |= declared_identifiers(provider, state(root))
+
+        passed, evidence, message = coverage(
+            provider, live, declared, check.params["exclusions"], predicates.test
+        )
+        evidence["roots"] = check.params["roots"]
         return CheckResult(check.id, passed, evidence, message)
 
 
@@ -135,6 +194,14 @@ def plan(root: str) -> dict[str, Any]:
     if result.get("errored"):
         raise RuntimeError(f"terraform plan in infra/{root} reported errors")
     return result
+
+
+def state(root: str) -> dict[str, Any]:
+    """The root's current state as JSON. Read only: nothing is planned."""
+    workdir = INFRA_DIR / root
+    if not (workdir / ".terraform").is_dir():
+        raise RuntimeError(f"infra/{root} is not initialised -- run terraform init there")
+    return json.loads(_terraform(workdir, "show", "-json"))
 
 
 def _terraform(workdir: Path, *args: str) -> str:
@@ -241,15 +308,193 @@ ASSERTIONS = {
 }
 
 
-def _managed_in_state(plan_json: dict[str, Any]) -> list[str]:
-    def walk(module: dict) -> list[dict]:
-        found = list(module.get("resources", []))
-        for child in module.get("child_modules", []):
-            found.extend(walk(child))
-        return found
+def _walk(module: dict) -> list[dict]:
+    found = list(module.get("resources", []))
+    for child in module.get("child_modules", []):
+        found.extend(_walk(child))
+    return found
 
+
+def _managed_in_state(plan_json: dict[str, Any]) -> list[str]:
     root = plan_json.get("prior_state", {}).get("values", {}).get("root_module", {})
-    return [r["address"] for r in walk(root) if r.get("mode") == "managed"]
+    return [r["address"] for r in _walk(root) if r.get("mode") == "managed"]
+
+
+# --- live_is_declared ---
+#
+# The attributes that name a resource, per provider. A live resource is
+# declared if the inventory's ID or name for it equals one of these values
+# on some managed resource in state. Matching is exact and deliberately not
+# by type: Config and Cloud Asset name types differently from Terraform, and
+# a mapping table would be one more list to rot. The cost is that two
+# resources of different types sharing a name could vouch for each other.
+IDENTIFYING_ATTRIBUTES = {
+    "aws": ("id", "arn", "name", "bucket", "key_id", "unique_id"),
+    "gcp": ("id", "name"),
+}
+
+
+def declared_identifiers(provider: str, state_json: dict[str, Any]) -> set[str]:
+    root = state_json.get("values", {}).get("root_module", {})
+    found = set()
+    for resource in _walk(root):
+        if resource.get("mode") != "managed":
+            continue
+        for attribute in IDENTIFYING_ATTRIBUTES[provider]:
+            value = resource.get("values", {}).get(attribute)
+            if isinstance(value, str) and value:
+                found.add(value)
+    return found
+
+
+def _live_keys(provider: str, resource: dict) -> set[str]:
+    if provider == "gcp":
+        # Cloud Asset names carry the service host --
+        # //storage.googleapis.com/<bucket>, //iam.googleapis.com/projects/...
+        # -- and Terraform IDs are the path after it.
+        return {resource["resource_id"].split("//", 1)[-1].split("/", 1)[-1]}
+    return {v for v in (resource["resource_id"], resource.get("name")) if v}
+
+
+def coverage(provider, live, declared, exclusions, test) -> tuple[bool, dict, str]:
+    """Passes if every live resource is declared or excused by a stated rule.
+
+    `test(rule, resource)` returns (holds, note). Pure apart from that
+    callback, so self_test.py can drive it with a fake provider.
+    """
+    excused, unaccounted = [], []
+    used = [False] * len(exclusions)
+
+    for resource in live:
+        if _live_keys(provider, resource) & declared:
+            continue
+
+        reason, notes = None, []
+        for i, exclusion in enumerate(exclusions):
+            if exclusion["resource_type"] != resource["resource_type"]:
+                continue
+            holds, note = test(exclusion["rule"], resource)
+            if note:
+                notes.append(note)
+            if holds:
+                reason, used[i] = exclusion["reason"], True
+                break
+
+        entry = {
+            "resource_type": resource["resource_type"],
+            "resource_id": resource["resource_id"],
+            "name": resource.get("name"),
+        }
+        if reason:
+            excused.append({**entry, "reason": reason})
+        else:
+            unaccounted.append({**entry, "notes": sorted(set(notes))})
+
+    evidence = {
+        "live_count": len(live),
+        "declared_count": len(live) - len(excused) - len(unaccounted),
+        "excused": excused,
+        "unaccounted": unaccounted,
+        # Not a failure, but worth seeing: an exclusion nothing needs is
+        # either residue or a rule that has stopped matching what it meant.
+        "exclusions_unused": [e for e, u in zip(exclusions, used) if not u],
+    }
+    if not live:
+        return False, evidence, "the inventory is empty -- a check over nothing cannot pass"
+    if unaccounted:
+        return False, evidence, (
+            f"{len(unaccounted)} of {len(live)} live resources are neither declared "
+            f"nor excused"
+        )
+    return True, evidence, (
+        f"all {len(live)} live resources accounted for: "
+        f"{evidence['declared_count']} declared, {len(excused)} excused"
+    )
+
+
+class AwsPredicates:
+    """Exclusion rules checked against AWS itself, not against a name.
+
+    Each asks the owning service one question. NotFound is an answer --
+    the inventory listed something that does not exist -- and is returned
+    as a note rather than raised, so it reaches the evidence.
+    """
+
+    def __init__(self, region: str):
+        import boto3
+
+        self.ec2 = boto3.client("ec2", region_name=region)
+        self.iam = boto3.client("iam")
+        self.kms = boto3.client("kms", region_name=region)
+
+    def test(self, rule: dict, resource: dict) -> tuple[bool, str | None]:
+        if "resource_id_equals" in rule:
+            return resource["resource_id"] == rule["resource_id_equals"], None
+        if "name_equals" in rule:
+            return resource.get("name") == rule["name_equals"], None
+        handler = getattr(self, f"_{rule['predicate']}", None)
+        if handler is None:
+            raise NotImplementedError(f"no AWS predicate {rule['predicate']!r}")
+        try:
+            return handler(resource), None
+        except Exception as exc:
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+            if "NotFound" in code or code == "NoSuchEntity":
+                return False, f"{code}: the provider says this resource does not exist"
+            raise
+
+    def _service_linked_role(self, resource: dict) -> bool:
+        # The path, not the name. IAM reserves /aws-service-role/ for roles
+        # AWS services create; anyone can name a role AWSServiceRoleForX.
+        role = self.iam.get_role(RoleName=resource["name"])["Role"]
+        return role["Path"].startswith("/aws-service-role/")
+
+    def _default_vpc(self, resource: dict) -> bool:
+        kind = resource["resource_type"]
+        if kind == "AWS::EC2::VPC":
+            vpc_id = resource["resource_id"]
+        elif kind == "AWS::EC2::Subnet":
+            subnet = self.ec2.describe_subnets(SubnetIds=[resource["resource_id"]])
+            vpc_id = subnet["Subnets"][0]["VpcId"]
+        elif kind == "AWS::EC2::SecurityGroup":
+            group = self.ec2.describe_security_groups(GroupIds=[resource["resource_id"]])
+            group = group["SecurityGroups"][0]
+            # Only the group AWS creates. Anything else in the default VPC
+            # was put there by someone and should be answered for.
+            if group["GroupName"] != "default":
+                return False
+            vpc_id = group["VpcId"]
+        else:
+            return False
+        vpc = self.ec2.describe_vpcs(VpcIds=[vpc_id])["Vpcs"][0]
+        return bool(vpc.get("IsDefault"))
+
+    def _aws_managed_kms_key(self, resource: dict) -> bool:
+        key = self.kms.describe_key(KeyId=resource["resource_id"])["KeyMetadata"]
+        return key["KeyManager"] == "AWS"
+
+    def _kms_pending_deletion(self, resource: dict) -> bool:
+        key = self.kms.describe_key(KeyId=resource["resource_id"])["KeyMetadata"]
+        return key["KeyManager"] == "CUSTOMER" and key["KeyState"] == "PendingDeletion"
+
+
+class GcpPredicates:
+    def test(self, rule: dict, resource: dict) -> tuple[bool, str | None]:
+        if "resource_id_equals" in rule:
+            return resource["resource_id"] == rule["resource_id_equals"], None
+        if "name_equals" in rule:
+            return resource.get("name") == rule["name_equals"], None
+        if rule.get("predicate") == "google_default_service_account":
+            # Google creates these on first use of Compute Engine or App
+            # Engine, in domains it owns. A project cannot create an account
+            # in either domain, so matching the address is not matching a
+            # name someone chose.
+            email = resource["resource_id"].rsplit("/", 1)[-1]
+            return bool(re.fullmatch(
+                r"\d+-compute@developer\.gserviceaccount\.com|[a-z0-9-]+@appspot\.gserviceaccount\.com",
+                email,
+            )), None
+        raise NotImplementedError(f"no GCP predicate {rule.get('predicate')!r}")
 
 
 def _changed_attributes(change: dict) -> tuple[set[str], set[str]]:

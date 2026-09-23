@@ -1,0 +1,39 @@
+{
+  "id": "svc-acm-cfg-gcp-inventory-is-declared",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "CFG",
+  "description": "Every machine-based resource in the GCP inventory appears in declared state, or is excused by a stated and verified rule",
+  "required_cadence": "3 days",
+  "params": {
+    "assertion": "live_is_declared",
+    "provider": "gcp",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "roots": [
+      "gcp"
+    ],
+    "exclusions": [
+      {
+        "resource_type": "cloudresourcemanager.googleapis.com/Project",
+        "rule": {
+          "resource_id_equals": "//cloudresourcemanager.googleapis.com/projects/fedramp-20x-ksi-assessment"
+        },
+        "reason": "The project is the container every root deploys into, created by hand outside any organization. A root cannot declare the project it needs in order to exist."
+      },
+      {
+        "resource_type": "iam.googleapis.com/ServiceAccount",
+        "rule": {
+          "resource_id_equals": "//iam.googleapis.com/projects/fedramp-20x-ksi-assessment/serviceAccounts/terraform-admin@fedramp-20x-ksi-assessment.iam.gserviceaccount.com"
+        },
+        "reason": "The provisioning identity, created by hand before the root existed and impersonated rather than keyed. Its owner-equivalent reach is recorded in DECISIONS.md, 2026-09-22."
+      },
+      {
+        "resource_type": "iam.googleapis.com/ServiceAccount",
+        "rule": {
+          "predicate": "google_default_service_account"
+        },
+        "reason": "Created by Google on first use of Compute Engine, in a domain Google owns. Excused from this check only: its project-level roles/editor with nothing using it is an open finding (DECISIONS.md, 2026-09-23)."
+      }
+    ]
+  }
+}

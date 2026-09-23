@@ -97,7 +97,7 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented, all self-tested. 19 check definitions. Run by hand; no schedule or runtime exists yet |
+| Collector framework | 5 of 9 mechanisms implemented. 25 check definitions, 24 passing; the one failure is a real inventory defect. Run by hand; no schedule or runtime exists yet |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
@@ -107,7 +107,7 @@ set. A missing variable is reported as an error, never as a pass.
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 | Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
-**Nothing expensive is standing between sessions.** 66 AWS resources persist,
+**Nothing expensive is standing between sessions.** 67 AWS resources persist,
 plus the state backend: the log store, CloudTrail, the Config recorder, Athena,
 both Lambdas, the CI identities, the cross-cloud role, the container registry
 with its signed images, the extract bucket, the artifacts key and the posture

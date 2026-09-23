@@ -28,6 +28,7 @@ import tempfile
 from pathlib import Path
 
 from base import CheckDefinition
+import mechanisms.cloud_api_config_read as cfg
 import mechanisms.declared_versus_live_comparison as dvl
 import mechanisms.pipeline_config_read as pcr
 
@@ -230,11 +231,133 @@ def declared_versus_live_comparison() -> list[str]:
     return broken
 
 
+# --- live_is_declared ---
+#
+# coverage() with a fake provider. Each fixture resource says what the
+# provider would answer: its IAM path, or that it does not exist.
+
+DECLARED = {"bucket-a", "role-app"}
+EXCLUSIONS = [
+    {"resource_type": "AWS::IAM::Role", "rule": {"predicate": "service_linked_role"}, "reason": "slr"},
+]
+
+
+def _fake_provider(rule: dict, resource: dict):
+    if resource.get("missing"):
+        return False, "NotFound: the provider says this resource does not exist"
+    return resource.get("path") == "/aws-service-role/", None
+
+
+def _res(kind: str, rid: str, **extra) -> dict:
+    return {"resource_type": kind, "resource_id": rid, "name": rid, **extra}
+
+
+INVENTORIES = {
+    "all-declared": [_res("AWS::S3::Bucket", "bucket-a"), _res("AWS::IAM::Role", "role-app")],
+    "excused": [_res("AWS::S3::Bucket", "bucket-a"),
+                _res("AWS::IAM::Role", "AWSServiceRoleForConfig", path="/aws-service-role/")],
+    "undeclared": [_res("AWS::S3::Bucket", "bucket-a"), _res("AWS::S3::Bucket", "bucket-b")],
+    # Named like a service-linked role, created at an ordinary path. The
+    # exclusion must not be satisfiable by choosing a name.
+    "spoofed-name": [_res("AWS::IAM::Role", "AWSServiceRoleForAnything", path="/")],
+    # The inventory lists what the provider says is gone -- the stale
+    # default security group found on 2026-09-23.
+    "phantom": [_res("AWS::IAM::Role", "AWSServiceRoleForGone", path="/aws-service-role/", missing=True)],
+    "empty": [],
+}
+LID_PASS = ["all-declared", "excused"]
+LID_FAIL = ["undeclared", "spoofed-name", "phantom", "empty"]
+
+
+def live_is_declared() -> list[str]:
+    def verdict(name):
+        return dvl.coverage("aws", INVENTORIES[name], DECLARED, EXCLUSIONS, _fake_provider)
+
+    wrong = [n for n in LID_PASS if not verdict(n)[0]]
+    wrong += [n for n in LID_FAIL if verdict(n)[0]]
+    # A phantom must say why it failed, or the inventory defect is invisible.
+    notes = [n for u in verdict("phantom")[1]["unaccounted"] for n in u["notes"]]
+    if not any("does not exist" in n for n in notes):
+        wrong.append("phantom (no does-not-exist note)")
+
+    print(
+        f"[live_is_declared] {'PASS' if not wrong else 'BROKEN'} -- "
+        f"passes {', '.join(LID_PASS)}; fails {', '.join(LID_FAIL)}"
+    )
+    if wrong:
+        print(f"    wrong verdict on: {', '.join(wrong)}")
+        return ["live_is_declared"]
+    return []
+
+
+# --- cloud_api_config_read judgements ---
+#
+# Each broken configuration is wrong in exactly one way, named by its key.
+
+ARN = "arn:aws:s3:::b"
+
+
+def _tls(**change) -> dict:
+    statement = {
+        "Sid": "DenyInsecureTransport", "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+        "Resource": [ARN, f"{ARN}/*"],
+        "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+    }
+    statement.update(change)
+    return {"Statement": [statement]}
+
+
+PAB_ON = {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}
+LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
+
+CFG_CASES = [
+    ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
+        "no policy": None,
+        "allow not deny": _tls(Effect="Allow"),
+        "one principal": _tls(Principal={"AWS": "arn:aws:iam::1:role/x"}),
+        "objects only": _tls(Resource=f"{ARN}/*"),
+        "one action": _tls(Action="s3:GetObject"),
+        "condition inverted": _tls(Condition={"Bool": {"aws:SecureTransport": "true"}}),
+    }),
+    ("evaluate_public_access_blocked", cfg.evaluate_public_access_blocked, PAB_ON, {
+        "no block": None,
+        "one setting off": {**PAB_ON, "RestrictPublicBuckets": False},
+    }),
+    ("evaluate_object_lock", lambda c: cfg.evaluate_object_lock(c, "COMPLIANCE", 7), LOCK_OK, {
+        "not enabled": {"error": "ObjectLockConfigurationNotFoundError"},
+        "governance mode": {**LOCK_OK, "Rule": {"DefaultRetention": {"Mode": "GOVERNANCE", "Days": 7}}},
+        "no default retention": {"ObjectLockEnabled": "Enabled"},
+        "too short": {**LOCK_OK, "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 1}}},
+    }),
+    ("evaluate_trail_validation", lambda c: cfg.evaluate_trail_validation(*c),
+     ({"LogFileValidationEnabled": True}, {"IsLogging": True}), {
+        "no trail": (None, {}),
+        "not logging": ({"LogFileValidationEnabled": True}, {"IsLogging": False}),
+        "validation off": ({"LogFileValidationEnabled": False}, {"IsLogging": True}),
+    }),
+]
+
+
+def cloud_api_config_read() -> list[str]:
+    broken = []
+    for name, judge, good, bads in CFG_CASES:
+        wrong = [] if judge(good)[0] else ["good config"]
+        wrong += [why for why, bad in bads.items() if judge(bad)[0]]
+        print(f"[{name}] {'PASS' if not wrong else 'BROKEN'} -- fails on: {', '.join(bads)}")
+        if wrong:
+            broken.append(name)
+            print(f"    wrong verdict on: {', '.join(wrong)}")
+    return broken
+
+
 def main() -> int:
     broken = pipeline_config_read()
     print()
     broken += declared_versus_live_comparison()
-    total = len(CASES) + len(DVL_CASES) + 1
+    broken += live_is_declared()
+    print()
+    broken += cloud_api_config_read()
+    total = len(CASES) + len(DVL_CASES) + 2 + len(CFG_CASES)
 
     print()
     if broken:

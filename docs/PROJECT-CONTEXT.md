@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-23:
 
-- **Persisting between sessions**: 66 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 67 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket
   the artifacts key, and the posture services (GuardDuty, Security Hub, Inspector). On GCP: all of
@@ -49,7 +49,7 @@ The build is in progress, and `README.md` carries the current status table. As o
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
 - **Not started**: the three workflows, policy-as-code, the SDR emitter, and the remaining check
-  definitions. 19 of roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
+  definitions. 25 of roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
   The other four are registered and raise a clear error naming what they wait on, and all four
   are genuinely blocked. **No collector schedule or runtime exists.** The collectors are run by
   hand.
@@ -76,7 +76,7 @@ deployed and internally consistent, and still does nothing. Check against the li
 
 ### What is standing
 
-**AWS — 66 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS — 67 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
 Checked against the API on 2026-09-23. No load balancer, no database, no ECS cluster, no VPC except
 the default one, no endpoints.
 
@@ -116,9 +116,10 @@ Nothing below is "configured". Each was exercised.
 
 - **Inventory**: the self-test passes on both clouds, including its negative control. It seeds one
   watched and one unwatched resource and confirms only the first appears.
-- **Collectors**: 19 of 19 checks pass, and 5 of 9 mechanisms are implemented. Every assertion
-  has a negative control in `collector/self_test.py`, because a check that cannot fail is not a
-  check.
+- **Collectors**: 25 checks, and 24 pass. The one failure is real: the inventory lists a security
+  group that no longer exists (open items). 5 of 9 mechanisms are implemented. The assertions
+  written from 2026-09-22 onwards have negative controls in `collector/self_test.py`. The older
+  `cloud_api_config_read` handlers, `log_query` and `inventory_reconciliation` **do not yet**.
 - **Declared versus live**: drift detected by the collector itself on both clouds. It was proven
   on 2026-09-23 by tagging the extract bucket out of band. The check failed, named the bucket, and
   attributed the change to outside Terraform. The tag was reverted, and the check passed again.
@@ -174,11 +175,10 @@ fedramp-20x-ksi-assessment`.
 roughly 380 check definitions exist. The SDR emitter, which is the actual deliverable, has not been
 started. The other four mechanisms are genuinely blocked, so the unblocked work is:
 
-- **`live_is_declared`**, the reverse direction of declared versus live. It needs a list of live
-  resources that are legitimately outside Terraform, with a reason for each. Every entry is a
-  decision.
 - **The SDR emitter.** See `SDR-Emitter-Spec.md`.
-- **More check definitions** against the five built mechanisms.
+- **More check definitions** against the five built mechanisms. KSI-SVC-SIN rows 41, 42 and 46 wait
+  on the environment. Row 39 waits on the encryption decision (open items).
+- **Negative controls for the older handlers.**
 
 ### Open items
 
@@ -188,7 +188,12 @@ started. The other four mechanisms are genuinely blocked, so the unblocked work 
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which controls report data after the first day |
 | Worker writes through the VPC endpoint | The restriction moved from the bucket policy to the worker role on 2026-09-23. Confirm an extract still lands at the next phase 2 |
 | No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
-| `live_is_declared` exclusion list | Service-linked roles, the bootstrap state bucket, AWS-managed keys, `AWSReservedSSO_*` roles, the default VPC, `terraform-admin`. Each needs a recorded reason |
+| **AWS `terraform-admin`: static access key, `AdministratorAccess`, no MFA** | The operator identity for every local apply, active since 2026-09-17, and no AWS-side decision is recorded. Identity Center exists, so `aws sso login` with an admin permission set would replace it. The user's call |
+| **Default Compute Engine service account holds `roles/editor`** | Unused. One command to remove the binding or disable the account. The user's call |
+| Inventory lists a deleted security group | `sg-0ac03881f5bd7c3b7`. Config recorded its VPC's deletion but not the group's. KSI-PIY-GIV accuracy. Check whether Config catches up; if not, choose how the inventory handles implicit deletions. `svc-acm-cfg-aws-inventory-is-declared` fails on it until then |
+| Project VPC default security group undeclared | `aws_default_security_group` with no rules. `live_is_declared` will fail on it at every phase 1 until it is declared |
+| Customer-managed keys for the evidence stores | SVC-SIN build row 1. Four buckets use SSE-S3. The log store's reason (keys were ephemeral) changed when the artifacts key persisted. A design decision, since a deleted key takes Object Locked logs with it |
+| Account-level S3 public access block | Not set. Every bucket blocks individually; a new bucket would not inherit it |
 | The analytics image has no build path at all | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | `drift.yml` passes it anyway, and it comes through empty. Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

@@ -179,6 +179,37 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
   restrict_public_buckets = true
 }
 
+# KSI-SVC-SIN build row 2: TLS-only bucket policies. Every other bucket in
+# the account had one and this one had no policy at all -- found on
+# 2026-09-23 by the collector check written for that row, which is how a
+# row with no verify line ends up unmet. Query results are derived from the
+# log store, so they are audit data in transit like the store itself.
+data "aws_iam_policy_document" "athena_results_bucket" {
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.athena_results.arn, "${aws_s3_bucket.athena_results.arn}/*"]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+  policy = data.aws_iam_policy_document.athena_results_bucket.json
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "athena_results" {
   bucket = aws_s3_bucket.athena_results.id
 
