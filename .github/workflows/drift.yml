@@ -77,6 +77,11 @@ jobs:
         env:
           TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL }}
           TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
+          # cross_cloud.tf gates its role on this being non-empty. It is on
+          # the persistent side, so the drift plan targets it, and an unset
+          # value would make the role plan to zero -- reported as drift on
+          # every run rather than as the missing variable it actually is.
+          TF_VAR_gcp_pipeline_sa_unique_id: ${{ vars.GCP_PIPELINE_SA_UNIQUE_ID }}
         run: |
           # Scoped to the resources that persist between sessions.
           #

@@ -5280,3 +5280,38 @@ state, so it lists what exists and cannot propose creating what does not. Moving
 persistent side therefore needed a one-time apply targeted by declaration rather than by boundary.
 That is the right trade — deriving from state is what stops the list rotting — but it means the
 script is for teardown and drift, not for provisioning.
+
+---
+
+## 2026-09-23 — The pipeline identity persists in full, so CI no longer needs the environment
+
+**Moved to the persistent side:** `pipeline.tf` (the build role) and `cross_cloud.tf` (the role the
+GCP analytics pipeline assumes). 58 resources now persist and nothing is ephemeral in state.
+
+**This became possible rather than being decided.** Both files depended on the container registry and
+the artifacts key, and once those moved on 2026-09-22 neither had an ephemeral dependency left. The
+dependency check reported it; the change follows from it.
+
+**Why it matters more than "two IAM roles".** The build role used to die with the application
+environment, so `build-and-push` could only run after a full apply. That is circular: the workflow's
+entire job is producing the images the environment is waiting for, and it could not run until the
+environment it was blocking existed. CI can now run against a torn-down environment, which is the
+state it will normally find.
+
+**A gate that would have reported itself as drift.** `cross_cloud.tf` gates its role on
+`var.gcp_pipeline_sa_unique_id`, and the drift workflow did not set it. While the file was ephemeral
+the scoped plan never targeted it and the omission was invisible. On the persistent side the plan
+targets it, the variable evaluates empty, `count` resolves to zero, and the plan proposes destroying
+a role that should exist — reported as drift on every run.
+
+The variable is now a repository variable, `GCP_PIPELINE_SA_UNIQUE_ID`, and `drift.yml` passes it.
+Worth recording as a pattern: **moving a file across the boundary changes which variables the drift
+plan must have**, because targeting determines what gets evaluated. A gated resource crossing to the
+persistent side brings its gate with it.
+
+**Verified after the move**, not before: 58 targets, exit 0, "No changes."
+
+**Context from the same morning.** The first unattended scheduled drift run since the scoping fix
+completed successfully — 2026-09-23T12:30:57Z, 37 seconds, against a torn-down environment. That is
+the condition the check was failing on every day before yesterday, and it now passes without
+anyone watching.

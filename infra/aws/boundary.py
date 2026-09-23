@@ -12,6 +12,8 @@ application environment, rebuilt on the next apply:
     pipeline_identity.tf  the OIDC provider and the drift role
     registry.tf           the container registry and the extract bucket
     artifacts_key.tf      the key both of those encrypt with
+    pipeline.tf           the build role
+    cross_cloud.tf        the role the GCP pipeline assumes
 
 The last three are not about cost either. The registry persists so that images
 survive a teardown -- otherwise every session that wants to deploy must first
@@ -23,6 +25,13 @@ In each case the *store* persists and the *grants to transient principals* do
 not: registry_grants.tf holds the policies naming roles from compute.tf, and
 the artifacts key authorises those roles through their own IAM policies rather
 than through its key policy. See DECISIONS.md, 2026-09-22.
+
+pipeline.tf and cross_cloud.tf joined them on 2026-09-23, once the registry and
+the artifacts key persisted and neither file had an ephemeral dependency left.
+Both are IAM-only and cost nothing. The point is that the build role no longer
+dies with the environment, so CI can run against a torn-down one -- which is
+what it needs to do, since its whole job is producing the images the
+environment is waiting for.
 
 The last of those is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -63,6 +72,8 @@ PERSISTENT_FILES = {
     "pipeline_identity.tf",
     "registry.tf",
     "artifacts_key.tf",
+    "pipeline.tf",
+    "cross_cloud.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",
