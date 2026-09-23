@@ -5315,3 +5315,65 @@ persistent side brings its gate with it.
 completed successfully — 2026-09-23T12:30:57Z, 37 seconds, against a torn-down environment. That is
 the condition the check was failing on every day before yesterday, and it now passes without
 anyone watching.
+
+---
+
+## 2026-09-23 — The pipeline produced signed images, for the first time
+
+**`build-and-push` completed.** Five jobs green: dependency scanning for both services, both builds
+published, and the change event emitted. It had never run to completion before — its first attempt on
+2026-09-22 failed on the OIDC subject mismatch, and it could not run at all after that until the
+build role stopped being destroyed with the environment.
+
+| | api | worker |
+|---|---|---|
+| tag | `v1` | `v1` |
+| digest | `sha256:b515cd4083afb1a4f…` | `sha256:2edeeb77b3d4469d7…` |
+| signature | `sha256-b515cd40….sig` | `sha256-2edeeb77….sig` |
+
+**Verified against the registry, not against the run's exit status.** The `.sig` artifacts exist in
+ECR and their tags match their images' digests exactly, and the digests the workflow recorded match
+what ECR reports. A green workflow that published nothing would look identical from the run page.
+
+**What now has evidence that did not.** KSI-SVC-VRI has real signed images referenced by digest,
+KSI-SCR-MON has a dependency audit that ran against real manifests, KSI-SCR-MIT has manifest
+integrity checked before install, KSI-CMT-RMV has a registry push traceable to a commit, and
+KSI-CNA-DFP has every action pinned to a commit SHA in a workflow that has actually executed.
+
+**AWS phase 2 is now reachable** — the digests above are what `deploy_services = true` pins to.
+
+---
+
+## 2026-09-23 — Open question: the posture services are ephemeral, so nothing scans the images
+
+**Found immediately after the images landed**, by checking whether Inspector had picked them up. It
+had not: `list-coverage` returns empty, Inspector reports `DISABLED`, GuardDuty has no detector, and
+the account is not subscribed to Security Hub. All three are declared in `posture.tf`, on the
+ephemeral side, and the environment is down.
+
+**This corrects a claim made yesterday.** Persisting the registry was argued for partly on the
+grounds that it would give the vulnerability scanner something to scan continuously. That was wrong,
+and wrong in a way that was checkable at the time: the images persist and the scanner does not, so
+the benefit is not realised. The other two reasons — unblocking `cross_cloud.tf`, and making phase 2
+reachable without a rebuild — held and have now both been demonstrated.
+
+**Why it matters beyond the one argument.** The vulnerability scanner is a shared component nine
+indicators consume. GuardDuty is KSI-IAM-SUS's detection source. Security Hub is KSI-CNA-IBP's entire
+benchmark basis, and supplies two of KSI-SVC-EIS's three finding sources. None of them exists between
+sessions.
+
+**The word the catalog keeps using is "persistently".** KSI-IAM-ELP and KSI-IAM-JIT both require
+access models "persistently reviewed"; KSI-SCR-... requires effectiveness "persistently reviewed". A
+posture service that exists for a few hours a week is difficult to describe that way honestly, and
+the honest description is what the determination has to carry.
+
+**The cost, from the 2026-09-19 estimate.** Roughly 3 to 8 USD per month for the three together —
+Security Hub priced per resource unit, Inspector per image scan at about nine cents initial and a
+cent per rescan, GuardDuty per event volume. Against a residual currently near zero, that is the
+largest standing cost the project would have taken on.
+
+**`posture.tf` is eligible.** Its only reference outside itself is `aws_sns_topic.detection_interim`
+in `detection.tf`, which is already persistent. So this is a cost decision and nothing else.
+
+**Not decided.** Recorded for the design conversation, as the free-tier question was, because it
+changes what several determinations can claim rather than how something is built.
