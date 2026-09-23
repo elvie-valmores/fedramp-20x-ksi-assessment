@@ -5100,3 +5100,62 @@ and the alternative is discovering it from an expired certificate.
 **The shape is familiar.** This is the fifth thing this month that was configured correctly, reported
 healthy, and might not do what its determination claims — and like the others, it is only visible by
 reading what the system actually produced rather than what the configuration says it should.
+
+---
+
+## 2026-09-22 — The workforce directory exists, on Cloud Identity Free for now
+
+**Built.** A Cloud Identity tenant on `corp.elvievalmores.com`, domain-verified by TXT record at
+Cloudflare, with three accounts.
+
+| Account | Role |
+|---|---|
+| `admin@corp.elvievalmores.com` | Tenant administrator. Break-glass, not a working identity |
+| `alex@corp.elvievalmores.com` | Platform Engineer |
+| `sam@corp.elvievalmores.com` | Security Engineer |
+
+**The two personas hold deliberately different roles.** KSI-IAM-ELP requires that each user reach only
+what they need, and KSI-IAM-JIT requires a role and attribute-based model. Two equivalent
+administrators would leave both determinations with nothing to demonstrate — one permission set
+applied twice is not a least-privilege model. Alex deploys and operates and elevates for data and IAM;
+Sam reads broadly and manages security services and elevates for infrastructure. The elevation paths
+cross, which is what makes JIT's lanes meaningful rather than decorative.
+
+**The admin account is treated as AWS root is treated** — high value, strongly protected, rarely used,
+and outside the team. It is not one of the two personas and will hold no standing AWS access.
+
+**Free tier now, Premium at AAM.** SAML SSO is included in Cloud Identity Free; automated (SCIM)
+provisioning is not. Rather than pay from today for a capability that will sit idle for several build
+steps, the tenant starts on Free and upgrades when KSI-IAM-AAM's evidence is actually built. The
+upgrade is a license change in the admin console, not a migration, so nothing is foreclosed. Roughly
+6 USD per user per month, so about 12 USD monthly against a project running 15 to 25 — a real
+increase, and accepted because the alternative reverses a determination.
+
+**Why paying is the right answer rather than declaring a limitation.** The 2026-09-05 AAM decision
+already considered and rejected the manual path: "Declaring users in code is automated provisioning,
+not automated lifecycle. Nothing happens unless a person remembers to open the change." AAM's
+statement is *"the lifecycle and privileges of all accounts, roles, and groups are securely managed
+using automation"*, and its mappings are AC-2(1), AC-2(3), AC-2(13) and IA-4(4) — automated account
+management, automated disabling, user status. Automation is not incidental to that indicator; it is
+the whole statement. Manual user creation in Identity Center is the thing the determination rejected.
+
+**Why the users are created by hand and this is not a contradiction.** A Terraform provider for
+Workspace users exists, and using it would require either a service account key — which KSI-IAM-SNU's
+durability hierarchy rates as failing, and which this project has none of — or domain-wide delegation,
+a standing grant to impersonate any user in the directory. Either is a permanent expansion of the
+credential surface to create two users once. It also inverts AAM's model, which makes Google the
+authoritative directory and everything downstream a replica. Users originating in the directory is
+that model working, not a gap in it.
+
+**Deliberately not done in the console:** groups, permission sets and assignments. Those are declared
+in Terraform per the 2026-09-05 decision, because SCIM does not sync groups.
+
+**The apex was never touched.** `elvievalmores.com` keeps its ProtonMail MX and its GitHub Pages
+records throughout; the tenant is scoped to the subdomain, and no mail routing exists or is wanted on
+`corp`. The persona addresses are identifiers that appear in SAML assertions and evidence, not
+mailboxes.
+
+**Open item, unrelated to identity but surfaced here.** `security.txt` will advertise
+`security@caliper.elvievalmores.com`, and KSI-PIY-RVD requires that contact be monitored. That
+subdomain has no MX and Cloud Identity Free has no mailbox, so the address would currently bounce. It
+needs a forwarding rule to somewhere actually read before that determination can be evidenced.

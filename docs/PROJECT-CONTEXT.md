@@ -131,6 +131,11 @@ runtime on the workstation. `infra/README.md` says the image is "pushed by hand 
 not currently possible by any route. GCP phase 2 is unreachable until this is resolved — most likely
 by adding the federation and a third matrix entry.
 
+**Workforce identity exists** — a Cloud Identity tenant on `corp.elvievalmores.com`, domain-verified,
+with `admin@` (break-glass), `alex@` (Platform Engineer) and `sam@` (Security Engineer). On the Free
+tier, which includes SAML but not SCIM; the upgrade to Premium happens when KSI-IAM-AAM's evidence is
+built. Groups and permission sets are deliberately absent — they belong in Terraform.
+
 **AWS Organization and Identity Center now exist** — `o-yyhciflg3u` (feature set `ALL`) and
 `ssoins-7223046591f7f9f9` in `us-east-1`, with identity store `d-90667e73f9`. Created 2026-09-22,
 after the Paid-plan upgrade, so the Free Tier credits survived. Nothing was created in the console
