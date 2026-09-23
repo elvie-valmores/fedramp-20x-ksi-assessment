@@ -71,83 +71,101 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state as of 2026-09-22, end of session
+## Resume here — state at the end of 2026-09-22
 
-**Nothing is standing in AWS.** The application environment was torn down with
-`infra/aws/teardown.sh`: 123 destroyed, 40 preserved. Verified after the fact — load balancer,
-database, VPC and all seven endpoints gone; log store present with Object Lock `COMPLIANCE`/7 days,
-CloudTrail, Config recorder, Athena and both Lambdas intact. Twelve customer-managed KMS keys sit in
-`PendingDeletion` and clear on their own.
+Read this before inferring anything from the code or from git history. Both have been stale before.
 
-**GCP has foundations only** — 7 resources. The analytics pipeline is written and has never been
-applied. The `cloudkms`, `run`, `artifactregistry` and `cloudscheduler` APIs are not yet enabled.
+### What is standing
 
-**What was proven this session.** Phase 1 verified live before teardown: inventory self-test passing
-on both clouds including its negative control, 5 of 5 collector checks, no internet route on the
-private tiers, database private and encrypted with IAM auth.
+**AWS — 54 persistent resources, nothing expensive.** No load balancer, no database, no VPC, no
+endpoints. What remains: the Object Locked log store, CloudTrail, the Config recorder, Athena and
+Glue, both Lambdas, the budget guardrail, the GitHub OIDC provider and drift role, the two ECR
+repositories, the extract bucket, and the artifacts KMS key. Twelve other customer-managed keys sit
+in `PendingDeletion` and clear on their own.
 
-`drift` now works, which it never had. It is scoped to the persistence boundary via
-`infra/aws/boundary.py` and verified green **against a torn-down environment** — 43 persistent
-resources, "No changes", exit 0 — which is the condition every scheduled run between sessions faces.
-The OIDC provider and drift role live in `pipeline_identity.tf` on the persistent side, so the
-identity that runs the check no longer goes down with the environment it is not checking.
+Two *ephemeral* resources are also standing — the cross-cloud role and its policy — because they were
+applied to prove the path. `teardown.sh` would remove them.
 
-**What was fixed this session.** Two controls that were configured, deployed and completely
-non-functional: the GitHub OIDC trust pinned the legacy subject claim, and behind it the drift role
-lacked four read permissions plus carried a deny whose premise was false for secret versions. Both
-are applied. Neither was visible to `terraform validate`, to `terraform plan` from a privileged
-identity, or to code review. Both were found only by running the thing and reading the output.
+**GCP — 30 resources, phase 1 complete.** Landing bucket, BigQuery dataset and table, Artifact
+Registry, two KMS keys and their ring, two service accounts, Data Access audit configuration on
+storage, BigQuery and KMS. The Cloud Run job and its schedule are gated off behind
+`deploy_pipeline = false` pending an image.
 
-### The next thing to do
+**Identity.** AWS Organization `o-yyhciflg3u` (feature set `ALL`), IAM Identity Center
+`ssoins-7223046591f7f9f9` in `us-east-1`, identity store `d-90667e73f9`, with Google Cloud Identity
+on `corp.elvievalmores.com` (customer ID `C01rucqxe`) as the SAML identity provider. Three accounts:
+`admin@` (break-glass), `alex@` (Platform Engineer), `sam@` (Security Engineer).
 
-**Re-run `build-and-push`.** It has not run since the trust fix, so image build, dependency scanning,
-keyless signing, digest pinning and push are all unproven, and both ECR repositories are empty. It is
-the gate on AWS phase 2 and on most of the CMT cluster.
+**The offering is named Caliper**, at `caliper.elvievalmores.com`, with an ACM certificate issued and
+DNS-validated. The certificate is valid **197 days**, expiring 2027-04-07 — not the thirteen months
+once assumed here. Read certificate dates; do not assume durations.
 
-**It needs the environment standing**, because ECR and the pipeline roles are both in the destroyable
-set. So that work is a session that applies phase 1 first, and ideally carries straight through to
-phase 2 rather than tearing down in between.
+### What is proven, and how
 
-### Open decisions, none urgent, all recorded in DECISIONS.md
+Nothing below is "configured". Each was exercised.
 
-| Question | Where |
+- **Inventory** — self-test passes on both clouds including its negative control: it seeds a watched
+  and an unwatched resource and confirms only the first appears.
+- **Collectors** — 15 of 15 checks pass. 4 of 9 mechanisms implemented. Every pipeline assertion has
+  a negative control in `collector/self_test.py`, because a check that cannot fail is not a check.
+- **Drift** — runs green in CI against a torn-down environment, which is the condition every
+  scheduled run faces. Scoped to the persistence boundary via `infra/aws/boundary.py`.
+- **Federation** — authenticated through end to end, Google to Identity Center.
+- **Cross-cloud trust** — AWS accepted a policy pinning `sub` and `aud` to the GCP service account's
+  numeric ID `104894493962317106056`.
+
+### The persistence boundary, which is now a rule
+
+`infra/aws/boundary.py` owns the split and is consumed by `teardown.sh --ephemeral` and by
+`drift.yml --persistent`. Implementing it twice would let the halves diverge, and both failure modes
+are silent: a resource the teardown forgets bills forever, one the drift check forgets stops being
+watched.
+
+**The rule that emerged three times in one day: a persistent resource may not reference an ephemeral
+one, and the seam falls between the thing and the permission to use it.** The store persists, the
+grants to transient principals do not. `registry_grants.tf` and the artifacts key's IAM-side
+authorisation both follow from this.
+
+Note `boundary.py` derives from Terraform state, so it lists what exists and cannot propose creating
+what does not. Moving something onto the persistent side needs a one-time apply targeted by
+declaration.
+
+### The next thing to do, with the analysis already done
+
+**Move `pipeline.tf` and `cross_cloud.tf` to the persistent side.** Verified at the end of this
+session: now that the registry and artifacts key persist, **neither file has any ephemeral dependency
+left**. Both are IAM-only and therefore free.
+
+Why it matters more than it sounds: the build role currently dies with the environment, so
+`build-and-push` cannot run unless the whole application environment is applied first. Moving it
+removes that constraint entirely — **CI becomes runnable against a torn-down environment**, images
+land in a registry that now persists, and AWS phase 2 becomes a single apply rather than a session.
+
+Then **run `build-and-push`**. It has never completed. Image build, dependency scanning, keyless
+signing, digest pinning and push are all unproven, and both ECR repositories are empty. It gates AWS
+phase 2 and most of the CMT cluster.
+
+### Open items
+
+| Item | State |
 |---|---|
-| Move `registry.tf` and the `artifacts` key into the persistent set so images survive teardown? | below |
-| The analytics image has no build path at all | below |
-
-*(The drift-versus-teardown question raised earlier the same day is closed — drift is now scoped to
-the persistence boundary and verified green against a torn-down environment.)*
-
-**On registry persistence.** ECR repositories and the artifacts key cost roughly a dollar a month and
-are currently destroyed every session, so every session that wants phase 2 must rebuild images first.
-Moving them into the persistent set would make phase 2 reachable immediately on any apply. It changes
-the persistence boundary that `teardown.sh` derives and that the 2026-09-22 teardown entry documents,
-so it is a deliberate decision rather than a tidy-up. Note `registry.tf` depends on
-`aws_kms_key.artifacts` in `kms.tf`, so both move or neither does.
+| The analytics image has no build path at all | Blocking GCP phase 2 |
+| Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
+| `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
+| ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |
+| Identity Center sign-ins may not reach CloudTrail | Unverified; would affect KSI-MLA-LET |
+| Security Command Center Standard | Console activation outstanding |
 
 **On the analytics image.** `build-and-push.yml`'s matrix is `[api, worker]`; `app/analytics/` is not
-in it. There is no GitHub-to-GCP workload identity federation in `infra/gcp`. There is no container
-runtime on the workstation. `infra/README.md` says the image is "pushed by hand until then", which is
-not currently possible by any route. GCP phase 2 is unreachable until this is resolved — most likely
-by adding the federation and a third matrix entry.
+in it, there is no GitHub-to-GCP workload identity federation, and there is no container runtime on
+the workstation. `infra/README.md` says the image is "pushed by hand until then", which is not
+currently possible by any route. Most likely resolved by adding the federation and a third matrix
+entry.
 
-**Workforce identity exists** — a Cloud Identity tenant on `corp.elvievalmores.com`, domain-verified,
-with `admin@` (break-glass), `alex@` (Platform Engineer) and `sam@` (Security Engineer). On the Free
-tier, which includes SAML but not SCIM; the upgrade to Premium happens when KSI-IAM-AAM's evidence is
-built. Groups and permission sets are deliberately absent — they belong in Terraform.
-
-**AWS Organization and Identity Center now exist** — `o-yyhciflg3u` (feature set `ALL`) and
-`ssoins-7223046591f7f9f9` in `us-east-1`, with identity store `d-90667e73f9`. Created 2026-09-22,
-after the Paid-plan upgrade, so the Free Tier credits survived. Nothing was created in the console
-beyond enablement; groups and permission set assignments belong in Terraform. The IAM cluster
-(SNU, APM, AAM, ELP, JIT) is still blocked on wiring Google Cloud Identity as the SAML IdP, which
-needs the outstanding domain decision.
-
-**Cheapest unblocked progress:** GCP phase 1. It costs pennies at rest and yields
-`pipeline_service_account_unique_id`, which is what `infra/aws/cross_cloud.tf` is gated on — that role
-is currently `count = 0` and will stay that way until the GCP service account exists.
-
----
+**Groups, permission sets and assignments do not exist yet.** They are declared in Terraform by
+decision, because SCIM does not sync groups. They can be built now up to the seam: permission sets,
+groups and account assignments are all declarable; putting Alex and Sam *into* groups needs the users
+to exist in Identity Center, which needs SCIM, which needs Premium.
 
 ## The files in `/docs`
 

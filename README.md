@@ -93,16 +93,19 @@ All three need working cloud credentials: an AWS profile, and
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 4 of 9 mechanisms implemented, all self-tested |
+| Collector framework | 4 of 9 mechanisms implemented, all self-tested. 15 check definitions |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 applied and verified 2026-09-22; torn down after. Phase 2 needs images |
-| GCP analytics pipeline | Written, never applied |
-| Cross-cloud federation (GCP → AWS) | Written, never applied — gated on the GCP service account existing |
+| Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end |
+| Cross-cloud federation (GCP → AWS) | Role applied; trust pinned to the GCP service account numeric ID |
+| GCP analytics pipeline | Phase 1 applied (30 resources). Phase 2 needs an image |
 | CI/CD pipeline | `drift` verified working end to end 2026-09-22 (clean, exit 0). `build-and-push` not yet re-run |
 
-**Nothing is standing between sessions** except the state backend, the log
-store, CloudTrail, the Config recorder, Athena and the two Lambdas. The
+**Nothing expensive is standing between sessions.** 54 AWS resources persist —
+the state backend, the log store, CloudTrail, the Config recorder, Athena, both
+Lambdas, the CI identity, the container registry, the extract bucket and the
+artifacts key. No load balancer, database, VPC or endpoints. The
 application environment is rebuilt each session with `terraform apply` and
 removed with `infra/aws/teardown.sh`; see `infra/README.md`. Phase 1 was last
 verified on 2026-09-22 — inventory self-test and collector checks passing on
