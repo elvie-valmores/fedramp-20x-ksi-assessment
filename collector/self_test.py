@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Proves the pipeline checks can actually fail.
+"""Proves the checks can actually fail.
 
 Every check in checks/ currently passes. That is either evidence that the
 pipeline is configured correctly, or evidence of nothing at all, and the
@@ -7,8 +7,9 @@ two are indistinguishable from the outside -- which is the failure mode
 this project cares most about. Four controls were found this month that
 were configured, deployed, and completely inert while reporting nothing.
 
-So each assertion is run twice: once against a workflow that should
-satisfy it, and once against a deliberately broken one that should not.
+So each assertion is run against input that should satisfy it and input
+that should not -- a good and a broken workflow for pipeline_config_read,
+a clean and a drifted Terraform plan for declared_versus_live_comparison.
 An assertion that passes both is reported as broken, because a check that
 cannot fail is not a check.
 
@@ -27,6 +28,7 @@ import tempfile
 from pathlib import Path
 
 from base import CheckDefinition
+import mechanisms.declared_versus_live_comparison as dvl
 import mechanisms.pipeline_config_read as pcr
 
 GOOD = """
@@ -101,7 +103,7 @@ def definition(assertion: str, workflow: str, extra: dict) -> CheckDefinition:
     )
 
 
-def main() -> int:
+def pipeline_config_read() -> list[str]:
     mechanism = pcr.PipelineConfigRead()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -133,12 +135,113 @@ def main() -> int:
         finally:
             pcr.WORKFLOWS_DIR = original
 
+    return broken
+
+
+# --- declared_versus_live_comparison ---
+#
+# Plans reduced to the fields the mechanism reads. Two resources in state,
+# so "all of them match" and "one of them does not" are both expressible.
+
+
+def _plan(changes: dict[str, list[str]], drift: dict[str, list[str]], in_state: int = 2) -> dict:
+    state = [{"address": f"aws_s3_bucket.b{i}", "mode": "managed"} for i in range(in_state)]
+    return {
+        "prior_state": {"values": {"root_module": {"resources": state}}},
+        "resource_changes": [
+            {
+                "address": r["address"],
+                "mode": "managed",
+                "change": {
+                    "actions": changes.get(r["address"], ["no-op"]),
+                    "before": {"tags": {"a": "1"}},
+                    "after": {"tags": {"a": "1"} if r["address"] not in changes else {}},
+                },
+            }
+            for r in state
+        ],
+        "resource_drift": [
+            {"address": a, "change": {"actions": acts}} for a, acts in drift.items()
+        ],
+    }
+
+
+def _knock_on() -> dict:
+    # b0 changed out of band; b1's only difference is a value Terraform
+    # cannot know until b0's change applies.
+    plan = _plan({"aws_s3_bucket.b0": ["update"], "aws_s3_bucket.b1": ["update"]},
+                 {"aws_s3_bucket.b0": ["update"]})
+    b1 = plan["resource_changes"][1]["change"]
+    b1["after"] = {"tags": {"a": "1"}, "policy": None}
+    b1["before"]["policy"] = "{}"
+    b1["after_unknown"] = {"policy": True}
+    return plan
+
+
+PLANS = {
+    "clean": _plan({}, {}),
+    # Refresh saw b0's tags move, but the provider's own comparison calls it
+    # equal and the plan proposes nothing -- the null-against-{} case found
+    # on the real roots. Must pass no_drift, or every run is noise.
+    "refresh-noise": _plan({}, {"aws_s3_bucket.b0": ["update"]}),
+    "out-of-band": _plan({"aws_s3_bucket.b0": ["update"]}, {"aws_s3_bucket.b0": ["update"]}),
+    "not-applied": _plan({"aws_s3_bucket.b0": ["update"]}, {}),
+    "deleted": _plan({"aws_s3_bucket.b0": ["create"]}, {"aws_s3_bucket.b0": ["delete"]}),
+    "knock-on": _knock_on(),
+    "empty-state": _plan({}, {}, in_state=0),
+}
+
+# assertion -> plans it must pass, plans it must fail. An out-of-band
+# update must NOT fail declared_exists_live: the object is there, it has
+# only changed, and an assertion that fails on everything discriminates
+# nothing.
+DVL_CASES = [
+    ("no_drift", ["clean", "refresh-noise"], ["out-of-band", "not-applied", "deleted", "knock-on", "empty-state"]),
+    ("declared_exists_live", ["clean", "refresh-noise", "out-of-band", "not-applied", "knock-on"], ["deleted", "empty-state"]),
+]
+
+
+def declared_versus_live_comparison() -> list[str]:
+    broken = []
+    for assertion, should_pass, should_fail in DVL_CASES:
+        wrong = [n for n in should_pass if not dvl.evaluate(assertion, PLANS[n])[0]]
+        wrong += [n for n in should_fail if dvl.evaluate(assertion, PLANS[n])[0]]
+        print(
+            f"[{assertion}] {'PASS' if not wrong else 'BROKEN'} -- "
+            f"passes {', '.join(should_pass)}; fails {', '.join(should_fail)}"
+        )
+        if wrong:
+            broken.append(assertion)
+            print(f"    wrong verdict on: {', '.join(wrong)}")
+
+    # The attribution is the evidence's main use, so it is asserted too.
+    causes = {
+        name: [c["cause"] for c in dvl.evaluate("no_drift", PLANS[name])[1]["changes"]]
+        for name in ("out-of-band", "not-applied", "knock-on")
+    }
+    ok = causes == {
+        "out-of-band": ["changed outside Terraform"],
+        "not-applied": ["declaration not applied"],
+        "knock-on": ["changed outside Terraform", "follows from another change"],
+    }
+    print(f"[no_drift attribution] {'PASS' if ok else 'BROKEN'} -- {causes}")
+    if not ok:
+        broken.append("no_drift attribution")
+    return broken
+
+
+def main() -> int:
+    broken = pipeline_config_read()
+    print()
+    broken += declared_versus_live_comparison()
+    total = len(CASES) + len(DVL_CASES) + 1
+
     print()
     if broken:
-        print(f"{len(broken)} assertion(s) do not discriminate: {', '.join(broken)}")
+        print(f"{len(broken)} of {total} assertion(s) do not discriminate: {', '.join(broken)}")
         return 1
 
-    print(f"all {len(CASES)} assertions distinguish a good workflow from a bad one")
+    print(f"all {total} assertions distinguish input that should pass from input that should not")
     return 0
 
 

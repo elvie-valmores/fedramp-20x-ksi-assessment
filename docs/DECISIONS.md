@@ -5635,3 +5635,132 @@ deliberately scoped to the types the inventory needs. Controls for types the rec
 record will produce no findings, not passing ones. First evaluations take up to a day, so check
 which controls report data. Whether those Config rule evaluations bill separately is part of the
 same cost check.
+
+---
+
+## 2026-09-23 — Declared versus live is built, on a full plan rather than refresh-only, and the drift it found was not drift
+
+**Built: `declared_versus_live_comparison`**, the fifth of nine mechanisms. It has two assertions:
+
+- `no_drift` serves KSI-SVC-ACM's "zero drift between declared and live configuration".
+- `declared_exists_live` serves "every resource in declared state exists in the environment".
+
+There are four check definitions, one per assertion per cloud. All 19 checks pass. The reverse
+direction, `live_is_declared`, is deferred on purpose (below).
+
+**It runs Terraform itself.** It does not read the drift workflow's result, because reading CI's
+verdict would only check that a check passed. It also covers GCP, which `drift.yml` explicitly does
+not. If a required `TF_VAR_` is missing, the check reports an error, never a pass: the plan would be
+evaluating a different configuration. The check definitions list those variables, so each
+definition records what its plan was evaluated with.
+
+**The approved design was refresh-only, and it was reversed on evidence.** The reasoning had been
+that a refresh-only plan's `resource_drift` isolates changes made outside Terraform, which is the
+catalog's meaning of drift. Tried against both real roots, it reported ten changes, and none of them
+was an out-of-band change:
+
+- `null` against `{}`, on `labels`, `resource_tags` and an event rule's `tags`.
+- `null` against `0` or `false`, on six storage lifecycle condition fields.
+- Server-side `etag` and `updated` metadata. Every project IAM binding shares one `etag`.
+- A BigQuery access list returned in a different order, with `roles/bigquery.dataOwner` and
+  `dataEditor` reported under their legacy names `OWNER` and `WRITER`. Same grants, different
+  spelling.
+
+Refresh compares raw stored values. It does not apply the provider's own rules for when two values
+mean the same thing, which is why a full plan on the same roots was clean. Filtering this noise by
+hand means writing rules like "treat `null` and `0` as equal" and "ignore `etag`", and each rule is
+a place real drift could hide.
+
+**Chosen: the verdict comes from a full plan, and refresh is used only where it is reliable.**
+
+- **Classifying each change.** "Changed outside Terraform" means refresh saw the object move.
+  "Follows from another change" means every differing attribute is unknown until apply. Otherwise it
+  is "declaration not applied".
+- **Detecting deletion.** An object is either there or it is not, so refresh's delete entries can
+  be trusted.
+
+This also matches the design matrix's own wording for the row: "Terraform plan in check mode, exit
+status and diff".
+
+**What it gives up.** An attribute the configuration does not manage is invisible to a full plan.
+If someone attached a bucket policy out of band to a bucket whose policy resource is not standing,
+`no_drift` would stay green. That belongs to a config-read check on the attribute itself.
+
+**Scope is every managed address in state, passed as `-target`.** An untargeted plan evaluates the
+whole configuration, and with the environment down it fails on `edge.tf` indexing
+`time_rotating.security_txt[0]` and `aws_acm_certificate.public[0]`, which are not standing.
+Targeting what is in state checks everything standing: the persistent set between sessions, and the
+whole environment while it is up. The variables must match the phase that was applied. Run against
+a standing phase 2 without `deploy_services=true`, the plan proposes destroying the services, and
+reports that, correctly, as declared and live disagreeing under the configuration it was given.
+
+**Proven against a real change, as SVC-ACM's automation assurance requires.** "A drift detector that
+has never detected drift is an assumption rather than a property."
+
+1. Clean: 65 of 65 match.
+2. Added the tag `OutOfBandTest` to the extract bucket through the S3 API, preserving the existing
+   three tags.
+3. `no_drift` failed with 2 of 65. It attributed `aws_s3_bucket.extracts` (`tags`, `tags_all`) to
+   "changed outside Terraform". `declared_exists_live` still passed, correctly, because the bucket
+   still existed and had only changed.
+4. Restored the original tag set exactly, confirmed by comparing it with the saved copy.
+5. Clean again: 65 of 65.
+
+**The live test found a flaw in the attribution.** The second change in step 3 was
+`aws_iam_role_policy.gcp_pipeline[0]`. Its policy document is a data source that names the extract
+bucket. With the bucket carrying a pending change, Terraform postponed reading that data source until
+apply, so the policy showed as unknown. It had been labelled "declaration not applied", which was
+wrong, and the third cause, "follows from another change", was added for it. Using fixtures alone,
+this would never have come up.
+
+**The self-test covers the new mechanism.** `self_test.py` has seven plan fixtures, including the
+null-against-`{}` case, which must *pass* `no_drift`, and the knock-on case. The self-test was then
+checked against two deliberately broken versions of the mechanism. One was the rejected refresh-based
+`no_drift`; the other was a `declared_exists_live` that ignored deletions. The self-test flagged both.
+
+**Deferred: `live_is_declared`.** This is SVC-ACM row 17 and IAM-AAM row 106. It needs a list of live
+resources that are legitimately outside Terraform: service-linked roles, the bootstrap state bucket
+(which has its own state), AWS-managed keys, Identity Center's `AWSReservedSSO_*` roles, the default
+VPC and its subnets and security group, and the `terraform-admin` user. Each entry is a decision with
+a reason, not an implementation detail.
+
+---
+
+**Found on the way: the extract bucket has no bucket policy between sessions.** The first
+refresh-only run reported `aws_s3_bucket.extracts`'s `policy` as changed from a three-statement
+document to empty. It is not out-of-band drift. The teardown removed `aws_s3_bucket_policy.extracts`
+through Terraform, and the bucket's mirrored copy of the policy was left stale in state. But what it
+points at is real: `get-bucket-policy` returns `NoSuchBucketPolicy`.
+
+`DenyInsecureTransport` and `DenyUnencryptedWrites` are declared in `registry_grants.tf` alongside
+the grant to the worker role, and that file is ephemeral. The 2026-09-22 rule, "the store persists,
+the grants do not", was applied at file level, and the protective denies went with the grants. The
+cross-cloud role is persistent and holds `s3:GetObject` on this bucket. So between sessions a
+standing principal can read customer-data extracts from a bucket that does not require TLS. Default
+encryption is persistent (`aws_s3_bucket_server_side_encryption_configuration.extracts`), so objects
+are still encrypted at rest.
+
+**Neither drift check could see it.** The policy resource is not in the persistent set, and the
+bucket's `policy` attribute is computed, so a full plan refreshes it silently. By the count this log
+has kept, this is the sixth control this week found configured and inert.
+
+**Not fixed; it needs a decision.** S3 allows one policy per bucket. The policy's third statement,
+`DenyWritesOutsideVPC`, names the worker role and the VPC endpoint, both ephemeral, so the policy
+cannot simply move to the persistent side as written. Recorded in the open items.
+
+---
+
+**Two corrections.**
+
+- **No collector schedule exists, and none ever did.** `PROJECT-CONTEXT.md`'s known limitations said
+  the framework "runs on a real 3-day schedule via EventBridge and Cloud Scheduler". Neither root
+  contains such a resource. The only schedules are the detection-query Lambda's and the GCP
+  analytics pipeline's. The collectors are run by hand. The posture entry above, written earlier
+  today, said "the collector schedule stays ephemeral and its limitation stands". That was wrong in
+  the same way: there is no schedule to be ephemeral. The real gap is that no collector runtime or
+  schedule exists. Whether one should persist is a question for when it does.
+- **The drift workflow's own record understated its scope.** Every run's job summary said it checked
+  "the log store, Athena, Glue, CloudTrail, the Config recorder, both Lambdas and the budget
+  guardrail". The plan was checking 65 resources, including the registry, the CI roles, the
+  cross-cloud role and the posture services. The list is now generated from `boundary.py --files`,
+  so it cannot go stale again.

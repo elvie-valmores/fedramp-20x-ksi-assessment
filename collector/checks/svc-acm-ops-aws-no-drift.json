@@ -1,0 +1,17 @@
+{
+  "id": "svc-acm-ops-aws-no-drift",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "OPS",
+  "description": "Zero drift between declared and live configuration across everything standing in the AWS root",
+  "required_cadence": "3 days",
+  "params": {
+    "root": "aws",
+    "assertion": "no_drift",
+    "variables": [
+      "TF_VAR_billing_alert_email",
+      "TF_VAR_gcp_pipeline_sa_unique_id",
+      "TF_VAR_app_domain"
+    ]
+  }
+}

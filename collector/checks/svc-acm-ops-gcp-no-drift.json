@@ -1,0 +1,16 @@
+{
+  "id": "svc-acm-ops-gcp-no-drift",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "OPS",
+  "description": "Zero drift between declared and live configuration across everything standing in the GCP root",
+  "required_cadence": "3 days",
+  "params": {
+    "root": "gcp",
+    "assertion": "no_drift",
+    "variables": [
+      "TF_VAR_billing_account_id",
+      "TF_VAR_billing_alert_email"
+    ]
+  }
+}

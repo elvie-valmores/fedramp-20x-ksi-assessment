@@ -7,10 +7,10 @@ raise a clear NotImplementedError instead of going missing.
 """
 
 from mechanisms.cloud_api_config_read import CloudAPIConfigRead
+from mechanisms.declared_versus_live_comparison import DeclaredVersusLiveComparison
 from mechanisms.inventory_reconciliation import InventoryReconciliation
 from mechanisms.log_query import LogQuery
 from mechanisms.not_yet_built import (
-    DeclaredVersusLiveComparison,
     DeliberateTest,
     EffectiveAccessAnalysis,
     RecordStore,
@@ -21,12 +21,12 @@ from mechanisms.pipeline_config_read import PipelineConfigRead
 MECHANISMS = {
     # Implemented.
     "cloud_api_config_read": CloudAPIConfigRead(),
+    "declared_versus_live_comparison": DeclaredVersusLiveComparison(),
     "inventory_reconciliation": InventoryReconciliation(),
     "log_query": LogQuery(),
     "pipeline_config_read": PipelineConfigRead(),
     # Registered, not yet implemented -- each waits on infrastructure
     # that does not exist yet. See mechanisms/not_yet_built.py.
-    "declared_versus_live_comparison": DeclaredVersusLiveComparison(),
     "register_read": RegisterRead(),
     "deliberate_test": DeliberateTest(),
     "record_store": RecordStore(),

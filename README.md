@@ -56,12 +56,12 @@ Gathers the evidence the assessment needs. Roughly 380 pieces of evidence
 reduce to nine ways of gathering it, so the framework implements the nine
 mechanisms and each individual check is a JSON file in `collector/checks/`.
 
-Four mechanisms are implemented. The other five are registered but raise a
+Five mechanisms are implemented. The other four are registered but raise a
 clear error explaining what they are waiting on.
 
-`self_test.py` runs each assertion twice — against a workflow that should
-satisfy it and one that should not — because a check that cannot fail is not
-a check.
+`self_test.py` runs each assertion against input that should satisfy it and
+input that should not: a good and a broken workflow, and a clean and a drifted
+Terraform plan. A check that cannot fail is not a check.
 
 ## Running it
 
@@ -87,13 +87,17 @@ cd collector && ../.venv/bin/python run_checks.py
 All three need working cloud credentials: an AWS profile, and
 `gcloud auth application-default login` for GCP. See `infra/README.md`.
 
+The drift checks run `terraform plan` in `infra/aws` and `infra/gcp`, so both
+roots must be initialised, and the `TF_VAR_` variables each check lists must be
+set. A missing variable is reported as an error, never as a pass.
+
 ## Build status
 
 | Component | State |
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 4 of 9 mechanisms implemented, all self-tested. 15 check definitions |
+| Collector framework | 5 of 9 mechanisms implemented, all self-tested. 19 check definitions. Run by hand; no schedule or runtime exists yet |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |

@@ -1,0 +1,16 @@
+{
+  "id": "svc-acm-cfg-gcp-declared-exists-live",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "CFG",
+  "description": "Every resource in the GCP root's declared state exists in the environment",
+  "required_cadence": "3 days",
+  "params": {
+    "root": "gcp",
+    "assertion": "declared_exists_live",
+    "variables": [
+      "TF_VAR_billing_account_id",
+      "TF_VAR_billing_alert_email"
+    ]
+  }
+}

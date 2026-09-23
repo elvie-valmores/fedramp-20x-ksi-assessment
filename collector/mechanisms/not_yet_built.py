@@ -25,13 +25,6 @@ class _NotYetBuilt(Mechanism):
         )
 
 
-class DeclaredVersusLiveComparison(_NotYetBuilt):
-    """Would compare Terraform's declared state against what's running."""
-
-    name = "declared_versus_live_comparison"
-    depends_on = "a reader for Terraform state, to diff against live queries"
-
-
 class RegisterRead(_NotYetBuilt):
     """Would read values from the project's register of tracked decisions."""
 

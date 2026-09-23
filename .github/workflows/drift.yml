@@ -138,9 +138,12 @@ jobs:
             echo "- result: \`${{ steps.plan.outputs.result }}\` (exit ${{ steps.plan.outputs.exitcode }})"
             echo "- checked: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`"
             echo ""
-            echo "Scope: the resources that persist between sessions — the"
-            echo "log store, Athena, Glue, CloudTrail, the Config recorder,"
-            echo "both Lambdas and the budget guardrail."
+            # Generated from boundary.py rather than written out. A written
+            # list went stale here once already -- it named seven things
+            # while the plan checked sixty-five -- and a record that
+            # misstates its own scope is worse than no record.
+            echo "Scope: the resources that persist between sessions, declared"
+            echo "in: $(./infra/aws/boundary.py --files)."
             echo ""
             echo "The application environment is NOT covered. It is destroyed"
             echo "between sessions by design, so it is checked only while it"

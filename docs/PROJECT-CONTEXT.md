@@ -49,9 +49,10 @@ The build is in progress, and `README.md` carries the current status table. As o
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
 - **Not started**: the three workflows, policy-as-code, the SDR emitter, and the remaining check
-  definitions. 15 of roughly 380 exist. 4 of 9 collector mechanisms are implemented and self-tested.
-  The other five are registered and raise a clear error naming what they wait on. Two of those five
-  have since been unblocked by later work; see the 2026-09-22 entry in `DECISIONS.md`.
+  definitions. 19 of roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
+  The other four are registered and raise a clear error naming what they wait on, and all four
+  are genuinely blocked. **No collector schedule or runtime exists.** The collectors are run by
+  hand.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
 GCP root each apply in two phases. KSI-SVC-VRI requires images referenced by digest, and a digest
@@ -115,9 +116,12 @@ Nothing below is "configured". Each was exercised.
 
 - **Inventory**: the self-test passes on both clouds, including its negative control. It seeds one
   watched and one unwatched resource and confirms only the first appears.
-- **Collectors**: 15 of 15 checks pass, and 4 of 9 mechanisms are implemented. Every pipeline
-  assertion has a negative control in `collector/self_test.py`, because a check that cannot fail is
-  not a check.
+- **Collectors**: 19 of 19 checks pass, and 5 of 9 mechanisms are implemented. Every assertion
+  has a negative control in `collector/self_test.py`, because a check that cannot fail is not a
+  check.
+- **Declared versus live**: drift detected by the collector itself on both clouds. It was proven
+  on 2026-09-23 by tagging the extract bucket out of band. The check failed, named the bucket, and
+  attributed the change to outside Terraform. The tag was reverted, and the check passed again.
 - **Drift**: runs green in CI against the full persistent set. Run 35923874415 was the first over
   the 58 including the build and cross-cloud roles. Run 35925317909 was the first over all
   65, including posture. Earlier green runs checked smaller sets;
@@ -164,11 +168,17 @@ fedramp-20x-ksi-assessment`.
 
 ### The next thing to do
 
-**The collector framework, which is the bottleneck on the build order.** 4 of 9 mechanisms and
-15 of roughly 380 check definitions exist, and the SDR emitter, which is the actual deliverable, has
-not been started. **`declared_versus_live_comparison` is next.** Its "not yet built" note says it
-waits on "a reader for Terraform state". The state has been in S3 and readable all along, so that
-block is stale (2026-09-22).
+**The collector framework is still the bottleneck on the build order.** 5 of 9 mechanisms and 19 of
+roughly 380 check definitions exist. The SDR emitter, which is the actual deliverable, has not been
+started. The other four mechanisms are genuinely blocked, so the unblocked work is:
+
+- **Decide the extract bucket's policy.** It has no bucket policy between sessions (open items).
+  This is a real control gap, not a build task.
+- **`live_is_declared`**, the reverse direction of declared versus live. It needs a list of live
+  resources that are legitimately outside Terraform, with a reason for each. Every entry is a
+  decision.
+- **The SDR emitter.** See `SDR-Emitter-Spec.md`.
+- **More check definitions** against the five built mechanisms.
 
 ### Open items
 
@@ -176,7 +186,9 @@ block is stale (2026-09-22).
 |---|---|
 | Measure the posture cost | **Before 2026-10-06**, when the Inspector trial ends. GuardDuty's ends about 2026-10-22. Read each service's projected cost and compare it with the 3 to 8 USD estimate. Option B is the fallback |
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which controls report data after the first day |
-| Collector schedule persistence | Not decided. The argument that moved posture ("what it watches persists") reaches it too |
+| **The extract bucket has no bucket policy between sessions** | Its `DenyInsecureTransport` and `DenyUnencryptedWrites` statements are declared in `registry_grants.tf`, which is ephemeral. S3 allows one policy per bucket, and the policy's other statement names ephemeral resources (the worker role, the VPC endpoint), so fixing it needs a design decision. See the last 2026-09-23 entry in `DECISIONS.md` |
+| No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
+| `live_is_declared` exclusion list | Service-linked roles, the bootstrap state bucket, AWS-managed keys, `AWSReservedSSO_*` roles, the default VPC, `terraform-admin`. Each needs a recorded reason |
 | The analytics image has no build path at all | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | `drift.yml` passes it anyway, and it comes through empty. Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
@@ -373,9 +385,12 @@ method.
 
 ## Known limitations carried into the build
 
-- **The 3-day cadence versus teardown.** The collector framework runs on a real 3-day schedule via
-  EventBridge and Cloud Scheduler, which are Terraform-managed and therefore exist only while the
-  environment does. A production deployment would run continuously. Record this explicitly.
+- **The 3-day cadence has no schedule behind it yet.** This bullet used to say the collector
+  framework "runs on a real 3-day schedule via EventBridge and Cloud Scheduler". That was never
+  built. No collector schedule, and no runtime for the collectors, exists in either root (checked
+  2026-09-23). The collectors are run by hand. Until a schedule exists, the cadence column is a
+  requirement, not a property. Once one is built, whether it persists is the same question
+  `posture.tf` raised.
 - **SDR-CSX-KMT wants a year of daily metrics at Class C.** An apply-and-destroy environment cannot
   produce that. The "where available" qualifier makes it survivable; state the collection window.
 - **The schema requires `fedRampRequirements`**, the ruleset half this project did not determine.
