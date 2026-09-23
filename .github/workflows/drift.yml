@@ -71,6 +71,15 @@ jobs:
             -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
 
+      # The scoped plan below is only as good as the boundary it scopes to.
+      # If a persistent file references an ephemeral resource, -target pulls
+      # that resource in and the plan proposes creating it -- reported as
+      # drift, for a reason that has nothing to do with drift. Reads source
+      # only, so it costs nothing and fails before the plan does.
+      - name: check the persistence boundary
+        working-directory: infra/aws
+        run: ./boundary.py --check
+
       - name: plan in check mode
         id: plan
         working-directory: infra/aws

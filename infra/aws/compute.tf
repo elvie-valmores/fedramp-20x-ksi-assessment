@@ -358,6 +358,33 @@ data "aws_iam_policy_document" "worker_task" {
     resources = ["${aws_s3_bucket.extracts.arn}/measurements/*"]
   }
 
+  # The network-boundary dimension KSI-CNA-RNT adds for resources with no
+  # interface: whether access is restricted to the VPC or reachable from
+  # anywhere with the right credential. Writes must arrive through the S3
+  # gateway endpoint.
+  #
+  # This was a statement in the extract bucket's policy until 2026-09-23.
+  # It names this role and the endpoint, both ephemeral, and the bucket
+  # policy it shared needed to persist -- so it moved here, next to the
+  # things it names. The effect is the same: an explicit deny wins whether
+  # it sits on the identity or the resource. What differs is who can remove
+  # it, since whoever can edit this role's policy can now drop the
+  # restriction without touching the bucket. Every such edit is a
+  # non-pipeline IAM mutation, which KSI-SVC-ACM's mutation query watches.
+  statement {
+    sid    = "WritesOnlyThroughEndpoint"
+    effect = "Deny"
+
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.extracts.arn}/*"]
+
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:SourceVpce"
+      values   = [aws_vpc_endpoint.s3.id]
+    }
+  }
+
   statement {
     sid    = "EncryptExtracts"
     effect = "Allow"

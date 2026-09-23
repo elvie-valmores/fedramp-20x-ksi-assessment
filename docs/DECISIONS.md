@@ -5764,3 +5764,57 @@ cannot simply move to the persistent side as written. Recorded in the open items
   guardrail". The plan was checking 65 resources, including the registry, the CI roles, the
   cross-cloud role and the posture services. The list is now generated from `boundary.py --files`,
   so it cannot go stale again.
+
+---
+
+## 2026-09-23 — The extract bucket's protections persist, and the VPC restriction moves to the worker
+
+**Chosen.** The extract bucket's policy is split by what each statement is about:
+
+- **`DenyInsecureTransport` and `DenyUnencryptedWrites` move to `registry.tf` and persist.** They are
+  properties of the store, not grants.
+- **`DenyWritesOutsideVPC` becomes `WritesOnlyThroughEndpoint` in the worker role's own policy in
+  `compute.tf`.** It is ephemeral, next to the VPC endpoint it names.
+
+`aws_s3_bucket_policy.extracts` keeps its address, so there was no state move, only a one-time
+targeted apply: 1 added, 0 changed, 0 destroyed. 66 resources now persist.
+
+**Considered.**
+
+- Keep the policy ephemeral and declare the gap.
+- Make the whole policy persistent and rewrite the VPC statement so it names no ephemeral resource:
+  the role ARN as a constructed string, and `aws:SourceVpc` or `aws:SourceVpce`. Both of those
+  change on every apply, so the statement would still depend on something ephemeral.
+- Two policy resources on one bucket. S3 allows one policy per bucket, so two resources would
+  overwrite each other on every apply, and the teardown would delete the policy either way.
+
+**Why this one.** It is the 2026-09-22 rule applied correctly, not a new rule. "The store persists,
+the grants to transient principals do not." That rule had been applied at file level, and the file
+held protections as well as a grant. A statement that restricts one transient principal belongs with
+that principal.
+
+**What it gives up.** An explicit deny wins wherever it sits, so the effect is the same. What changes
+is who can remove it: whoever can edit the worker role's policy can now drop the restriction without
+touching the bucket. Any such edit is a non-pipeline IAM mutation, which is what KSI-SVC-ACM's
+mutation query exists to watch.
+
+**Verified by trying it, as `terraform-admin`.**
+
+| Request | Result |
+|---|---|
+| List over HTTPS | allowed |
+| List over plain HTTP | `AccessDenied`, explicit deny in a resource-based policy |
+| `PutObject` without the KMS header | `AccessDenied`, explicit deny in a resource-based policy; no object created |
+
+The worker-side statement can only be tested while the environment stands. **Verify it at the next
+phase 2:** an extract written by the worker must still land.
+
+**The boundary property is now checked by a tool.** It has been checked by hand three times: on
+2026-09-22 for the registry, and today for the pipeline identity and for `posture.tf`. Now
+`boundary.py --check` reads the persistent files and fails on any reference to a resource declared
+outside them, naming the file, the line and the target.
+
+It was proven able to fail. A probe reference from `registry.tf` to `aws_vpc_endpoint.s3` was
+reported as `registry.tf:203 -> aws_vpc_endpoint.s3 (network.tf)` with exit 1, then the probe was
+removed. `drift.yml` runs `--check` before its plan, so a crossing is reported as a crossing instead
+of as drift.

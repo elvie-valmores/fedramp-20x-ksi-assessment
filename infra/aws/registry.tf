@@ -128,3 +128,74 @@ resource "aws_s3_bucket_lifecycle_configuration" "extracts" {
     }
   }
 }
+
+# --- The extract bucket's own protections ---
+#
+# Moved here from registry_grants.tf on 2026-09-23. They had been declared
+# alongside the grant to the worker role, so the teardown removed them with
+# it, and for every hour the environment was down the bucket had no policy
+# at all. A persistent principal -- the cross-cloud role -- could read
+# customer-data extracts from a bucket that did not require TLS.
+#
+# The rule is "the store persists, the grants to transient principals do
+# not", and these are neither grants nor about a transient principal. They
+# are properties of the store, so they persist with it. The one statement
+# that did name a transient principal -- worker writes only through the VPC
+# endpoint -- moved to the worker role's own policy in compute.tf, next to
+# the endpoint it names. S3 allows one policy per bucket, so the policy had
+# to be split by what it is about rather than duplicated.
+#
+# See DECISIONS.md, 2026-09-23.
+data "aws_iam_policy_document" "extracts_bucket" {
+  # KSI-CNA-RNT's second resource category: resources with no network
+  # interface, limited by resource policy and access boundary rather than
+  # by security group. The determination's point is that a check built
+  # only around interfaces misses this category entirely, and that it is
+  # the more damaging exposure because it is data rather than a path.
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.extracts.arn, "${aws_s3_bucket.extracts.arn}/*"]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  # Unencrypted writes rejected at the bucket, not merely defaulted. The
+  # bucket's default encryption would encrypt an object that arrived
+  # without a header; this rejects one that arrived asking for something
+  # weaker.
+  statement {
+    sid    = "DenyUnencryptedWrites"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.extracts.arn}/*"]
+
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "extracts" {
+  bucket = aws_s3_bucket.extracts.id
+  policy = data.aws_iam_policy_document.extracts_bucket.json
+}

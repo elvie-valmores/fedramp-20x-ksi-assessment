@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-23:
 
-- **Persisting between sessions**: 65 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 66 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket
   the artifacts key, and the posture services (GuardDuty, Security Hub, Inspector). On GCP: all of
@@ -76,7 +76,7 @@ deployed and internally consistent, and still does nothing. Check against the li
 
 ### What is standing
 
-**AWS — 65 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS — 66 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
 Checked against the API on 2026-09-23. No load balancer, no database, no ECS cluster, no VPC except
 the default one, no endpoints.
 
@@ -155,6 +155,8 @@ targeting decides what gets evaluated. `cross_cloud.tf` brought `GCP_PIPELINE_SA
 
 `boundary.py` derives from Terraform state, so it lists what exists and cannot propose creating what
 does not. Moving something onto the persistent side needs a one-time apply targeted by declaration.
+Run `boundary.py --check` first. It fails if a persistent file references an ephemeral resource,
+and `drift.yml` runs it on every run.
 
 ### Applying
 
@@ -172,8 +174,6 @@ fedramp-20x-ksi-assessment`.
 roughly 380 check definitions exist. The SDR emitter, which is the actual deliverable, has not been
 started. The other four mechanisms are genuinely blocked, so the unblocked work is:
 
-- **Decide the extract bucket's policy.** It has no bucket policy between sessions (open items).
-  This is a real control gap, not a build task.
 - **`live_is_declared`**, the reverse direction of declared versus live. It needs a list of live
   resources that are legitimately outside Terraform, with a reason for each. Every entry is a
   decision.
@@ -186,7 +186,7 @@ started. The other four mechanisms are genuinely blocked, so the unblocked work 
 |---|---|
 | Measure the posture cost | **Before 2026-10-06**, when the Inspector trial ends. GuardDuty's ends about 2026-10-22. Read each service's projected cost and compare it with the 3 to 8 USD estimate. Option B is the fallback |
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which controls report data after the first day |
-| **The extract bucket has no bucket policy between sessions** | Its `DenyInsecureTransport` and `DenyUnencryptedWrites` statements are declared in `registry_grants.tf`, which is ephemeral. S3 allows one policy per bucket, and the policy's other statement names ephemeral resources (the worker role, the VPC endpoint), so fixing it needs a design decision. See the last 2026-09-23 entry in `DECISIONS.md` |
+| Worker writes through the VPC endpoint | The restriction moved from the bucket policy to the worker role on 2026-09-23. Confirm an extract still lands at the next phase 2 |
 | No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
 | `live_is_declared` exclusion list | Service-linked roles, the bootstrap state bucket, AWS-managed keys, `AWSReservedSSO_*` roles, the default VPC, `terraform-admin`. Each needs a recorded reason |
 | The analytics image has no build path at all | Blocks GCP phase 2 |

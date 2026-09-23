@@ -63,9 +63,9 @@ later would silently survive every teardown, and nothing would report it.
 Deriving means a new resource is ephemeral by default, and only a deliberate
 placement in one of the named files exempts it.
 
-Relies on one property, verified 2026-09-22 and worth re-checking before
-moving a resource between files: nothing in the persistent files
-references a resource declared outside them. `terraform plan -target` pulls
+Relies on one property, and `--check` verifies it -- run it before moving
+a resource between files: nothing in the persistent files references a
+resource declared outside them. `terraform plan -target` pulls
 in dependencies, so if that stopped holding, --persistent would quietly drag
 application resources into the drift plan.
 """
@@ -103,6 +103,29 @@ def declaring_files():
     return declared
 
 
+def crossings(declared):
+    """Every reference from a persistent file to a resource declared outside one.
+
+    The property the whole split relies on (see the docstring). Checked by
+    reading the source rather than the plan graph, because it has to hold
+    before anything is applied: moving a file is the moment it can break.
+    Comments are skipped -- they may name anything. Data sources are not
+    matched: they are read, not owned, and several persistent files already
+    read data sources declared in ephemeral ones.
+    """
+    found = []
+    for path in sorted(PERSISTENT_FILES):
+        with open(path) as handle:
+            lines = handle.read().splitlines()
+        for number, line in enumerate(lines, start=1):
+            code = line.split("#", 1)[0]
+            for match in re.finditer(r"(?<![\w.])([a-z0-9_]+)\.([a-z0-9_]+)", code):
+                home = declared.get((match.group(1), match.group(2)))
+                if home and home not in PERSISTENT_FILES:
+                    found.append(f"{path}:{number} -> {match.group(0)} ({home})")
+    return found
+
+
 def state_addresses():
     result = subprocess.run(
         ["terraform", "state", "list"], capture_output=True, text=True
@@ -117,6 +140,11 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--persistent", action="store_true", help="what survives a teardown")
     group.add_argument("--ephemeral", action="store_true", help="what a teardown removes")
+    group.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if a persistent file references an ephemeral resource",
+    )
     group.add_argument(
         "--files",
         action="store_true",
@@ -137,6 +165,17 @@ def main():
         return
 
     declared = declaring_files()
+
+    if args.check:
+        found = crossings(declared)
+        if found:
+            sys.exit(
+                "persistent files reference ephemeral resources:\n  "
+                + "\n  ".join(found)
+            )
+        print(f"{len(PERSISTENT_FILES)} persistent files, no reference crosses the boundary")
+        return
+
     selected, unmapped = [], []
 
     for address in state_addresses():
