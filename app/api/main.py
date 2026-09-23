@@ -24,11 +24,32 @@ from common.db import connect, DatabaseUnavailable
 
 LOG = logging.getLogger("api")
 
-# The writable mount. The root filesystem is read only, so this is the only
-# writable path in the container and the certificate is the only thing
-# written to it. On Fargate this is ephemeral storage rather than tmpfs --
-# encrypted at rest and destroyed with the task, but not memory.
-TLS_DIR = "/tmp/tls"
+# Where the task certificate is materialised so the TLS library can open it.
+#
+# /dev/shm rather than the /tmp volume, and the reason is measured rather than
+# assumed. With `readonlyRootFilesystem = true` the only writable paths are
+# mounts, and the task's ephemeral volume mounts at /tmp owned by root with
+# mode 0755. This process runs as uid 10001, so it cannot create anything
+# there -- which is what crashed every api task on 2026-09-23:
+#
+#     PermissionError: [Errno 13] Permission denied: '/tmp/tls'
+#
+# Measured from inside a task on this cluster:
+#
+#     /dev/shm  owner 0 0  mode 0o1777  writable True
+#     /var/tmp  owner 0 0  mode 0o1777  writable False
+#     /tmp      owner 0 0  mode 0o0755  writable False
+#
+# /var/tmp is world-writable in the image and still refused, because it is
+# part of the read-only root filesystem. /dev/shm is a separate tmpfs mount
+# and is not covered by that flag.
+#
+# This is better than the volume, not merely a way around it. /dev/shm is
+# memory, so the private key never reaches a filesystem at all -- which is
+# the property this comment previously described as out of reach. It is
+# destroyed with the task like the volume, and never written to disk unlike
+# the volume.
+TLS_DIR = "/dev/shm/tls"
 
 app = FastAPI(title="ksi-api", docs_url=None, redoc_url=None)
 

@@ -547,11 +547,25 @@ resource "aws_ecs_task_definition" "api" {
   # The writable mount the read-only root filesystem makes necessary. The
   # TLS material is written here and nowhere else.
   #
+  # Scratch space, and NOT where the task certificate goes.
+  #
+  # Fargate mounts this volume owned by root with mode 0755, and the
+  # containers run as uid 10001, so nothing in this task can actually write
+  # to it. That is measured, not assumed -- it is what crashed every api
+  # task on 2026-09-23 with `Permission denied: '/tmp/tls'`.
+  #
+  # The certificate now materialises in /dev/shm, a separate tmpfs mount
+  # that `readonlyRootFilesystem` does not cover and that is world-writable.
+  # That is strictly better: /dev/shm is memory, so the private key never
+  # touches disk, where this volume's ephemeral storage would have.
+  #
+  # The mount is kept because a read-only root filesystem needs somewhere
+  # for anything that expects /tmp to exist, and because removing it would
+  # make the task definition disagree with the hardening block every other
+  # service shares. It is deliberately not described as writable.
+  #
   # Not tmpfs: Fargate does not support linuxParameters.tmpfs, so this is
-  # a Docker volume on the task's ephemeral storage. That storage is
-  # encrypted at rest with an AWS-managed key and is destroyed with the
-  # task, so the private key does not outlive the task -- but it does
-  # touch disk, and calling it tmpfs would overstate the claim.
+  # a Docker volume on the task's ephemeral storage.
   volume {
     name = "tmp"
 
