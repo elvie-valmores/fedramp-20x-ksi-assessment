@@ -5159,3 +5159,60 @@ mailboxes.
 `security@caliper.elvievalmores.com`, and KSI-PIY-RVD requires that contact be monitored. That
 subdomain has no MX and Cloud Identity Free has no mailbox, so the address would currently bounce. It
 needs a forwarding rule to somewhere actually read before that determination can be evidenced.
+
+---
+
+## 2026-09-22 — The federation works, proven by using it
+
+**Google Cloud Identity is now the workforce identity provider for AWS**, with IAM Identity Center
+trusting its SAML assertions. Verified by authenticating through it, not by reading the configuration.
+
+| | |
+|---|---|
+| Google tenant | `corp.elvievalmores.com`, customer ID `C01rucqxe` |
+| IdP sign-in URL | `https://accounts.google.com/o/saml2/idp?idpid=C01rucqxe` |
+| IdP issuer URL | `https://accounts.google.com/o/saml2?idpid=C01rucqxe` |
+| Identity Center instance | `ssoins-7223046591f7f9f9`, identity store `d-90667e73f9` |
+| ACS URL | `.../platform/saml/acs/4941442d9bf9ddcf-a64b-4b2e-b754-e15ff995f103` |
+| Google signing certificate | expires **2031-09-21** |
+
+**The catalog app is the wrong one, and it fails in a way that looks like success.** Google's
+directory offers "Amazon Web Services", which is the classic IAM federation connector: it requires
+`https://aws.amazon.com/SAML/Attributes/Role` and `RoleSessionName`, asserting an IAM role ARN
+directly into an account. Identity Center works the other way round — it identifies the user by
+NameID and decides access itself through permission sets. It has no use for a Role attribute.
+
+Configuring the catalog app would have completed cleanly on both sides and failed only at sign-in,
+with an assertion naming a role unrelated to any permission set. No Identity Center entry exists in
+this edition's catalog, so the app is a **custom SAML app**, which is also what AWS documents for
+Google Workspace. Its attributes screen is deliberately empty; that emptiness is the difference
+between the two apps.
+
+**A first-sign-in prompt is indistinguishable from a broken trust.** The first attempt failed with
+"Looks like this code isn't right", and CloudTrail recorded no authentication at all — the flow never
+reached AWS. The cause was Google's own new-user first-login sequence, forcing a password change
+before it would authenticate anyone. Signing in to the account directly once, clearing the prompts,
+and retrying the portal worked immediately.
+
+Recorded because the symptom pointed at the wrong layer. The error surfaced on an AWS page with an
+AWS request ID, while the fault was entirely in Google, one step before AWS was involved. CloudTrail
+showing *nothing* is what located it: a SAML trust that is misconfigured produces a failed
+authentication event, and an absence of events means the assertion never arrived.
+
+**Users are still not provisioned, by design.** Identity Center does not create users from a SAML
+assertion — the record must exist before an assertion for it is accepted. SCIM is what creates them
+and SCIM is Premium, so a single user was created by hand purely to prove the trust, then deleted.
+That user was a test fixture and is not the provisioning path.
+
+**What this leaves buildable, and where the seam falls.** Permission sets and groups can be declared
+in Terraform now: groups are declared there anyway, because SCIM does not sync them. Account
+assignments binding a group to a permission set can also be declared. What cannot be declared is
+*membership* — putting Alex and Sam into those groups needs the users to exist, which needs SCIM.
+
+So the seam is exactly where the 2026-09-05 decision said it would be: users through SCIM, groups
+through Terraform. The build can proceed to the edge of that seam without Premium, and stops there.
+
+**Open item.** No Identity Center sign-in events have appeared in CloudTrail. This may be delivery
+lag, which runs to roughly fifteen minutes. If federated authentications genuinely do not reach the
+corpus, KSI-MLA-LET's claim that authentication is logged would not hold for the workforce path,
+which is the path that matters most. To be checked rather than assumed.
