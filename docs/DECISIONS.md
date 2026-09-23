@@ -5377,3 +5377,106 @@ in `detection.tf`, which is already persistent. So this is a cost decision and n
 
 **Not decided.** Recorded for the design conversation, as the free-tier question was, because it
 changes what several determinations can claim rather than how something is built.
+
+---
+
+## 2026-09-23 — Phase 2 ran, and the application served a request
+
+**The first time the offering has ever run.** Both services deployed from digest-pinned images built
+by the pipeline, the migration created the schema and the IAM database roles, and a request went in
+and came back out:
+
+```
+GET  /readyz              200  {"status":"ready"}
+POST /measurements        201  {"id":1,"recorded_at":"2026-09-23T21:19:55Z"}
+GET  /measurements/acme   200  {"metric":"latency_ms","value":42.5}
+```
+
+**No database password exists anywhere in the system.** That insert authenticated with IAM. The path
+had never been executed before and is the kind that looks correct in configuration and fails on first
+connection.
+
+**What the two-phase gate proved.** Phase 1 cannot declare services because a digest cannot be looked
+up for an image that does not exist; phase 2 pins to the digest the tag resolves to. Both halves have
+now run. KSI-SVC-VRI's constraint is not a inconvenience the build works around — it is the reason
+the deployed task definitions name `@sha256:…` rather than a tag.
+
+**The edge, end to end.** The load balancer carries the ACM certificate issued for
+`caliper.elvievalmores.com` on 2026-09-22 — verified by ARN, not by assumption — HTTPS answers over
+HTTP/2, and `security.txt` is served at the well-known path with its rotating expiry. KSI-SVC-ASM
+build row 4 and KSI-PIY-RVD both have a real target for the first time.
+
+**Least privilege in the database, from the migration itself.** `api_service` holds SELECT and INSERT
+on `measurements`; `worker_service` holds SELECT only; `CREATE ON SCHEMA public` is revoked from
+PUBLIC. Both roles are granted `rds_iam` and nothing else. That is KSI-IAM-ELP demonstrable at the
+data layer rather than only at the cloud control plane.
+
+---
+
+## 2026-09-23 — Two hardening controls collided, and the fix is better than the design
+
+**Every api task crashed on first start:**
+
+```
+PermissionError: [Errno 13] Permission denied: '/tmp/tls'
+```
+
+**Two deliberate decisions produced it.** `readonlyRootFilesystem = true` makes mounted volumes the
+only writable paths. The container runs as uid 10001, declared in both the Dockerfile and the task
+definition so the two can be compared. Fargate mounts the task's ephemeral volume owned by root with
+mode 0755. So the single writable path was not writable by the process that needed it, and neither
+decision was wrong on its own.
+
+**The worker was unaffected**, which is why this surfaced as one service failing rather than the
+environment failing. The worker has no TLS listener and writes nothing.
+
+**Measured from inside a task on the cluster**, rather than reasoned about:
+
+```
+proc uid/gid  10001 10001
+/dev/shm      owner 0 0  mode 0o1777  writable True
+/var/tmp      owner 0 0  mode 0o1777  writable False
+/tmp          owner 0 0  mode 0o0755  writable False
+```
+
+`/var/tmp` is world-writable in the image and still refused, because it belongs to the read-only root
+filesystem. `/dev/shm` is a separate tmpfs mount and is not covered by that flag. Two diagnostic
+tasks were needed: the first passed `["python","-c",…]` as a command override against an image whose
+entrypoint is already `python`, and failed with `can't open file '/srv/python'`.
+
+**Chosen: materialise the certificate in `/dev/shm`.** This is an improvement, not a workaround. The
+code's own comment had described the volume as "ephemeral storage rather than tmpfs — encrypted at
+rest and destroyed with the task, but not memory". `/dev/shm` *is* memory, so the TLS private key now
+never reaches a filesystem at all. The property the author wanted and settled for missing is now the
+one in place.
+
+**The volume is kept and annotated** rather than removed, so that nobody reads it as writable again,
+and so the task definitions do not diverge from the hardening block every service shares.
+
+**Why this could not have been caught earlier.** `terraform validate` passes, the plan is clean, the
+image builds, the dependency scan passes, the task definition and the Dockerfile agree on the uid,
+and the container starts. It fails on the third line of application startup, in an environment that
+had never been stood up. This is the fifth control this week found non-functional while appearing
+correctly configured — and the first found by running the application rather than the tooling.
+
+---
+
+## 2026-09-23 — Inspector produced real findings, and they are not the ones CI reports
+
+**With the environment standing, Inspector scanned the images** and reported per image: 4 critical,
+14 high, 12 medium. A sample: `CVE-2026-82560 — perl`, high, `fixedInVersion: NotAvailable`.
+
+**None of these are findings the pipeline's dependency audit can produce.** `pip-audit` runs against
+`requirements.txt` and passed; these are operating-system packages in the
+`python:3.12-slim-bookworm` base image. The 2026-09-19 decision rejected basic ECR scanning on the
+grounds that it covers OS packages only and would leave application dependencies unscanned. The
+inverse holds too, and both halves are now evidenced rather than argued: CI covers the dependency
+manifest, Inspector covers the image, and the seam between them is the base image's own packages.
+
+**`fixedInVersion: NotAvailable` on a high-severity finding is the interesting case** for KSI-SCR-MIT
+and KSI-SCR-MON — a vulnerability with no available remediation is exactly what the accepted-risk
+register exists for, and the project now has a real instance rather than a hypothetical one.
+
+**This is what persisting the registry was supposed to buy** and, as recorded yesterday, does not
+buy on its own: the images persist and Inspector does not. These findings exist because the
+environment was standing. The open question about `posture.tf` is unchanged.
