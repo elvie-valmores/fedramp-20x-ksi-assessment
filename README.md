@@ -96,16 +96,17 @@ All three need working cloud credentials: an AWS profile, and
 | Collector framework | 4 of 9 mechanisms implemented, all self-tested. 15 check definitions |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
-| Application environment, AWS | Phase 1 applied and verified 2026-09-22; torn down after. Phase 2 needs images |
+| Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
 | Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end |
-| Cross-cloud federation (GCP → AWS) | Role applied; trust pinned to the GCP service account numeric ID |
+| Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
 | GCP analytics pipeline | Phase 1 applied (30 resources). Phase 2 needs an image |
-| CI/CD pipeline | `drift` verified working end to end 2026-09-22 (clean, exit 0). `build-and-push` not yet re-run |
+| CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 
-**Nothing expensive is standing between sessions.** 54 AWS resources persist —
-the state backend, the log store, CloudTrail, the Config recorder, Athena, both
-Lambdas, the CI identity, the container registry, the extract bucket and the
-artifacts key. No load balancer, database, VPC or endpoints. The
+**Nothing expensive is standing between sessions.** 58 AWS resources persist,
+plus the state backend: the log store, CloudTrail, the Config recorder, Athena,
+both Lambdas, the CI identities, the cross-cloud role, the container registry
+with its signed images, the extract bucket and the artifacts key. There is no
+load balancer, database, VPC or endpoint. The
 application environment is rebuilt each session with `terraform apply` and
 removed with `infra/aws/teardown.sh`; see `infra/README.md`. Phase 1 was last
 verified on 2026-09-22 — inventory self-test and collector checks passing on

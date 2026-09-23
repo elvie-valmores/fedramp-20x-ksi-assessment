@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Five files hold everything that survives a teardown. Everything else is the
+Ten files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -15,11 +15,17 @@ application environment, rebuilt on the next apply:
     pipeline.tf           the build role
     cross_cloud.tf        the role the GCP pipeline assumes
 
-The last three are not about cost either. The registry persists so that images
-survive a teardown -- otherwise every session that wants to deploy must first
-run a full build, and the vulnerability scanner has nothing to look at in
-between, which nine indicators depend on. The artifacts key follows because
-both stores encrypt with it.
+pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
+free. It is there because the drift check runs while the application
+environment is down, so the identity that runs it cannot go down with it. A
+correct plan executed by a principal that does not exist is still no signal.
+
+The registry persists so that images survive a teardown -- otherwise every
+session that wants to deploy must first run a full build. It was also meant to
+give the vulnerability scanner something to look at between sessions, but the
+scanner is declared in posture.tf, which is ephemeral, so for now that part
+of the reason does not hold (DECISIONS.md, 2026-09-23). The artifacts key
+follows because both stores encrypt with it.
 
 In each case the *store* persists and the *grants to transient principals* do
 not: registry_grants.tf holds the policies naming roles from compute.tf, and
@@ -32,11 +38,6 @@ Both are IAM-only and cost nothing. The point is that the build role no longer
 dies with the environment, so CI can run against a torn-down one -- which is
 what it needs to do, since its whole job is producing the images the
 environment is waiting for.
-
-The last of those is not about cost -- an OIDC provider and IAM roles are
-free. It is there because the drift check runs while the application
-environment is down, so the identity that runs it cannot go down with it. A
-correct plan executed by a principal that does not exist is still no signal.
 
 Two consumers, opposite halves:
 
@@ -52,10 +53,10 @@ The mapping is from state address back to the .tf file that declares it, not
 from a written list. A written list rots -- a resource added to compute.tf
 later would silently survive every teardown, and nothing would report it.
 Deriving means a new resource is ephemeral by default, and only a deliberate
-placement in one of the five named files exempts it.
+placement in one of the named files exempts it.
 
 Relies on one property, verified 2026-09-22 and worth re-checking before
-moving a resource between files: nothing in the five persistent files
+moving a resource between files: nothing in the persistent files
 references a resource declared outside them. `terraform plan -target` pulls
 in dependencies, so if that stopped holding, --persistent would quietly drag
 application resources into the drift plan.

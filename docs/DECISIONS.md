@@ -5480,3 +5480,82 @@ register exists for, and the project now has a real instance rather than a hypot
 **This is what persisting the registry was supposed to buy** and, as recorded yesterday, does not
 buy on its own: the images persist and Inspector does not. These findings exist because the
 environment was standing. The open question about `posture.tf` is unchanged.
+
+---
+
+## 2026-09-23 — Torn down after phase 2, and drift checked over the full persistent set for the first time
+
+**Most of this entry comes from a handoff file.** The session that ran phase 2 lost read access to the
+repository partway through its final verification: first `archive_file` could not read the Lambda
+sources, then the whole directory returned `Operation not permitted`, including to `git`. Writing new
+files still worked, and so did the AWS and GitHub credentials. So the teardown outcome went into
+`docs/HANDOFF-2026-09-23.md` (commit `78dda77`) and not into this log. The next session folded that
+file in here and deleted it. Everything below was checked again against the live accounts before it
+was written down.
+
+**The teardown completed.**
+
+```
+Apply complete! Resources: 0 added, 0 changed, 118 destroyed.
+```
+
+The background process reported exit -1. The harness caused that by losing the process handle at a
+session boundary. It was not a Terraform failure: the completion line comes from the run's own
+output, and the AWS API confirmed the result afterwards.
+
+**Verified gone, twice.** The first check was at the end of the session. The second was at the start
+of the next one, 2026-09-23 around 21:35 UTC. No load balancer, no database, no ECS cluster, no VPC
+other than the default one, no endpoints, no NAT gateway, no Elastic IP, no instances. The posture
+services are gone as well: Inspector reports `DISABLED`, GuardDuty has no detector, and the account is
+not subscribed to Security Hub.
+
+**Verified preserved.** 58 managed resources remain in state, and `boundary.py --ephemeral` returns
+nothing. `terraform state list` shows 103 entries; the other 45 are data sources, which the boundary
+leaves out. The log store has Object Lock `COMPLIANCE` / 7 days. CloudTrail is multi-region and the
+Config recorder is recording. Both Lambdas are present, and one customer-managed key is enabled, the
+artifacts key. Fifteen other customer-managed keys are in `PendingDeletion` and will clear on their
+own.
+
+**The images survived. This is the first time the 2026-09-22 persistence decision has been tested by
+a teardown.** ECR holds 8 manifests each for `api` and `worker`. The tags are `v1`, from the first
+build, and `git-f9f2c35f8fd1`, from `build-and-push` run 35920972765 on commit `f9f2c35`. Each tagged
+index has a `.sig` whose tag matches its digest exactly. **`git-f9f2c35f8fd1` is the tag to deploy**
+because it carries the `/dev/shm` certificate fix; `v1` still crashes the api. Phase 2 no longer
+needs a rebuild first. The pipeline verifies each signature before it records the digest. This
+session checked only that the digests match: there is no `cosign` on the workstation, so nothing was
+verified cryptographically from outside CI.
+
+**GCP was unchanged, as expected.** 30 managed resources and no Cloud Run jobs. A full plan returned
+"No changes".
+
+**The handoff's drift reasoning was wrong.** It rated the unverified drift check as low risk because
+the scheduled run at 12:30 UTC passed and "the persistent set has not changed since". That run was on
+`7f78937`, the commit *before* `7806abe` moved `pipeline.tf` and `cross_cloud.tf` across. The
+`GCP_PIPELINE_SA_UNIQUE_ID` repository variable was created at 20:38 UTC, eight hours after it. So the
+scheduled run checked a smaller set of resources with a different variable set, and CI had never run
+drift against the 58. The "58 targets, exit 0" recorded in the entry above was a local plan made with
+administrator credentials. It could not show whether the *drift role* can read the two roles that had
+just moved.
+
+**Now it has.** Dispatched run 35923874415 on `78dda77` printed "checking 58 persistent resources"
+and exited 0 with "No changes". It refreshed 58 resources, among them `aws_iam_role.github_build`,
+`aws_iam_role.gcp_pipeline[0]` and both of their inline policies. The `[0]` shows the gate evaluated
+non-empty, so the new variable is actually reaching the plan.
+
+The lesson repeats the one in the pipeline-identity entry above from another direction. A green run
+only covers what that run targeted. **A passing drift run is evidence about the boundary as of its
+commit, not the boundary as it stands today.**
+
+**Two corrections the handoff surfaced.**
+
+- **`APP_DOMAIN` is not a repository variable**, although the handoff listed it among the values
+  "held in GitHub repository variables". `drift.yml` passes `vars.APP_DOMAIN`, which comes through as
+  an empty string. That is harmless at present: `var.app_domain` is used only in `edge.tf` and
+  `secrets.tf`, and both are ephemeral, so the scoped plan never evaluates it. But the line looks as
+  though it does something and does not. It becomes a real fault if anything using the domain moves
+  to the persistent side, which is the same pattern as `GCP_PIPELINE_SA_UNIQUE_ID`. Left open.
+- **`boundary.py`'s docstring said "Five files"** while listing ten. Corrected in the same commit as
+  this entry.
+
+**Also not in any variable store:** the GCP root needs `billing_account_id` for a plan. The value is
+read with `gcloud billing projects describe`.
