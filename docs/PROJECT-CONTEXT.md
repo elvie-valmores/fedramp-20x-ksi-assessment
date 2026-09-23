@@ -119,8 +119,8 @@ Nothing below is "configured". Each was exercised.
   assertion has a negative control in `collector/self_test.py`, because a check that cannot fail is
   not a check.
 - **Drift**: runs green in CI against the full persistent set. Run 35923874415 was the first over
-  the 58 including the build and cross-cloud roles. The 65 including posture were first checked
-  after that, in the run that followed the posture commit. Earlier green runs checked smaller sets;
+  the 58 including the build and cross-cloud roles. Run 35925317909 was the first over all
+  65, including posture. Earlier green runs checked smaller sets;
   see the 2026-09-23 entries in `DECISIONS.md`.
 - **Posture**: Inspector rescanned the persisted images and reproduced the phase 2 result exactly
   (4 critical, 14 high and 12 medium per image). GuardDuty is enabled, both Security Hub standards

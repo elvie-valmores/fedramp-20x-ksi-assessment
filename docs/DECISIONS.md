@@ -5612,7 +5612,8 @@ services from the 2026-09-22 work.
 - The findings rule is `ENABLED` and targets the detection topic.
 - Inspector rescanned the persisted images and reproduced the phase 2 result exactly: 4 critical,
   14 high and 12 medium per image.
-- Local drift plan over the 65 persistent resources: exit 0, "No changes".
+- Local drift plan over the 65 persistent resources: exit 0, "No changes". Then CI drift run
+  35925317909 on `8440e6a` did the same, refreshing all 65 including the seven posture resources.
 
 **Inspector scans 4 of the 16 manifests in ECR.** The other 12 report `UNSUPPORTED_MEDIA_TYPE`:
 they are image indexes, cosign signatures and build attestations. The 4 are the platform images, one
