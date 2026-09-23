@@ -101,12 +101,15 @@ All three need working cloud credentials: an AWS profile, and
 | Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
 | GCP analytics pipeline | Phase 1 applied (30 resources). Phase 2 needs an image |
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
+| Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
-**Nothing expensive is standing between sessions.** 58 AWS resources persist,
+**Nothing expensive is standing between sessions.** 65 AWS resources persist,
 plus the state backend: the log store, CloudTrail, the Config recorder, Athena,
 both Lambdas, the CI identities, the cross-cloud role, the container registry
-with its signed images, the extract bucket and the artifacts key. There is no
-load balancer, database, VPC or endpoint. The
+with its signed images, the extract bucket, the artifacts key and the posture
+services. The posture services are the only ones with a real standing cost,
+estimated at 3 to 8 USD a month. There is no load balancer, database, VPC or
+endpoint. The
 application environment is rebuilt each session with `terraform apply` and
 removed with `infra/aws/teardown.sh`; see `infra/README.md`. Phase 1 was last
 verified on 2026-09-22 — inventory self-test and collector checks passing on

@@ -5559,3 +5559,78 @@ commit, not the boundary as it stands today.**
 
 **Also not in any variable store:** the GCP root needs `billing_account_id` for a plan. The value is
 read with `gcloud billing projects describe`.
+
+---
+
+## 2026-09-23 — Resolved: the posture services persist
+
+**Chosen.** `posture.tf` moves to the persistent side: GuardDuty, Security Hub with the CIS and FSBP
+standards, Inspector for ECR, and the GuardDuty findings rule. This resolves the open question
+recorded earlier today. 65 resources now persist.
+
+**Considered.**
+
+- **A.** Persist all three.
+- **B.** Persist GuardDuty and Inspector, and keep Security Hub ephemeral.
+- **C.** Keep all three ephemeral, but export their findings to the log store.
+- **D.** Keep all three ephemeral, and declare that as a limitation.
+
+**Why A.**
+
+- **Teardown deleted the evidence.** Removing a detector or switching off Inspector deletes their
+  findings. Before this change, the phase 2 Inspector results existed only as prose in this log.
+  That includes the high-severity finding with `fixedInVersion: NotAvailable`, the project's first
+  real accepted-risk case.
+- **What the services watch persists.** That is the images, the CloudTrail stream, the IAM roles and
+  the log store.
+- **GuardDuty cannot catch up.** It analyses events as they arrive and does not go back over earlier
+  ones, so anything that happens while it is off is never examined. Security Hub and Inspector
+  evaluate current state and could be caught up at the start of a session. GuardDuty could not.
+
+**What it gives up.** Roughly 3 to 8 USD a month. That figure comes from the 2026-09-19 estimate and
+has not been measured. It is the first persistent resource chosen for evidence value rather than
+because it is free or because the architecture needs it.
+
+**The broader principle was not decided.** The counter-argument was that the 3-day collector cadence
+limitation is an accepted precedent of the same shape. Several collector checks also target
+persistent resources, so "what it watches persists" would reach the collector schedule too. This
+decision covers `posture.tf` only. The collector schedule stays ephemeral and its limitation stands
+until someone decides otherwise.
+
+**How it was moved.** `posture.tf` was added to `PERSISTENT_FILES`, followed by a one-time apply
+targeted at its seven resources (7 added, 0 changed, 0 destroyed). The file's references were checked
+first. Outside itself it references only `aws_sns_topic.detection_interim` (persistent) and the
+`aws_region` and `aws_caller_identity` data sources, which `pipeline.tf` already uses. It sets no
+variables, so no drift gate comes with it. The drift role already held read permissions for all three
+services from the 2026-09-22 work.
+
+**Verified by using it.**
+
+- GuardDuty is `ENABLED` and publishes every 15 minutes.
+- Inspector is `ENABLED` for ECR, and the registry scan type switched to `ENHANCED`.
+- Both Security Hub standards report `READY`.
+- The findings rule is `ENABLED` and targets the detection topic.
+- Inspector rescanned the persisted images and reproduced the phase 2 result exactly: 4 critical,
+  14 high and 12 medium per image.
+- Local drift plan over the 65 persistent resources: exit 0, "No changes".
+
+**Inspector scans 4 of the 16 manifests in ECR.** The other 12 report `UNSUPPORTED_MEDIA_TYPE`:
+they are image indexes, cosign signatures and build attestations. The 4 are the platform images, one
+per repository per build. That matters for cost, because Inspector bills per image scanned.
+
+**The trials are running, so the cost can be measured before it is paid.**
+
+| Service | Trial | Ends |
+|---|---|---|
+| Inspector (ECR) | Started 2026-09-21 19:05 EDT, when phase 1 was first applied | **2026-10-06** |
+| GuardDuty | 29 days remaining on 2026-09-23 | about 2026-10-22 |
+| Security Hub | No API reports trial status | Check the console |
+
+Read each service's projected post-trial cost before 2026-10-06 and compare it with the 3 to 8 USD
+estimate. If Security Hub is where the cost concentrates, option B is the recorded fallback.
+
+**Still unverified.** Security Hub runs its controls as AWS Config rules, and the recorder is
+deliberately scoped to the types the inventory needs. Controls for types the recorder does not
+record will produce no findings, not passing ones. First evaluations take up to a day, so check
+which controls report data. Whether those Config rule evaluations bill separately is part of the
+same cost check.

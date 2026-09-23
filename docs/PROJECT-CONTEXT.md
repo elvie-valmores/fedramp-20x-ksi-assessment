@@ -33,10 +33,11 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-23:
 
-- **Persisting between sessions**: 58 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 65 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket
-  and the artifacts key. On GCP: all of phase 1. "Resume here" below has the detail.
+  the artifacts key, and the posture services (GuardDuty, Security Hub, Inspector). On GCP: all of
+  phase 1. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
   in about fifteen minutes and is torn down after each session. Phase 1 was last verified on
   2026-09-22. Phase 2 was verified on 2026-09-23, when it served a request authenticated to the
@@ -74,14 +75,19 @@ deployed and internally consistent, and still does nothing. Check against the li
 
 ### What is standing
 
-**AWS — 58 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
-Checked against the API at 21:35 UTC on 2026-09-23. No load balancer, no database, no ECS cluster,
-no VPC except the default one, no endpoints. Inspector reports `DISABLED`, GuardDuty has no detector,
-and the account is not subscribed to Security Hub.
+**AWS — 65 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+Checked against the API on 2026-09-23. No load balancer, no database, no ECS cluster, no VPC except
+the default one, no endpoints.
+
+**The posture services run continuously as of 2026-09-23.** That is GuardDuty, Security Hub with
+the CIS and FSBP standards, and Inspector on ECR. They are the only persistent resources with a real
+standing cost, roughly 3 to 8 USD a month, estimated rather than measured. See the resolved 2026-09-23
+entry in `DECISIONS.md`.
 
 What remains: the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config recorder,
 Athena and Glue, both Lambdas, the budget guardrail, the GitHub OIDC provider, the drift role, the
-build role, the cross-cloud role, the two ECR repositories, the extract bucket and the artifacts key.
+build role, the cross-cloud role, the two ECR repositories, the extract bucket, the artifacts key and
+the posture services.
 Fifteen other customer-managed keys sit in `PendingDeletion` and clear on their own. `terraform state
 list` prints 103 lines; 45 of them are data sources, which `boundary.py` leaves out.
 
@@ -112,9 +118,13 @@ Nothing below is "configured". Each was exercised.
 - **Collectors**: 15 of 15 checks pass, and 4 of 9 mechanisms are implemented. Every pipeline
   assertion has a negative control in `collector/self_test.py`, because a check that cannot fail is
   not a check.
-- **Drift**: runs green in CI against the full 58-resource persistent set, including the build role
-  and the cross-cloud role. The first such run was 35923874415 on 2026-09-23. Earlier green runs
-  checked a smaller set; see the last 2026-09-23 entry in `DECISIONS.md`.
+- **Drift**: runs green in CI against the full persistent set. Run 35923874415 was the first over
+  the 58 including the build and cross-cloud roles. The 65 including posture were first checked
+  after that, in the run that followed the posture commit. Earlier green runs checked smaller sets;
+  see the 2026-09-23 entries in `DECISIONS.md`.
+- **Posture**: Inspector rescanned the persisted images and reproduced the phase 2 result exactly
+  (4 critical, 14 high and 12 medium per image). GuardDuty is enabled, both Security Hub standards
+  are `READY`, and the findings rule targets the detection topic.
 - **Image pipeline**: `build-and-push` has completed twice. It scans dependencies, builds, signs,
   verifies the signature and pushes by digest.
 - **The application**: phase 2 served a request. `POST /measurements` returned 201 and the read-back
@@ -154,14 +164,7 @@ fedramp-20x-ksi-assessment`.
 
 ### The next thing to do
 
-**First, decide whether `posture.tf` moves to the persistent side.** This is open and needs the
-user's decision; do not act on it without one. The case is in `DECISIONS.md` under 2026-09-23. It
-costs roughly 3 to 8 USD a month. The file is eligible, because its only outside reference is the
-already-persistent SNS topic. Against it: the 3-day collector cadence limitation is an accepted
-precedent of the same shape. It matters because nothing scans the persisted images between sessions,
-and nine indicators consume the scanner.
-
-**Then the collector framework, which is the bottleneck on the build order.** 4 of 9 mechanisms and
+**The collector framework, which is the bottleneck on the build order.** 4 of 9 mechanisms and
 15 of roughly 380 check definitions exist, and the SDR emitter, which is the actual deliverable, has
 not been started. **`declared_versus_live_comparison` is next.** Its "not yet built" note says it
 waits on "a reader for Terraform state". The state has been in S3 and readable all along, so that
@@ -171,7 +174,9 @@ block is stale (2026-09-22).
 
 | Item | State |
 |---|---|
-| `posture.tf` persistence | Open question. See above |
+| Measure the posture cost | **Before 2026-10-06**, when the Inspector trial ends. GuardDuty's ends about 2026-10-22. Read each service's projected cost and compare it with the 3 to 8 USD estimate. Option B is the fallback |
+| Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which controls report data after the first day |
+| Collector schedule persistence | Not decided. The argument that moved posture ("what it watches persists") reaches it too |
 | The analytics image has no build path at all | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | `drift.yml` passes it anyway, and it comes through empty. Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
@@ -318,7 +323,8 @@ Apply and destroy per session. Persisting between sessions: Terraform state back
 storage, the central log store, database snapshots, KMS keys.
 
 Standing continuously the stack is roughly 115 to 125 USD per month. Torn down between sessions the
-residual is under 5. Realistically 15 to 25 per month at normal working cadence.
+residual was under 5 until 2026-09-23. The posture services now persist, which adds an estimated 3 to
+8. At normal working cadence, expect the earlier 15 to 25 per month plus that.
 
 **Two cost traps already found:**
 

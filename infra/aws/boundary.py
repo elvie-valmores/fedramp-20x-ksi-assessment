@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Ten files hold everything that survives a teardown. Everything else is the
+Eleven files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -14,6 +14,7 @@ application environment, rebuilt on the next apply:
     artifacts_key.tf      the key both of those encrypt with
     pipeline.tf           the build role
     cross_cloud.tf        the role the GCP pipeline assumes
+    posture.tf            GuardDuty, Security Hub and Inspector
 
 pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -23,9 +24,9 @@ correct plan executed by a principal that does not exist is still no signal.
 The registry persists so that images survive a teardown -- otherwise every
 session that wants to deploy must first run a full build. It was also meant to
 give the vulnerability scanner something to look at between sessions, but the
-scanner is declared in posture.tf, which is ephemeral, so for now that part
-of the reason does not hold (DECISIONS.md, 2026-09-23). The artifacts key
-follows because both stores encrypt with it.
+scanner lived in posture.tf, which was ephemeral, so that part of the reason
+did not hold until posture.tf moved too (below). The artifacts key follows
+because both stores encrypt with it.
 
 In each case the *store* persists and the *grants to transient principals* do
 not: registry_grants.tf holds the policies naming roles from compute.tf, and
@@ -38,6 +39,13 @@ Both are IAM-only and cost nothing. The point is that the build role no longer
 dies with the environment, so CI can run against a torn-down one -- which is
 what it needs to do, since its whole job is producing the images the
 environment is waiting for.
+
+posture.tf joined on 2026-09-23 too, and unlike the others it costs money --
+roughly 3 to 8 USD a month, estimated rather than measured. What it watches
+persists: the images, the CloudTrail stream, the IAM roles and the log store.
+Tearing it down also deletes its findings, and GuardDuty cannot look back
+over events it was not running for. Its only reference outside itself is the
+SNS topic in detection.tf.
 
 Two consumers, opposite halves:
 
@@ -75,6 +83,7 @@ PERSISTENT_FILES = {
     "artifacts_key.tf",
     "pipeline.tf",
     "cross_cloud.tf",
+    "posture.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",
