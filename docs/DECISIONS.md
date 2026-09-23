@@ -5216,3 +5216,67 @@ through Terraform. The build can proceed to the edge of that seam without Premiu
 lag, which runs to roughly fifteen minutes. If federated authentications genuinely do not reach the
 corpus, KSI-MLA-LET's claim that authentication is logged would not hold for the workforce path,
 which is the path that matters most. To be checked rather than assumed.
+
+---
+
+## 2026-09-22 — The registry persists, and the artifacts key changes shape to allow it
+
+**Moved to the persistent side:** the two ECR repositories with their lifecycle policies, the extract
+bucket with its encryption, versioning and lifecycle configuration, and the artifacts key both
+encrypt with. 54 resources now persist between sessions, up from 40.
+
+**Why, in order of weight.** The vulnerability scanner is a shared component nine indicators consume,
+and it scans images in ECR. With the registry destroyed between sessions there were no images to scan
+for most of any month, so the component was idle exactly when the environment was not standing —
+which is most of the time. Second, `cross_cloud.tf` depends on the extract bucket and the artifacts
+key and nothing else ephemeral, so it was blocked behind a full environment apply. Third, images
+surviving means AWS phase 2 is reachable on any apply rather than only after a CI run. Cost is about
+one dollar a month, almost all of it the KMS key.
+
+**The store persists, the grants to transient principals do not.** Both stores' policies name roles
+from `compute.tf`, so `registry_grants.tf` holds the ECR repository policy and the extract bucket
+policy and stays ephemeral. A repository outlives the roles permitted to pull from it and the
+permission reappears with them. This is the third instance of the same shape today, after
+`pipeline_identity.tf` and the artifacts key itself, and it is now the rule rather than a workaround:
+a persistent resource may not reference an ephemeral one, and the seam falls between the thing and
+the permission to use it.
+
+**The artifacts key policy no longer names roles, and that is a real trade.** A KMS key policy
+validates that the principals it names exist — `PutKeyPolicy` rejects an ARN that does not resolve —
+so a persistent key could not carry a policy naming `worker_task` and `task_execution`. The key
+policy now grants the account, and those roles are authorised by their own IAM policies.
+
+**What that costs, precisely.** Nothing in capability: `compute.tf` already grants `worker_task`
+`kms:GenerateDataKey` and `kms:DescribeKey` on this key with the same `kms:ViaService` condition, and
+`task_execution` `kms:Decrypt` and `kms:DescribeKey`. The statements removed were duplicating grants
+that already existed. What is lost is the key policy acting as a second, independent backstop behind
+IAM — so an over-broad IAM policy on those roles is no longer caught twice. Separate keys per data
+class are unchanged, so per-class blast radius is unchanged. The ECR service principal grant stays,
+because a service principal has no existence to validate and ECR needs key access to encrypt layers.
+
+**Rejected: an ephemeral `aws_kms_key_policy` overlay.** It would have preserved the per-principal
+policy exactly, but the provider documents that combining it with `aws_kms_key.policy` produces a
+perpetual diff — and a perpetual diff would make the drift signal permanently positive, which is the
+failure this project spent today eliminating. Trading a redundant backstop for a working drift check
+is the better side of that.
+
+**A cross-boundary reference the check caught.** `output "github_build_role_arn"` had been carried
+into `pipeline_identity.tf` when that file was split out this afternoon, and it names a role declared
+in `pipeline.tf`. An output is a reference like any other, and it would have failed to evaluate
+whenever the environment was down. Moved back. Worth noting that the boundary check found it and
+review did not — the same file was read twice today without it being seen.
+
+**The cross-cloud role now exists.** Applied with the GCP pipeline service account's numeric unique
+ID `104894493962317106056`, and AWS accepted a trust policy pinning both `accounts.google.com:sub`
+and `accounts.google.com:aud` to that value. This is the first time the cross-cloud path has been
+anything but declared, and it validates the 2026-09-20 decision to match the numeric ID rather than
+the service account email, along with the 2026-09-21 audience fix.
+
+**Drift re-verified after the boundary moved**, because the boundary is what drift is scoped to: 54
+persistent targets, exit 0, "No changes."
+
+**One limitation of `boundary.py` noted rather than fixed.** It derives both halves from Terraform
+state, so it lists what exists and cannot propose creating what does not. Moving resources onto the
+persistent side therefore needed a one-time apply targeted by declaration rather than by boundary.
+That is the right trade — deriving from state is what stops the list rotting — but it means the
+script is for teardown and drift, not for provisioning.

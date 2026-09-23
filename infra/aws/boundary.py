@@ -10,6 +10,19 @@ application environment, rebuilt on the next apply:
     inventory.tf          CloudTrail and the Config recorder
     billing.tf            the budget guardrail
     pipeline_identity.tf  the OIDC provider and the drift role
+    registry.tf           the container registry and the extract bucket
+    artifacts_key.tf      the key both of those encrypt with
+
+The last three are not about cost either. The registry persists so that images
+survive a teardown -- otherwise every session that wants to deploy must first
+run a full build, and the vulnerability scanner has nothing to look at in
+between, which nine indicators depend on. The artifacts key follows because
+both stores encrypt with it.
+
+In each case the *store* persists and the *grants to transient principals* do
+not: registry_grants.tf holds the policies naming roles from compute.tf, and
+the artifacts key authorises those roles through their own IAM policies rather
+than through its key policy. See DECISIONS.md, 2026-09-22.
 
 The last of those is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -48,6 +61,8 @@ import sys
 
 PERSISTENT_FILES = {
     "pipeline_identity.tf",
+    "registry.tf",
+    "artifacts_key.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",

@@ -178,3 +178,13 @@ resource "aws_iam_role_policy" "github_build" {
   role   = aws_iam_role.github_build.id
   policy = data.aws_iam_policy_document.github_build.json
 }
+
+# Lives here rather than beside the drift role's output, because it names a
+# resource declared here. Moved on 2026-09-22 after the persistence-boundary
+# check caught it referencing across the split -- the output was carried into
+# pipeline_identity.tf when that file was created, and an output is a
+# reference like any other.
+output "github_build_role_arn" {
+  description = "Assumed by the build workflow. Set as the AWS_BUILD_ROLE repository variable."
+  value       = aws_iam_role.github_build.arn
+}

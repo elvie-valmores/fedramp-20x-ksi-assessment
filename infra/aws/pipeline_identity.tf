@@ -209,11 +209,6 @@ resource "aws_iam_role_policy" "github_drift" {
   policy = data.aws_iam_policy_document.github_drift.json
 }
 
-output "github_build_role_arn" {
-  description = "Assumed by the build workflow. Set as the AWS_BUILD_ROLE repository variable."
-  value       = aws_iam_role.github_build.arn
-}
-
 output "github_drift_role_arn" {
   description = "Assumed by the drift workflow. Set as the AWS_DRIFT_ROLE repository variable."
   value       = aws_iam_role.github_drift.arn
