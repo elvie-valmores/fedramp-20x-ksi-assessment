@@ -244,8 +244,16 @@ EXCLUSIONS = [
 
 def _fake_provider(rule: dict, resource: dict):
     if resource.get("missing"):
-        return False, "NotFound: the provider says this resource does not exist"
+        return False, f"NotFound: {dvl.GONE}"
     return resource.get("path") == "/aws-service-role/", None
+
+
+def _fake_exists(resource: dict):
+    if resource.get("missing"):
+        return False, f"NotFound: {dvl.GONE}"
+    if resource.get("unprobed"):
+        return None, "existence not probed"
+    return True, None
 
 
 def _res(kind: str, rid: str, **extra) -> dict:
@@ -256,38 +264,57 @@ INVENTORIES = {
     "all-declared": [_res("AWS::S3::Bucket", "bucket-a"), _res("AWS::IAM::Role", "role-app")],
     "excused": [_res("AWS::S3::Bucket", "bucket-a"),
                 _res("AWS::IAM::Role", "AWSServiceRoleForConfig", path="/aws-service-role/")],
+    # Exists, and nothing declares or excuses it.
     "undeclared": [_res("AWS::S3::Bucket", "bucket-a"), _res("AWS::S3::Bucket", "bucket-b")],
     # Named like a service-linked role, created at an ordinary path. The
     # exclusion must not be satisfiable by choosing a name.
     "spoofed-name": [_res("AWS::IAM::Role", "AWSServiceRoleForAnything", path="/")],
-    # The inventory lists what the provider says is gone -- the stale
-    # default security group found on 2026-09-23.
-    "phantom": [_res("AWS::IAM::Role", "AWSServiceRoleForGone", path="/aws-service-role/", missing=True)],
+    # Listed by the inventory, gone according to its service, and caught by
+    # an exclusion's own lookup -- the default security group of 2026-09-23.
+    "phantom-excludable": [_res("AWS::IAM::Role", "AWSServiceRoleForGone", path="/aws-service-role/", missing=True)],
+    # Listed, gone, and of a type no exclusion covers: found by the probe.
+    "phantom-undeclared": [_res("AWS::S3::Bucket", "bucket-deleted", missing=True)],
+    # Undeclared, and its existence cannot be asked. Must not be excused.
+    "unprobed": [_res("AWS::WAFv2::WebACL", "acl-x", unprobed=True)],
     "empty": [],
 }
-LID_PASS = ["all-declared", "excused"]
-LID_FAIL = ["undeclared", "spoofed-name", "phantom", "empty"]
+LID_CASES = [
+    ("live_is_declared",
+     ["all-declared", "excused", "phantom-excludable", "phantom-undeclared"],
+     ["undeclared", "spoofed-name", "unprobed", "empty"]),
+    ("inventory_current",
+     ["all-declared", "excused", "undeclared", "unprobed"],
+     ["phantom-excludable", "phantom-undeclared", "empty"]),
+]
+# Kept for negative_controls(), which reports what each assertion must fail on.
+LID_FAIL = LID_CASES[0][2]
 
 
 def live_is_declared() -> list[str]:
-    def verdict(name):
-        return dvl.coverage("aws", INVENTORIES[name], DECLARED, EXCLUSIONS, _fake_provider)
+    broken = []
+    for assertion, should_pass, should_fail in LID_CASES:
+        def verdict(name):
+            return dvl.coverage("aws", INVENTORIES[name], DECLARED, EXCLUSIONS,
+                                _fake_provider, _fake_exists, assertion)
 
-    wrong = [n for n in LID_PASS if not verdict(n)[0]]
-    wrong += [n for n in LID_FAIL if verdict(n)[0]]
-    # A phantom must say why it failed, or the inventory defect is invisible.
-    notes = [n for u in verdict("phantom")[1]["unaccounted"] for n in u["notes"]]
-    if not any("does not exist" in n for n in notes):
-        wrong.append("phantom (no does-not-exist note)")
+        wrong = [n for n in should_pass if not verdict(n)[0]]
+        wrong += [n for n in should_fail if verdict(n)[0]]
+        print(
+            f"[{assertion}] {'PASS' if not wrong else 'BROKEN'} -- "
+            f"passes {', '.join(should_pass)}; fails {', '.join(should_fail)}"
+        )
+        if wrong:
+            broken.append(assertion)
+            print(f"    wrong verdict on: {', '.join(wrong)}")
 
-    print(
-        f"[live_is_declared] {'PASS' if not wrong else 'BROKEN'} -- "
-        f"passes {', '.join(LID_PASS)}; fails {', '.join(LID_FAIL)}"
-    )
-    if wrong:
-        print(f"    wrong verdict on: {', '.join(wrong)}")
-        return ["live_is_declared"]
-    return []
+    # A stale entry must say why, or the inventory defect is invisible.
+    for name in ("phantom-excludable", "phantom-undeclared"):
+        stale = dvl.coverage("aws", INVENTORIES[name], DECLARED, EXCLUSIONS,
+                             _fake_provider, _fake_exists)[1]["stale"]
+        if not any(dvl.GONE in n for e in stale for n in e["notes"]):
+            broken.append(f"stale note ({name})")
+            print(f"    {name}: stale entry carries no does-not-exist note")
+    return broken
 
 
 # --- cloud_api_config_read judgements ---
@@ -310,6 +337,14 @@ def _tls(**change) -> dict:
 PAB_ON = {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
 
+ALLOWED = [{"role": "roles/editor", "member": "serviceAccount:tf@p", "reason": "x"}]
+PROJECT = "//cloudresourcemanager.googleapis.com/projects/p"
+
+
+def _grant(role: str, member: str, resource: str = PROJECT) -> dict:
+    return {"resource": resource, "role": role, "member": member}
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -328,6 +363,16 @@ CFG_CASES = [
         "governance mode": {**LOCK_OK, "Rule": {"DefaultRetention": {"Mode": "GOVERNANCE", "Days": 7}}},
         "no default retention": {"ObjectLockEnabled": "Enabled"},
         "too short": {**LOCK_OK, "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 1}}},
+    }),
+    ("evaluate_basic_roles", lambda c: cfg.evaluate_basic_roles(c, ALLOWED)[:2],
+     [_grant("roles/editor", "serviceAccount:tf@p")], {
+        "unlisted member": [_grant("roles/editor", "serviceAccount:tf@p"),
+                            _grant("roles/editor", "serviceAccount:1-compute@developer.gserviceaccount.com")],
+        # An allowance for editor is not an allowance for owner.
+        "allowed member, other role": [_grant("roles/owner", "serviceAccount:tf@p")],
+        # A basic role on one dataset is still a basic role.
+        "on a child resource": [_grant("roles/viewer", "user:x@y",
+                                       "//bigquery.googleapis.com/projects/p/datasets/d")],
     }),
     ("evaluate_trail_validation", lambda c: cfg.evaluate_trail_validation(*c),
      ({"LogFileValidationEnabled": True}, {"IsLogging": True}), {
@@ -356,7 +401,12 @@ CFG_RESOURCES = {
     "evaluate_public_access_blocked": "s3_buckets_block_public_access",
     "evaluate_object_lock": "s3_object_lock",
     "evaluate_trail_validation": "cloudtrail_log_file_validation",
+    "evaluate_basic_roles": "basic_roles",
 }
+
+
+# Judgements that serve more than one resource key.
+CFG_ALSO = {"evaluate_public_access_blocked": ["s3_account_public_access_block"]}
 
 
 def negative_controls() -> dict[tuple[str, str], str]:
@@ -371,13 +421,15 @@ def negative_controls() -> dict[tuple[str, str], str]:
         found[("declared_versus_live_comparison", assertion)] = (
             "Terraform plans that must fail it: " + ", ".join(should_fail)
         )
-    found[("declared_versus_live_comparison", "live_is_declared")] = (
-        "inventories that must fail it: " + ", ".join(LID_FAIL)
-    )
-    for name, _, _, bads in CFG_CASES:
-        found[("cloud_api_config_read", CFG_RESOURCES[name])] = (
-            "configurations that must fail it: " + ", ".join(bads)
+    for assertion, _, should_fail in LID_CASES:
+        found[("declared_versus_live_comparison", assertion)] = (
+            "inventories that must fail it: " + ", ".join(should_fail)
         )
+    for name, _, _, bads in CFG_CASES:
+        for resource in [CFG_RESOURCES[name], *CFG_ALSO.get(name, [])]:
+            found[("cloud_api_config_read", resource)] = (
+                "configurations that must fail it: " + ", ".join(bads)
+            )
     return found
 
 
@@ -388,7 +440,7 @@ def main() -> int:
     broken += live_is_declared()
     print()
     broken += cloud_api_config_read()
-    total = len(CASES) + len(DVL_CASES) + 2 + len(CFG_CASES)
+    total = len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES) + len(CFG_CASES)
 
     print()
     if broken:

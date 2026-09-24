@@ -74,6 +74,29 @@ resource "aws_vpc" "main" {
   }
 }
 
+# The VPC's default security group, which AWS creates with the VPC and
+# will not delete. Undeclared, its rules are AWS's defaults -- all traffic
+# between its members, all egress -- rather than code, and anything
+# launched without a group lands in it.
+#
+# Declared with no rules at all, so it admits and emits nothing and is
+# useless as a fallback. Every workload here names its own group. This is
+# the CIS benchmark's position and Security Hub's EC2.2 control, both of
+# which now run continuously. It is also what lets the collector's
+# live_is_declared check pass while the environment stands: this group
+# was deliberately not excused there (DECISIONS.md, 2026-09-23).
+#
+# Terraform does not create this resource; it adopts the existing group
+# and removes its rules. On destroy it is only dropped from state, and
+# the group goes when the VPC does.
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "fedramp-20x-ksi-default-deny"
+  }
+}
+
 # --- Public tier: the load balancer only ---
 
 resource "aws_internet_gateway" "main" {

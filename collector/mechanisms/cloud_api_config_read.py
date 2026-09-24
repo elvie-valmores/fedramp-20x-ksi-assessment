@@ -53,6 +53,10 @@ class CloudAPIConfigRead(Mechanism):
             return self._s3_object_lock(check)
         if provider == "aws" and resource == "cloudtrail_log_file_validation":
             return self._cloudtrail_log_file_validation(check)
+        if provider == "aws" and resource == "s3_account_public_access_block":
+            return self._s3_account_public_access_block(check)
+        if provider == "gcp" and resource == "basic_roles":
+            return self._gcp_basic_roles(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -197,6 +201,56 @@ class CloudAPIConfigRead(Mechanism):
         return CheckResult(check.id, ok, evidence, detail)
 
 
+    def _s3_account_public_access_block(self, check: CheckDefinition) -> CheckResult:
+        """Passes if the account-level block has all four settings on.
+
+        Requires params: region, account_id.
+
+        The per-bucket check covers the buckets that exist; this covers the
+        ones that do not yet. Same judgement as the per-bucket one.
+        """
+        client = boto3.client("s3control", region_name=check.params["region"])
+        try:
+            config = client.get_public_access_block(AccountId=check.params["account_id"])
+            config = config["PublicAccessBlockConfiguration"]
+        except client.exceptions.ClientError as exc:
+            if exc.response["Error"]["Code"] != "NoSuchPublicAccessBlockConfiguration":
+                raise
+            config = None
+        ok, detail = evaluate_public_access_blocked(config)
+        return CheckResult(check.id, ok, {"account_block": config}, detail)
+
+    def _gcp_basic_roles(self, check: CheckDefinition) -> CheckResult:
+        """Passes if every basic-role grant in the project is a named allowance.
+
+        Requires params: project_id, allowed -- a list of {role, member,
+        reason}. Covers the project and every resource under it, through
+        Cloud Asset's IAM search, because a basic role granted on one
+        dataset is as much a grant as one on the project.
+
+        Basic roles (owner, editor, viewer) are the ones GCP applies across
+        every service at once. KSI-IAM-ELP's least-privilege model has no
+        room for them except where a stated reason makes the reach
+        deliberate -- a provisioning identity that must manage everything,
+        say -- and the allowance list is where that reason is recorded.
+        """
+        project_id = check.params["project_id"]
+        client = asset_client(project_id)
+        results = client.search_all_iam_policies(request={
+            "scope": f"projects/{project_id}",
+            "query": "policy:(" + " OR ".join(BASIC_ROLES) + ")",
+        })
+        grants = [
+            {"resource": policy.resource, "role": binding.role, "member": member}
+            for policy in results
+            for binding in policy.policy.bindings
+            if binding.role in BASIC_ROLES
+            for member in binding.members
+        ]
+        ok, detail, evidence = evaluate_basic_roles(grants, check.params["allowed"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+
 # --- fetches ---
 
 
@@ -291,4 +345,24 @@ def evaluate_trail_validation(trail: dict | None, status: dict) -> tuple[bool, s
     if not trail.get("LogFileValidationEnabled"):
         return False, "log file validation is off"
     return True, "trail logging with log file validation"
+
+
+BASIC_ROLES = ("roles/owner", "roles/editor", "roles/viewer")
+
+
+def evaluate_basic_roles(grants: list[dict], allowed: list[dict]) -> tuple[bool, str, dict]:
+    permitted = {(a["role"], a["member"]) for a in allowed}
+    unexpected = [g for g in grants if (g["role"], g["member"]) not in permitted]
+    used = {(g["role"], g["member"]) for g in grants}
+    evidence = {
+        "grants": grants,
+        "unexpected": unexpected,
+        # An allowance nothing uses is a reason with no grant behind it --
+        # residue, or a grant that moved somewhere the list does not cover.
+        "allowances_unused": [a for a in allowed if (a["role"], a["member"]) not in used],
+    }
+    if unexpected:
+        names = ", ".join(f"{g['member']} ({g['role']})" for g in unexpected)
+        return False, f"{len(unexpected)} basic-role grant(s) without a recorded reason: {names}", evidence
+    return True, f"all {len(grants)} basic-role grant(s) are named allowances", evidence
 

@@ -6023,3 +6023,83 @@ cleared when Config recorded the deletion. See the correction in the live-is-dec
 it was a roughly 70-minute lag, not a permanent defect. The consequence still stands. A collector run
 shortly after a teardown can report resources Config has not yet caught up with. The check's
 does-not-exist note makes that visible instead of looking like undeclared infrastructure.
+
+---
+
+## 2026-09-23 — Four open items acted on, one blocked, one waiting on the user
+
+Recommendations were given for the four open items and the user asked for them to be carried out.
+The state of each follows.
+
+**1. Passkey on `admin@corp.elvievalmores.com`: with the user.** It is also a prerequisite for
+moving the AWS operator off its static key. Identity Center has **no users and no permission sets**
+yet, and sign-in to it goes through Google, where `admin@` has no second factor. Replacing a static
+key without MFA by a Google login without MFA would not be an improvement. The order is:
+
+1. passkey and a second method on `admin@`
+2. an administrative permission set declared in Terraform, persistent
+3. a hand-created Identity Center user, recorded as an exception because SCIM needs Premium
+4. `aws sso login` proven
+5. the access key deactivated, then deleted a week later
+6. the IAM user kept as break-glass, with no key
+
+Google's directory cannot be read with this project's GCP credentials, so enrolment will be recorded
+on the user's word.
+
+**2. Default Compute Engine service account's `roles/editor`: check built, fix blocked.** The new
+check `iam-elp-cfg-gcp-basic-roles-allowed-only` allows a basic role (owner, editor, viewer)
+anywhere in the project only as a named allowance with a reason. There are two allowances: the
+human project owner, and `terraform-admin`'s editor grant from 2026-09-22. It reads bindings on the
+project and on every resource under it through Cloud Asset. It **fails, correctly, on the default
+compute account.**
+
+Removing the binding and disabling the account were **refused by the session's permission
+controls** as a permission grant change. They were not retried by another route. The commands are
+left for the user. The check will pass once they run.
+
+**3. Customer-managed keys for the evidence stores: not started.** It is a medium-sized change of its
+own. The recommended shape:
+
+- a dedicated persistent evidence key
+- `prevent_destroy` and a 30-day deletion window
+- a key policy denying `ScheduleKeyDeletion` and `DisableKey` to all but break-glass
+- an EventBridge alert on either call
+- grants for CloudTrail and Config
+
+The state bucket stays SSE-S3 as a recorded exception.
+
+**4. The smaller items: done.**
+
+- **Account-level S3 public access block: applied.** It is in a new persistent file, `account.tf`,
+  for account-wide guardrails, added to `boundary.py`. It was applied once, targeted; 68 resources
+  now persist. All five buckets still list without error.
+  `svc-sin-cfg-aws-account-public-access-block` checks it, reusing the four-settings judgement that
+  already has negative controls.
+- **Project VPC default security group: declared, not yet applied.** `aws_default_security_group`
+  with no rules is in `network.tf`, on the ephemeral side, so it applies at the next phase 1.
+  Before emptying it, every network-attached resource was checked for a named group of its own: both
+  ECS services, the database, the load balancer, and the interface endpoints (the gateway endpoint
+  and both Lambdas take none). The documented migration `run-task` also names its own group.
+  **Verify at the next phase 1** that `live_is_declared` passes while the environment stands.
+- **Config's lag: split into its own indicator.** The inventory can list a resource its service
+  says is gone. That is no longer a KSI-SVC-ACM failure, because it is not undeclared
+  infrastructure. It is now a KSI-PIY-GIV failure, `inventory_current`, because the inventory is
+  inaccurate.
+  - Any resource that is neither declared nor excused is checked against its own service. Probes
+    exist for 13 of the 17 inventoried types.
+  - Four types cannot be asked by ID from what Config returns: IAM policies, ECS services, WAF ACLs,
+    and secrets pending deletion. Those stay unaccounted, because an unknown is not a reason to
+    excuse something. GCP has no probe yet, for the same reason.
+  - The two checks share one exclusion list by reference (`exclusions_from`), so they cannot drift
+    apart.
+
+**The recommended two-hour grace period was dropped.** It would need the time the resource was
+deleted, and for exactly the implicit deletions this is about, nothing records one. So a collector
+run inside Config's lag window fails `inventory_current`, which is true at that moment. The message
+says what to expect.
+
+**Self-test:** 16 of 16 assertions discriminate. The split was confirmed by mutation: restoring the
+old behaviour, where stale entries failed `live_is_declared`, was flagged on both phantom fixtures.
+
+**Collector: 29 checks, 28 pass.** The one failure is the editor binding above. The SDR re-emits
+valid with 29 evidence objects and KSI-IAM-ELP's first evidence.

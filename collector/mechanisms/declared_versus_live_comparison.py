@@ -56,12 +56,13 @@ inventory rather than querying the clouds itself -- the row names the
 inventory as its source -- and the union of the named roots' state,
 because the bootstrap root holds what the other roots stand on.
 
-Check params, for live_is_declared:
-    assertion   "live_is_declared"
+Check params, for live_is_declared and inventory_current:
+    assertion   "live_is_declared" or "inventory_current"
     provider    "aws" or "gcp"
     region      (aws) / project_id (gcp) -- passed to the inventory
     roots       directories under infra/ whose state counts as declared
-    exclusions  resources legitimately outside Terraform, each
+    exclusions  (or exclusions_from: another check's ID, to share its list)
+                resources legitimately outside Terraform, each
                 {"resource_type", "rule", "reason"}. A rule is either
                 {"predicate": name}, verified against the provider (see
                 AwsPredicates and GcpPredicates), or an exact match for one
@@ -93,6 +94,7 @@ from typing import Any
 from base import CheckDefinition, CheckResult, Mechanism
 
 INFRA_DIR = Path(__file__).resolve().parents[2] / "infra"
+CHECKS_DIR = Path(__file__).resolve().parents[1] / "checks"
 
 TIMEOUT_SECONDS = 600
 
@@ -109,7 +111,7 @@ class DeclaredVersusLiveComparison(Mechanism):
 
     def run(self, check: CheckDefinition) -> CheckResult:
         assertion = check.params["assertion"]
-        if assertion == "live_is_declared":
+        if assertion in ("live_is_declared", "inventory_current"):
             return self._live_is_declared(check)
         if assertion not in ASSERTIONS:
             raise NotImplementedError(
@@ -149,11 +151,13 @@ class DeclaredVersusLiveComparison(Mechanism):
             raise ValueError(f"unsupported provider {provider!r}")
 
         declared = set()
+        exclusions = _exclusions(check)
         for root in check.params["roots"]:
             declared |= declared_identifiers(provider, state(root))
 
         passed, evidence, message = coverage(
-            provider, live, declared, check.params["exclusions"], predicates.test
+            provider, live, declared, exclusions,
+            predicates.test, predicates.exists, check.params["assertion"],
         )
         evidence["roots"] = check.params["roots"]
         return CheckResult(check.id, passed, evidence, message)
@@ -194,6 +198,19 @@ def plan(root: str) -> dict[str, Any]:
     if result.get("errored"):
         raise RuntimeError(f"terraform plan in infra/{root} reported errors")
     return result
+
+
+def _exclusions(check: CheckDefinition) -> list[dict]:
+    """The check's own exclusions, or another check's, named by ID.
+
+    inventory_current needs exactly live_is_declared's exclusions -- an
+    excused resource is not in question -- and two copies of one list would
+    drift. One of the two params is required; neither defaults.
+    """
+    if "exclusions" in check.params:
+        return check.params["exclusions"]
+    source = CHECKS_DIR / f"{check.params['exclusions_from']}.json"
+    return json.loads(source.read_text())["params"]["exclusions"]
 
 
 def state(root: str) -> dict[str, Any]:
@@ -356,13 +373,31 @@ def _live_keys(provider: str, resource: dict) -> set[str]:
     return {v for v in (resource["resource_id"], resource.get("name")) if v}
 
 
-def coverage(provider, live, declared, exclusions, test) -> tuple[bool, dict, str]:
-    """Passes if every live resource is declared or excused by a stated rule.
+GONE = "the provider says this resource does not exist"
 
-    `test(rule, resource)` returns (holds, note). Pure apart from that
-    callback, so self_test.py can drive it with a fake provider.
+
+def coverage(provider, live, declared, exclusions, test, exists, assertion="live_is_declared"):
+    """Sorts every live resource into declared, excused, stale or unaccounted.
+
+    `test(rule, resource)` returns (holds, note); `exists(resource)` returns
+    (True, False or None for "cannot ask", note). Pure apart from those
+    callbacks, so self_test.py can drive it with a fake provider.
+
+    Two assertions read the same sort, because they are about different
+    things and belong to different indicators:
+
+      live_is_declared   KSI-SVC-ACM. Fails on unaccounted: a resource that
+                         exists and nothing declares or excuses.
+      inventory_current  KSI-PIY-GIV. Fails on stale: a resource the
+                         inventory lists and its own service says is gone.
+
+    A stale resource used to fail live_is_declared, which blamed configuration
+    management for an inventory that had not caught up. Config lagged about
+    70 minutes on an implicitly deleted security group on 2026-09-23. Existence
+    that cannot be asked about stays unaccounted: an unknown is not a reason
+    to excuse something.
     """
-    excused, unaccounted = [], []
+    excused, unaccounted, stale = [], [], []
     used = [False] * len(exclusions)
 
     for resource in live:
@@ -387,28 +422,46 @@ def coverage(provider, live, declared, exclusions, test) -> tuple[bool, dict, st
         }
         if reason:
             excused.append({**entry, "reason": reason})
-        else:
-            unaccounted.append({**entry, "notes": sorted(set(notes))})
+            continue
+
+        present = False if any(GONE in n for n in notes) else None
+        if present is None:
+            present, note = exists(resource)
+            if note:
+                notes.append(note)
+        target = stale if present is False else unaccounted
+        target.append({**entry, "notes": sorted(set(notes))})
 
     evidence = {
         "live_count": len(live),
-        "declared_count": len(live) - len(excused) - len(unaccounted),
+        "declared_count": len(live) - len(excused) - len(unaccounted) - len(stale),
         "excused": excused,
         "unaccounted": unaccounted,
+        "stale": stale,
         # Not a failure, but worth seeing: an exclusion nothing needs is
         # either residue or a rule that has stopped matching what it meant.
         "exclusions_unused": [e for e, u in zip(exclusions, used) if not u],
     }
     if not live:
         return False, evidence, "the inventory is empty -- a check over nothing cannot pass"
+
+    if assertion == "inventory_current":
+        if stale:
+            return False, evidence, (
+                f"{len(stale)} of {len(live)} inventoried resources no longer exist: "
+                + ", ".join(e["resource_id"] for e in stale)
+            )
+        return True, evidence, f"all {len(live)} inventoried resources exist or were not in question"
+
     if unaccounted:
         return False, evidence, (
             f"{len(unaccounted)} of {len(live)} live resources are neither declared "
             f"nor excused"
         )
     return True, evidence, (
-        f"all {len(live)} live resources accounted for: "
+        f"all {len(live) - len(stale)} existing resources accounted for: "
         f"{evidence['declared_count']} declared, {len(excused)} excused"
+        + (f"; {len(stale)} stale inventory entries left to inventory_current" if stale else "")
     )
 
 
@@ -426,6 +479,12 @@ class AwsPredicates:
         self.ec2 = boto3.client("ec2", region_name=region)
         self.iam = boto3.client("iam")
         self.kms = boto3.client("kms", region_name=region)
+        self.s3 = boto3.client("s3", region_name=region)
+        self.ecs = boto3.client("ecs", region_name=region)
+        self.rds = boto3.client("rds", region_name=region)
+        self.elbv2 = boto3.client("elbv2", region_name=region)
+        self.ecr = boto3.client("ecr", region_name=region)
+        self.cloudtrail = boto3.client("cloudtrail", region_name=region)
 
     def test(self, rule: dict, resource: dict) -> tuple[bool, str | None]:
         if "resource_id_equals" in rule:
@@ -440,8 +499,66 @@ class AwsPredicates:
         except Exception as exc:
             code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
             if "NotFound" in code or code == "NoSuchEntity":
-                return False, f"{code}: the provider says this resource does not exist"
+                return False, f"{code}: {GONE}"
             raise
+
+    def exists(self, resource: dict) -> tuple[bool | None, str | None]:
+        """Ask the owning service whether an inventoried resource exists.
+
+        Only called for resources that are neither declared nor excused, so
+        it costs a call per anomaly, not per resource.
+        """
+        probe = self._PROBES.get(resource["resource_type"])
+        if probe is None:
+            return None, f"existence not probed for {resource['resource_type']}"
+        try:
+            return probe(self, resource), None
+        except Exception as exc:
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+            if "NotFound" in code or code in ("NoSuchEntity", "404", "NoSuchBucket"):
+                return False, f"{code}: {GONE}"
+            raise
+
+    def _probe_bucket(self, r):
+        self.s3.head_bucket(Bucket=r["name"] or r["resource_id"])
+        return True
+
+    def _probe_cluster(self, r):
+        found = self.ecs.describe_clusters(clusters=[r["name"] or r["resource_id"]])["clusters"]
+        return bool(found) and found[0]["status"] != "INACTIVE"
+
+    def _probe_trail(self, r):
+        return bool(self.cloudtrail.describe_trails(trailNameList=[r["name"] or r["resource_id"]])["trailList"])
+
+    def _probe_task_definition(self, r):
+        # A deregistered revision is kept by ECS as INACTIVE and can never run
+        # again. For inventory purposes it is gone.
+        td = self.ecs.describe_task_definition(taskDefinition=r["resource_id"])["taskDefinition"]
+        return td["status"] != "INACTIVE"
+
+    _PROBES = {
+        "AWS::S3::Bucket": _probe_bucket,
+        "AWS::IAM::Role": lambda self, r: bool(self.iam.get_role(RoleName=r["name"])),
+        "AWS::IAM::User": lambda self, r: bool(self.iam.get_user(UserName=r["name"])),
+        "AWS::KMS::Key": lambda self, r: bool(self.kms.describe_key(KeyId=r["resource_id"])),
+        "AWS::EC2::VPC": lambda self, r: bool(self.ec2.describe_vpcs(VpcIds=[r["resource_id"]])["Vpcs"]),
+        "AWS::EC2::Subnet": lambda self, r: bool(self.ec2.describe_subnets(SubnetIds=[r["resource_id"]])["Subnets"]),
+        "AWS::EC2::SecurityGroup": lambda self, r: bool(
+            self.ec2.describe_security_groups(GroupIds=[r["resource_id"]])["SecurityGroups"]),
+        "AWS::ECS::Cluster": _probe_cluster,
+        "AWS::ECS::TaskDefinition": _probe_task_definition,
+        "AWS::RDS::DBInstance": lambda self, r: bool(
+            self.rds.describe_db_instances(DBInstanceIdentifier=r["name"])["DBInstances"]),
+        "AWS::ElasticLoadBalancingV2::LoadBalancer": lambda self, r: bool(
+            self.elbv2.describe_load_balancers(LoadBalancerArns=[r["resource_id"]])["LoadBalancers"]),
+        "AWS::CloudTrail::Trail": _probe_trail,
+        "AWS::ECR::Repository": lambda self, r: bool(
+            self.ecr.describe_repositories(repositoryNames=[r["name"]])["repositories"]),
+        # Not probed: AWS::IAM::Policy (Config gives no ARN or path),
+        # AWS::ECS::Service (needs its cluster), AWS::WAFv2::WebACL (needs
+        # scope and name), AWS::SecretsManager::Secret (pending deletion is
+        # neither present nor gone). An unprobed type stays unaccounted.
+    }
 
     def _service_linked_role(self, resource: dict) -> bool:
         # The path, not the name. IAM reserves /aws-service-role/ for roles
@@ -479,6 +596,12 @@ class AwsPredicates:
 
 
 class GcpPredicates:
+    def exists(self, resource: dict) -> tuple[bool | None, str | None]:
+        # No per-type probe on GCP yet. Cloud Asset's search has not shown
+        # Config's lag, but that is an observation, not a property, so an
+        # unaccounted GCP resource stays unaccounted rather than excused.
+        return None, "existence not probed on GCP"
+
     def test(self, rule: dict, resource: dict) -> tuple[bool, str | None]:
         if "resource_id_equals" in rule:
             return resource["resource_id"] == rule["resource_id_equals"], None

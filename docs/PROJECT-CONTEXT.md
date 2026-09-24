@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-23:
 
-- **Persisting between sessions**: 67 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 68 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket
   the artifacts key, and the posture services (GuardDuty, Security Hub, Inspector). On GCP: all of
@@ -49,8 +49,8 @@ The build is in progress, and `README.md` carries the current status table. As o
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
 - **Built, first version**: the SDR emitter (`sdr/emit.py`). It emits a valid record for all 46
-  indicators, with automated evidence for 10 of them. See the 2026-09-23 entry in `DECISIONS.md`.
-- **Not started**: the three workflows, policy-as-code, and the remaining check definitions. 25 of
+  indicators, with automated evidence for 11 of them. See the 2026-09-23 entry in `DECISIONS.md`.
+- **Not started**: the three workflows, policy-as-code, and the remaining check definitions. 29 of
   roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
   The other four are registered and raise a clear error naming what they wait on, and all four
   are genuinely blocked. **No collector schedule or runtime exists.** The collectors are run by
@@ -78,7 +78,7 @@ deployed and internally consistent, and still does nothing. Check against the li
 
 ### What is standing
 
-**AWS — 67 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS — 68 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
 Checked against the API on 2026-09-23. No load balancer, no database, no ECS cluster, no VPC except
 the default one, no endpoints.
 
@@ -118,9 +118,9 @@ Nothing below is "configured". Each was exercised.
 
 - **Inventory**: the self-test passes on both clouds, including its negative control. It seeds one
   watched and one unwatched resource and confirms only the first appears.
-- **Collectors**: 25 of 25 checks pass. 5 of 9 mechanisms are implemented. A run shortly after a
-  teardown can report a resource Config has not yet recorded as deleted (a lag of about 70
-  minutes, seen on 2026-09-23). The check notes that the provider says it does not exist. The assertions
+- **Collectors**: 29 checks, and 28 pass. The one failure is real: the default Compute Engine
+  account's `roles/editor` (open items). 5 of 9 mechanisms are implemented. Config's lag on
+  implicit deletions is now its own PIY-GIV check (`inventory_current`), not an SVC-ACM failure. The assertions
   written from 2026-09-22 onwards have negative controls in `collector/self_test.py`. The older
   `cloud_api_config_read` handlers, `log_query` and `inventory_reconciliation` **do not yet**.
 - **The SDR**: valid against the pinned schemas, and validation was shown to reject six kinds of
@@ -197,11 +197,11 @@ other four mechanisms are genuinely blocked, so the unblocked work is:
 | Worker writes through the VPC endpoint | The restriction moved from the bucket policy to the worker role on 2026-09-23. Confirm an extract still lands at the next phase 2 |
 | No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
 | **AWS `terraform-admin`: static access key, `AdministratorAccess`, no MFA** | The operator identity for every local apply, active since 2026-09-17, and no AWS-side decision is recorded. Identity Center exists, so `aws sso login` with an admin permission set would replace it. The user's call |
-| **Default Compute Engine service account holds `roles/editor`** | Unused. One command to remove the binding or disable the account. The user's call |
-| Config lags on implicit deletions | About 70 minutes for a VPC's default security group on 2026-09-23. KSI-PIY-GIV: the inventory lists a deleted resource for that long, and a collector run inside the window fails `svc-acm-cfg-aws-inventory-is-declared` with a does-not-exist note. State the lag, or verify existence for such types |
-| Project VPC default security group undeclared | `aws_default_security_group` with no rules. `live_is_declared` will fail on it at every phase 1 until it is declared |
+| **Default Compute Engine service account holds `roles/editor`** | `iam-elp-cfg-gcp-basic-roles-allowed-only` fails on it. Removing the binding was refused by the session's permission controls; **the user runs** `gcloud projects remove-iam-policy-binding fedramp-20x-ksi-assessment --member=serviceAccount:921906217926-compute@developer.gserviceaccount.com --role=roles/editor --condition=None`, then `gcloud iam service-accounts disable` on the same account |
+| **Passkey on `admin@`, then single sign-on** | With the user. Identity Center has no users or permission sets yet. The order is in DECISIONS.md, 2026-09-23, "Four open items" |
+| Config lags on implicit deletions | Handled. A stale entry fails `piy-giv-ops-*-inventory-current`, not SVC-ACM. Four AWS types and all of GCP cannot be probed and stay unaccounted when undeclared |
+| Project VPC default security group | Declared with no rules on 2026-09-23. It applies at the next phase 1; confirm `live_is_declared` passes while the environment stands |
 | Customer-managed keys for the evidence stores | SVC-SIN build row 1. Four buckets use SSE-S3. The log store's reason (keys were ephemeral) changed when the artifacts key persisted. A design decision, since a deleted key takes Object Locked logs with it |
-| Account-level S3 public access block | Not set. Every bucket blocks individually; a new bucket would not inherit it |
 | The analytics image has no build path at all | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | `drift.yml` passes it anyway, and it comes through empty. Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

@@ -1,0 +1,17 @@
+{
+  "id": "piy-giv-ops-gcp-inventory-current",
+  "indicator": "KSI-PIY-GIV",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "OPS",
+  "description": "Every resource the GCP inventory lists still exists according to its own service -- the inventory is not reporting deleted resources as present",
+  "required_cadence": "3 days",
+  "params": {
+    "assertion": "inventory_current",
+    "provider": "gcp",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "roots": [
+      "gcp"
+    ],
+    "exclusions_from": "svc-acm-cfg-gcp-inventory-is-declared"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "iam-elp-cfg-gcp-basic-roles-allowed-only",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No principal holds a GCP basic role (owner, editor, viewer) anywhere in the project unless it is a named allowance with a recorded reason",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "basic_roles",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "allowed": [
+      {
+        "role": "roles/owner",
+        "member": "user:gcp.elvievalmores@gmail.com",
+        "reason": "The human account that created the project. The project sits outside any organization, so there is no org-level administrator above it; this is the only human with owner and the break-glass path for the project."
+      },
+      {
+        "role": "roles/editor",
+        "member": "serviceAccount:terraform-admin@fedramp-20x-ksi-assessment.iam.gserviceaccount.com",
+        "reason": "The provisioning identity. With projectIamAdmin it is owner-equivalent by necessity: declaring project IAM in Terraform requires the identity that applies it to be able to set project IAM (DECISIONS.md, 2026-09-22)."
+      }
+    ]
+  }
+}

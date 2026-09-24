@@ -1,0 +1,14 @@
+{
+  "id": "svc-sin-cfg-aws-account-public-access-block",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The account-level S3 public access block has all four settings on, so a bucket created later inherits the protection",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "s3_account_public_access_block",
+    "region": "us-east-1",
+    "account_id": "437672023758"
+  }
+}

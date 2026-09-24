@@ -1,0 +1,18 @@
+{
+  "id": "piy-giv-ops-aws-inventory-current",
+  "indicator": "KSI-PIY-GIV",
+  "mechanism": "declared_versus_live_comparison",
+  "evidence_type": "OPS",
+  "description": "Every resource the AWS inventory lists still exists according to its own service -- the inventory is not reporting deleted resources as present",
+  "required_cadence": "3 days",
+  "params": {
+    "assertion": "inventory_current",
+    "provider": "aws",
+    "region": "us-east-1",
+    "roots": [
+      "aws",
+      "bootstrap"
+    ],
+    "exclusions_from": "svc-acm-cfg-aws-inventory-is-declared"
+  }
+}
