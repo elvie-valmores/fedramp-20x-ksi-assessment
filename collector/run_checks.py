@@ -5,14 +5,22 @@ Reads each JSON file in checks/, hands it to the mechanism it names, and
 prints one line per check. Exits non-zero if anything failed, so this can
 be wired into CI unchanged.
 
+With --json PATH it also writes every outcome, including skips and errors,
+with the full evidence each verdict was based on. That file is what the
+SDR emitter reads: an outcome that is only printed is an outcome nothing
+downstream can cite.
+
 Usage:
-    cd collector && python run_checks.py
+    cd collector && python run_checks.py [--json results.json]
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from base import CheckDefinition
@@ -31,19 +39,28 @@ def load_checks() -> list[CheckDefinition]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--json", type=Path, help="also write every outcome to this file")
+    args = parser.parse_args()
+
     checks = load_checks()
     if not checks:
         print("no check definitions found in collector/checks/")
         return 1
 
+    started = datetime.now(timezone.utc).isoformat()
+    outcomes = []
     all_passed = True
     for check in checks:
+        outcome = {"check": asdict(check), "status": None, "message": None, "result": None}
+        outcomes.append(outcome)
         mechanism = MECHANISMS.get(check.mechanism)
 
         # A name that isn't in the registry is a typo in the check file,
         # and a silently ignored check is worse than a loud one.
         if mechanism is None:
-            print(f"[{check.id}] SKIP -- unknown mechanism {check.mechanism!r}")
+            outcome.update(status="SKIP", message=f"unknown mechanism {check.mechanism!r}")
+            print(f"[{check.id}] SKIP -- {outcome['message']}")
             all_passed = False
             continue
 
@@ -52,18 +69,29 @@ def main() -> int:
         except NotImplementedError as exc:
             # The mechanism exists but its dependencies don't yet. Not a
             # failure of the thing being assessed, so it doesn't fail the run.
+            outcome.update(status="SKIP", message=str(exc))
             print(f"[{check.id}] SKIP -- {exc}")
             continue
         except Exception as exc:
             # Anything else means the check itself broke. Report and keep
             # going so one bad check doesn't hide the rest.
+            outcome.update(status="ERROR", message=str(exc))
             print(f"[{check.id}] ERROR -- {exc}")
             all_passed = False
             continue
 
-        print(f"[{check.id}] {'PASS' if result.passed else 'FAIL'} -- {result.message}")
+        status = "PASS" if result.passed else "FAIL"
+        outcome.update(status=status, message=result.message, result=asdict(result))
+        print(f"[{check.id}] {status} -- {result.message}")
         if not result.passed:
             all_passed = False
+
+    if args.json:
+        args.json.write_text(json.dumps(
+            {"started_at": started, "finished_at": datetime.now(timezone.utc).isoformat(),
+             "outcomes": outcomes},
+            indent=2, default=str,
+        ) + "\n")
 
     return 0 if all_passed else 1
 

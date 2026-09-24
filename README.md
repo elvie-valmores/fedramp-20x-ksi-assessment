@@ -63,6 +63,15 @@ clear error explaining what they are waiting on.
 input that should not: a good and a broken workflow, and a clean and a drifted
 Terraform plan. A check that cannot fail is not a check.
 
+### `sdr/`
+
+Emits the Security Decision Record, the project's deliverable, in FedRAMP's
+schema. It reads the determinations from the design matrix and the collector's
+results, validates against the pinned schemas before writing, and renders a
+Markdown copy from the same JSON. It states what it cannot claim: no
+independent assessor, no FRR determinations, and one run of evidence rather
+than a history.
+
 ## Running it
 
 One virtualenv serves both Python components:
@@ -82,6 +91,13 @@ cd inventory && ../.venv/bin/python self_test.py
 
 # Run every evidence check
 cd collector && ../.venv/bin/python run_checks.py
+
+# Emit the SDR from a run's results, into sdr/out/
+cd collector && ../.venv/bin/python run_checks.py --json results.json
+cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty
+
+# Compare the pinned FedRAMP schemas against the published ones
+cd sdr && ../.venv/bin/python verify_pins.py
 ```
 
 All three need working cloud credentials: an AWS profile, and
@@ -97,7 +113,8 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented. 25 check definitions, 24 passing; the one failure is a real inventory defect. Run by hand; no schedule or runtime exists yet |
+| Collector framework | 5 of 9 mechanisms implemented. 25 check definitions, all passing. Run by hand; no schedule or runtime exists yet |
+| SDR emitter | Emits a schema-valid record for all 46 indicators; automated evidence for 10 |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |

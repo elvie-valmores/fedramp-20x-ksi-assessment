@@ -350,6 +350,37 @@ def cloud_api_config_read() -> list[str]:
     return broken
 
 
+# The resource key each cloud_api_config_read judgement serves.
+CFG_RESOURCES = {
+    "evaluate_tls_only": "s3_buckets_deny_insecure_transport",
+    "evaluate_public_access_blocked": "s3_buckets_block_public_access",
+    "evaluate_object_lock": "s3_object_lock",
+    "evaluate_trail_validation": "cloudtrail_log_file_validation",
+}
+
+
+def negative_controls() -> dict[tuple[str, str], str]:
+    """(mechanism, assertion or resource) -> what the negative control feeds it.
+
+    Read by the SDR emitter, which lists a check's negative control under
+    ksiTests only when one exists here -- so the SDR cannot claim a test
+    this file does not run.
+    """
+    found = {("pipeline_config_read", a): f"a workflow where {why}" for a, _, why in CASES}
+    for assertion, _, should_fail in DVL_CASES:
+        found[("declared_versus_live_comparison", assertion)] = (
+            "Terraform plans that must fail it: " + ", ".join(should_fail)
+        )
+    found[("declared_versus_live_comparison", "live_is_declared")] = (
+        "inventories that must fail it: " + ", ".join(LID_FAIL)
+    )
+    for name, _, _, bads in CFG_CASES:
+        found[("cloud_api_config_read", CFG_RESOURCES[name])] = (
+            "configurations that must fail it: " + ", ".join(bads)
+        )
+    return found
+
+
 def main() -> int:
     broken = pipeline_config_read()
     print()

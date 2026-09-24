@@ -48,8 +48,10 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Not started**: the three workflows, policy-as-code, the SDR emitter, and the remaining check
-  definitions. 25 of roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
+- **Built, first version**: the SDR emitter (`sdr/emit.py`). It emits a valid record for all 46
+  indicators, with automated evidence for 10 of them. See the 2026-09-23 entry in `DECISIONS.md`.
+- **Not started**: the three workflows, policy-as-code, and the remaining check definitions. 25 of
+  roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
   The other four are registered and raise a clear error naming what they wait on, and all four
   are genuinely blocked. **No collector schedule or runtime exists.** The collectors are run by
   hand.
@@ -116,10 +118,13 @@ Nothing below is "configured". Each was exercised.
 
 - **Inventory**: the self-test passes on both clouds, including its negative control. It seeds one
   watched and one unwatched resource and confirms only the first appears.
-- **Collectors**: 25 checks, and 24 pass. The one failure is real: the inventory lists a security
-  group that no longer exists (open items). 5 of 9 mechanisms are implemented. The assertions
+- **Collectors**: 25 of 25 checks pass. 5 of 9 mechanisms are implemented. A run shortly after a
+  teardown can report a resource Config has not yet recorded as deleted (a lag of about 70
+  minutes, seen on 2026-09-23). The check notes that the provider says it does not exist. The assertions
   written from 2026-09-22 onwards have negative controls in `collector/self_test.py`. The older
   `cloud_api_config_read` handlers, `log_query` and `inventory_reconciliation` **do not yet**.
+- **The SDR**: valid against the pinned schemas, and validation was shown to reject six kinds of
+  broken record. Both schema pins match FedRAMP's published copies (`sdr/verify_pins.py`).
 - **Declared versus live**: drift detected by the collector itself on both clouds. It was proven
   on 2026-09-23 by tagging the extract bucket out of band. The check failed, named the bucket, and
   attributed the change to outside Terraform. The tag was reverted, and the check passed again.
@@ -171,14 +176,17 @@ fedramp-20x-ksi-assessment`.
 
 ### The next thing to do
 
-**The collector framework is still the bottleneck on the build order.** 5 of 9 mechanisms and 19 of
-roughly 380 check definitions exist. The SDR emitter, which is the actual deliverable, has not been
-started. The other four mechanisms are genuinely blocked, so the unblocked work is:
+**Evidence coverage is now the bottleneck.** The SDR emitter exists and emits a valid record, but
+only 10 of 46 indicators carry automated evidence: 25 of roughly 380 check definitions exist. The
+other four mechanisms are genuinely blocked, so the unblocked work is:
 
-- **The SDR emitter.** See `SDR-Emitter-Spec.md`.
 - **More check definitions** against the five built mechanisms. KSI-SVC-SIN rows 41, 42 and 46 wait
   on the environment. Row 39 waits on the encryption decision (open items).
 - **Negative controls for the older handlers.**
+- **A collector runtime and schedule.** Without one, the SDR's cycle statement and SDR-CSX-KMT's
+  metrics both say "one run, by hand". It also blocks running the emitter in CI.
+- **Link check definitions to matrix rows.** Evidence is attached per indicator today, not per
+  VERIFY or VALIDATE row, so the SDR cannot yet say which row a check proves.
 
 ### Open items
 
@@ -190,7 +198,7 @@ started. The other four mechanisms are genuinely blocked, so the unblocked work 
 | No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
 | **AWS `terraform-admin`: static access key, `AdministratorAccess`, no MFA** | The operator identity for every local apply, active since 2026-09-17, and no AWS-side decision is recorded. Identity Center exists, so `aws sso login` with an admin permission set would replace it. The user's call |
 | **Default Compute Engine service account holds `roles/editor`** | Unused. One command to remove the binding or disable the account. The user's call |
-| Inventory lists a deleted security group | `sg-0ac03881f5bd7c3b7`. Config recorded its VPC's deletion but not the group's. KSI-PIY-GIV accuracy. Check whether Config catches up; if not, choose how the inventory handles implicit deletions. `svc-acm-cfg-aws-inventory-is-declared` fails on it until then |
+| Config lags on implicit deletions | About 70 minutes for a VPC's default security group on 2026-09-23. KSI-PIY-GIV: the inventory lists a deleted resource for that long, and a collector run inside the window fails `svc-acm-cfg-aws-inventory-is-declared` with a does-not-exist note. State the lag, or verify existence for such types |
 | Project VPC default security group undeclared | `aws_default_security_group` with no rules. `live_is_declared` will fail on it at every phase 1 until it is declared |
 | Customer-managed keys for the evidence stores | SVC-SIN build row 1. Four buckets use SSE-S3. The log store's reason (keys were ephemeral) changed when the artifacts key persisted. A design decision, since a deleted key takes Object Locked logs with it |
 | Account-level S3 public access block | Not set. Every bucket blocks individually; a new bucket would not inherit it |

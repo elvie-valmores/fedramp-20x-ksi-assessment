@@ -5865,16 +5865,20 @@ to declare it with no rules. Recorded in the open items.
 
 **Finding: the inventory lists a resource that does not exist.** The one unaccounted resource is
 `sg-0ac03881f5bd7c3b7`, the default security group of the project VPC destroyed at 17:28 EDT. Config
-recorded the VPC's deletion. It never recorded the deletion of the VPC's default group, which went
-implicitly with the VPC. Five hours later, `SelectResourceConfig` still reports the group as present,
-and EC2 answers `InvalidGroup.NotFound`. The check reports it with that note rather than silently
+recorded the VPC's deletion. It had not yet recorded the deletion of the VPC's default group, which
+went implicitly with the VPC. `SelectResourceConfig` still reported the group as present, and EC2
+answered `InvalidGroup.NotFound`. The check reported it with that note rather than silently
 excusing it.
 
-This belongs to KSI-PIY-GIV, not here. The inventory, which is Config-backed by the 2026-09-1x
-decision, lists a resource that is gone, and every teardown may leave another one. Not fixed. The
-choices are to verify existence for types known to be deleted implicitly, to filter security groups
-whose VPC relationship points at a deleted VPC, or to accept Config's lag and state it. Check again
-next session to see whether Config catches up on its own.
+> **Corrected later the same day.** This paragraph originally said Config "never recorded" the
+> deletion and that the group was still listed "five hours later". Both were wrong. The teardown
+> finished minutes before this session began, so the check ran about 50 minutes after it, not five
+> hours. Config recorded `ResourceDeleted` for the group at 18:38:57 EDT, about 70 minutes after the
+> VPC, and the check then passed. The finding is a lag, not a permanent defect. See the SDR emitter
+> entry below.
+
+This belongs to KSI-PIY-GIV, not here. The Config-backed inventory lists a resource that is gone for
+as long as Config's lag lasts on implicit deletions.
 
 **Finding: `terraform-admin` on AWS is an IAM user with `AdministratorAccess`, a static access key
 active since 2026-09-17, and no MFA device.** It is the identity every local apply in this project
@@ -5933,3 +5937,89 @@ is not written until it is taken.
 
 **Also noted: no account-level S3 public access block.** Every bucket blocks public access
 individually, so nothing is exposed. But a bucket created tomorrow would not inherit the block.
+
+---
+
+## 2026-09-23 — The SDR emitter is built, and the record says what it cannot claim
+
+**Built: `sdr/emit.py`**, the project's actual deliverable. It reads the 46 determinations from
+`KSI-Design-Matrix.xlsx` and the collector's results, and writes one Security Decision Record to
+`sdr/out/`:
+
+- `sdr.json`, in FedRAMP's schema.
+- `sdr.md`, generated from that JSON, never from the matrix, so the two formats cannot disagree.
+
+**The first emission is valid.** It covers 46 indicators (18 `Implemented`, 22 `Partially
+Implemented`, 6 `Not Implemented`) and 25 evidence objects across 10 indicators, from one collector
+run in which all 25 checks passed.
+
+**Validation is on emit, and a failure writes nothing.** The emitter validates against the pinned
+SDR schema with the pinned common-definitions schema resolved locally. Six deliberately broken
+records were each rejected: a status outside the enum, a missing required field, a missing
+`fedRampRequirements`, an evidence type outside the enum, an empty evidence object, and an overview
+URI that is not a URI.
+
+Two of those six are the emitter's own rules, not the schema's. `jsonschema` checks the `uri` and
+`date-time` formats only when optional packages are installed, so a pass would not have meant they
+were checked. The schema also allows an empty evidence object, which the spec forbids. The emitter
+checks both itself.
+
+**The common-definitions schema is now pinned too.** The SDR schema's
+`certificationPackageOverviewUri` is a `$ref` into it, so it was fetched from FedRAMP/schemas and
+pinned by filename, `$schemaVersion` 0.4.0 and hash. **FedRAMP changed that file at 15:31 UTC
+today**, which is exactly why the pin includes the hash. `sdr/verify_pins.py` compares both pins with
+upstream. It reports both as matching, and it was shown to report a wrong pin.
+
+**Choices where the spec left one open:**
+
+- **`certificationPackageOverviewUri` points at the README at the emitting commit.** The field is
+  required and must be a URI, and no Certification Package Overview exists. The README is the
+  project's overview, and the rendering states that it is not a FedRAMP CPO.
+- **`--frr` is a required switch with no default.** Only `empty` is implemented. `populated` raises
+  an error naming the missing FRR determinations. The spec wanted the omission to be a stated choice,
+  and a required flag makes the person running the emitter state it.
+- **`ksiTests` lists only tests that exist.** A check's negative control is listed only if
+  `collector/self_test.py` reports one for that mechanism and assertion. `negative_controls()` was
+  added so the SDR reads that list and cannot claim a test the file does not run. The
+  determination's deliberate-test rows are listed as "designed, not yet automated", because a test
+  that has not run has validated nothing.
+- **Evidence type:** CFG maps to `Configuration`, OPS from `log_query` to `Log`, and other OPS to
+  `Report`. Nothing produces `Screenshot`.
+- **Each evidence object** links to its check definition at the emitting commit and carries the
+  check's full evidence inline. If the tree has uncommitted changes, the version is suffixed
+  `-dirty`, because the links may not show what ran.
+- **The cycle statement is honest.** Every indicator's validation opens with its required cycle and
+  the fact that the collector is run by hand, with no schedule. A determination's cadence is not a
+  property of the system until something runs it.
+- **SDR-CSX-KMT's metrics are stated as absent.** There is no record store and no schedule, so the
+  collection window is one run, and every indicator says so. No custom fields were added to carry
+  metrics. The schema has none, and a non-standard field would validate while meaning nothing to a
+  reader of the standard.
+
+**The parser refuses content it does not recognise.** Any row inside a determination block that is
+not a known label, table header or table row stops the emitter, naming the sheet and row. A parser
+that skipped what it did not understand would drop text from the SDR silently. It also refuses
+collector results naming an indicator the matrix does not contain, whose evidence would otherwise
+vanish.
+
+**What the record covers, stated plainly.** 10 of 46 indicators carry automated evidence. The other
+36 carry their full determination (rationale, build, verify and validate rows, assurance and
+limitations) and the statement that no collector check exists for them yet. That is the true state
+of the build, and the record shows it rather than implying coverage.
+
+**Not built:**
+
+- **CI.** The spec asks for validation in CI, but the collector needs credentials for both clouds
+  and CI holds only the drift role. Emitting from the environment would need a collector runtime,
+  which does not exist.
+- **A schedule for `verify_pins.py`.**
+- **`portsAndProtocols`.** It is optional and derivable, but only from a standing environment.
+
+`sdr/out/` and collector result files are gitignored. The record is reproducible from a commit and
+a run, and generated output committed beside its source goes stale.
+
+**The collector now passes 25 of 25.** The one failure earlier today, the phantom security group,
+cleared when Config recorded the deletion. See the correction in the live-is-declared entry above:
+it was a roughly 70-minute lag, not a permanent defect. The consequence still stands. A collector run
+shortly after a teardown can report resources Config has not yet caught up with. The check's
+does-not-exist note makes that visible instead of looking like undeclared infrastructure.
