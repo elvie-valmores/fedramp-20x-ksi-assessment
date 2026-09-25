@@ -67,6 +67,9 @@ terraform apply -input=false .teardown.tfplan
 rm -f .teardown.args .teardown.tfplan
 
 echo
-echo "==> torn down. Preserved: log store, Athena, Glue, CloudTrail, Config"
-echo "    recorder, both Lambdas, the budget guardrail."
-echo "==> four KMS keys are now in PendingDeletion for seven days."
+# Generated, not written out: a hand-kept list here named seven things
+# after the persistent set had grown to sixty-eight (found 2026-09-25, the
+# same fault drift.yml's summary had).
+echo "==> torn down. Preserved: $(./boundary.py --persistent | wc -l | tr -d ' ') resources declared in:"
+echo "    $(./boundary.py --files)"
+echo "==> any customer-managed keys destroyed are now in PendingDeletion for seven days."

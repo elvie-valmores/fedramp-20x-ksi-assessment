@@ -6103,3 +6103,59 @@ old behaviour, where stale entries failed `live_is_declared`, was flagged on bot
 
 **Collector: 29 checks, 28 pass.** The one failure is the editor binding above. The SDR re-emits
 valid with 29 evidence objects and KSI-IAM-ELP's first evidence.
+
+---
+
+## 2026-09-25 — Session closed out: state re-verified, teardown confirmed, resume block rewritten
+
+**No build work. This entry records what was true when the session ended**, checked rather than
+carried forward, so the next session can start from it.
+
+**The application environment was already down.** `boundary.py --ephemeral` returned nothing and
+`teardown.sh` reported "already torn down" with exit 0. The API agreed.
+
+The sweep, rerunnable as it stands:
+
+```sh
+export AWS_REGION=us-east-1 AWS_PAGER=""
+aws elbv2 describe-load-balancers --query 'length(LoadBalancers)'          # 0
+aws rds describe-db-instances --query 'length(DBInstances)'                # 0
+aws ecs list-clusters --query 'length(clusterArns)'                        # 0
+aws ec2 describe-vpcs --filters Name=is-default,Values=false --query 'length(Vpcs)'   # 0
+aws ec2 describe-vpc-endpoints --query 'length(VpcEndpoints)'              # 0
+aws ec2 describe-nat-gateways --filter Name=state,Values=pending,available --query 'length(NatGateways)'  # 0
+aws ec2 describe-addresses --query 'length(Addresses)'                     # 0
+aws ec2 describe-instances --filters Name=instance-state-name,Values=pending,running --query 'length(Reservations)'  # 0
+aws guardduty list-detectors --query 'length(DetectorIds)'                 # 1 (persistent)
+aws inspector2 batch-get-account-status --query 'accounts[0].state.status' # ENABLED (persistent)
+```
+
+**Standing, as intended:**
+
+- **AWS:** 68 persistent resources. Posture is enabled, and the extract bucket carries its two
+  denies.
+- **GCP:** 30 resources in state and no Cloud Run job.
+- **Keys:** fifteen customer keys from the 2026-09-23 teardown are pending deletion, clearing
+  2026-09-26 to 2026-09-30.
+
+**Unattended drift held.** The scheduled runs on 2026-09-24 and 2026-09-25 passed over all 68
+persistent resources, including the boundary check. They are the first scheduled runs against the
+current persistent set.
+
+**Collector: 28 of 29, unchanged.** The one failure is still the default Compute Engine account's
+`roles/editor`. The self-test is 16 of 16.
+
+**The user's three items are still open**, all confirmed by tool except the passkey, which cannot be:
+
+- **Passkey on `admin@`:** unconfirmed.
+- **The `gcloud` commands:** not run. The binding is still present.
+- **The static key:** still active, and Identity Center has 0 permission sets.
+
+**One more hand-written list found and replaced.** `teardown.sh`'s closing message named seven
+preserved things after the persistent set had grown to 68: the same fault `drift.yml`'s summary had
+on 2026-09-23. It now prints the boundary's own count and file list. The rule is worth stating once:
+**no consumer of the boundary keeps a copy of it, including in a message.**
+
+**`PROJECT-CONTEXT.md`'s "Resume here" block was rewritten for a cold start.** It now opens with the
+first actions for the next session. It separates what waits on the user from build work, drops a
+duplicated open item, and puts the variables and commands for running everything in one place.

@@ -31,12 +31,13 @@ The design phase is closed. What remains is the build.
 
 ## Where the build has reached
 
-The build is in progress, and `README.md` carries the current status table. As of 2026-09-23:
+The build is in progress, and `README.md` carries the current status table. As of 2026-09-25:
 
 - **Persisting between sessions**: 68 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
-  provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket
-  the artifacts key, and the posture services (GuardDuty, Security Hub, Inspector). On GCP: all of
+  provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
+  the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
+  S3 public access block. On GCP: all of
   phase 1. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
   in about fifteen minutes and is torn down after each session. Phase 1 was last verified on
@@ -70,156 +71,185 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-09-23
+## Resume here — state at the end of 2026-09-25
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
-deployed and internally consistent, and still does nothing. Check against the live accounts.
+deployed and internally consistent, and still does nothing. Five were found in one week, and every
+one was found by running the thing rather than reading it. Check against the live accounts.
+
+The build work recorded here was done on 2026-09-23. On 2026-09-25 the session was closed out: the
+state below was re-verified against both clouds, the teardown was confirmed, and this block was
+rewritten.
+
+### First actions for the next session
+
+1. **Verify, do not trust.** These four commands reproduce every claim in "What is standing":
+   - `infra/aws/boundary.py --persistent | wc -l` should give 68, and `--ephemeral` should give 0.
+   - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
+   - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
+   - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
+     things". Expect 28 of 29.
+2. **Ask the user about their three items**, below. If they ran the `gcloud` commands, re-run
+   `iam-elp-cfg-gcp-basic-roles-allowed-only`; it should now pass, making 29 of 29.
+3. **Then pick up the build** at "The next thing to do".
+
+### Waiting on the user
+
+| Item | What they do |
+|---|---|
+| **Passkey on `admin@corp.elvievalmores.com`** | Admin console: allow 2-Step Verification and passkeys. At myaccount.google.com: create a passkey, add a second method, and store backup codes offline. The account is the directory's only super admin and has **no second factor**. Unconfirmed as of 2026-09-25. It can't be verified by tool, because GCP credentials here are not directory admins, so record it on the user's word |
+| **Remove the default Compute Engine account's `roles/editor`** | This session's permission controls refused the change. The user runs `gcloud projects remove-iam-policy-binding fedramp-20x-ksi-assessment --member=serviceAccount:921906217926-compute@developer.gserviceaccount.com --role=roles/editor --condition=None`, then `gcloud iam service-accounts disable 921906217926-compute@developer.gserviceaccount.com --project fedramp-20x-ksi-assessment`. Still bound on 2026-09-25 |
+| **Then: move off the AWS static key** | Only after the passkey. Claude declares an admin permission set, persistent. The user creates their Identity Center user by hand, then tests `aws sso login`. Deactivate the `terraform-admin` key, and delete it a week later. The order is in `DECISIONS.md`, 2026-09-23, "Four open items". On 2026-09-25 Identity Center had 0 permission sets and the key was still active |
 
 ### What is standing
 
-**AWS — 68 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
-Checked against the API on 2026-09-23. No load balancer, no database, no ECS cluster, no VPC except
-the default one, no endpoints.
+**AWS: 68 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+Verified 2026-09-25 against the API: no load balancer, database, ECS cluster, non-default VPC,
+endpoint, NAT gateway, Elastic IP or instance. `teardown.sh` reports "already torn down".
+`terraform state list` prints more lines than 68; the rest are data sources, which `boundary.py`
+leaves out.
 
-**The posture services run continuously as of 2026-09-23.** That is GuardDuty, Security Hub with
-the CIS and FSBP standards, and Inspector on ECR. They are the only persistent resources with a real
-standing cost, roughly 3 to 8 USD a month, estimated rather than measured. See the resolved 2026-09-23
-entry in `DECISIONS.md`.
+The persistent set, by file (`boundary.py --files`), is:
 
-What remains: the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config recorder,
-Athena and Glue, both Lambdas, the budget guardrail, the GitHub OIDC provider, the drift role, the
-build role, the cross-cloud role, the two ECR repositories, the extract bucket, the artifacts key and
-the posture services.
-Fifteen other customer-managed keys sit in `PendingDeletion` and clear on their own. `terraform state
-list` prints 103 lines; 45 of them are data sources, which `boundary.py` leaves out.
+- **Evidence layer:** the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config
+  recorder, Athena and Glue, and both Lambdas.
+- **Guardrails:** the budget guardrail and the account-level S3 public access block.
+- **CI and cross-cloud identity:** the OIDC provider, the drift role, the build role and the
+  cross-cloud role.
+- **Registry:** the ECR repositories with their signed images, the extract bucket with its TLS and
+  encryption denies, and the artifacts key.
+- **Posture:** GuardDuty, Security Hub with CIS and FSBP, and Inspector on ECR.
 
-**Signed images survived the teardown.** ECR holds 8 manifests each for `api` and `worker`. **Deploy
-`git-f9f2c35f8fd1`**: it carries the `/dev/shm` certificate fix. `v1` predates that fix, and its api
-task crashes on start. Phase 2 no longer needs a rebuild first.
+**The posture services are the only standing cost**, estimated at 3 to 8 USD a month and not yet
+measured. The Inspector trial ends **2026-10-06** and GuardDuty's around 2026-10-22.
 
-**GCP — 30 resources, phase 1 complete, and a plan on 2026-09-23 showed no drift.** Landing bucket,
-BigQuery dataset and table, Artifact Registry, two KMS keys and their ring, two service accounts, and
-Data Access audit configuration on storage, BigQuery and KMS. The Cloud Run job and its schedule stay
-switched off with `deploy_pipeline = false` until there is an image.
+Fifteen customer keys from the 2026-09-23 teardown are in `PendingDeletion`. They clear on their own
+between 2026-09-26 and 2026-09-30.
 
-**Identity.** AWS Organization `o-yyhciflg3u` (feature set `ALL`). IAM Identity Center
-`ssoins-7223046591f7f9f9` in `us-east-1`, identity store `d-90667e73f9`. The SAML identity provider is
-Google Cloud Identity on `corp.elvievalmores.com` (customer ID `C01rucqxe`). Three accounts: `admin@`
-(break-glass), `alex@` (Platform Engineer), `sam@` (Security Engineer).
+**Signed images are in ECR. Deploy `git-f9f2c35f8fd1`:** it carries the `/dev/shm` certificate fix.
+`v1` predates the fix, and its api task crashes on start. Phase 2 does not need a rebuild first.
 
-**The offering is named Caliper**, at `caliper.elvievalmores.com`. Its ACM certificate is issued and
-DNS-validated. It is valid for **197 days** and expires 2027-04-07, not the thirteen months this file
-once assumed. Read certificate dates; do not assume durations.
+**GCP: 30 resources, phase 1, no drift.** Landing bucket, BigQuery dataset and table, Artifact
+Registry, two KMS keys and their ring, two service accounts, and Data Access audit configuration.
+The Cloud Run job stays off (`deploy_pipeline = false`) until there is an image. GCP has no
+teardown; phase 1 is meant to stand.
+
+**Identity.** AWS Organization `o-yyhciflg3u`, IAM Identity Center `ssoins-7223046591f7f9f9` in
+`us-east-1`, identity store `d-90667e73f9`. The SAML identity provider is Google Cloud Identity on
+`corp.elvievalmores.com` (customer ID `C01rucqxe`). Three directory accounts: `admin@`
+(break-glass), `alex@` and `sam@`. **Identity Center has no users and no permission sets yet.**
+
+**The offering is Caliper**, at `caliper.elvievalmores.com`. The ACM certificate is valid for 197 days
+and expires 2027-04-07. Read certificate dates; do not assume durations.
 
 ### What is proven, and how
 
 Nothing below is "configured". Each was exercised.
 
-- **Inventory**: the self-test passes on both clouds, including its negative control. It seeds one
-  watched and one unwatched resource and confirms only the first appears.
-- **Collectors**: 29 checks, and 28 pass. The one failure is real: the default Compute Engine
-  account's `roles/editor` (open items). 5 of 9 mechanisms are implemented. Config's lag on
-  implicit deletions is now its own PIY-GIV check (`inventory_current`), not an SVC-ACM failure. The assertions
-  written from 2026-09-22 onwards have negative controls in `collector/self_test.py`. The older
-  `cloud_api_config_read` handlers, `log_query` and `inventory_reconciliation` **do not yet**.
-- **The SDR**: valid against the pinned schemas, and validation was shown to reject six kinds of
-  broken record. Both schema pins match FedRAMP's published copies (`sdr/verify_pins.py`).
-- **Declared versus live**: drift detected by the collector itself on both clouds. It was proven
-  on 2026-09-23 by tagging the extract bucket out of band. The check failed, named the bucket, and
-  attributed the change to outside Terraform. The tag was reverted, and the check passed again.
-- **Drift**: runs green in CI against the full persistent set. Run 35923874415 was the first over
-  the 58 including the build and cross-cloud roles. Run 35925317909 was the first over all
-  65, including posture. Earlier green runs checked smaller sets;
-  see the 2026-09-23 entries in `DECISIONS.md`.
-- **Posture**: Inspector rescanned the persisted images and reproduced the phase 2 result exactly
-  (4 critical, 14 high and 12 medium per image). GuardDuty is enabled, both Security Hub standards
-  are `READY`, and the findings rule targets the detection topic.
-- **Image pipeline**: `build-and-push` has completed twice. It scans dependencies, builds, signs,
-  verifies the signature and pushes by digest.
-- **The application**: phase 2 served a request. `POST /measurements` returned 201 and the read-back
-  returned 200. It authenticated to Postgres through IAM, and no password exists anywhere in the
-  system.
-- **Teardown**: 118 resources destroyed, the persistent set intact, and the images kept.
-- **Federation**: a sign-in has gone through end to end, from Google to Identity Center.
-- **Cross-cloud trust**: AWS accepted a policy pinning `sub` and `aud` to the GCP service account's
-  numeric ID, `104894493962317106056`.
+- **Collectors**: 29 checks, 28 passing on 2026-09-25. The failure is the editor grant above.
+  5 of 9 mechanisms are built, and 11 of 46 indicators have automated evidence.
+  `collector/self_test.py` has negative controls for 16 assertions, each also tested against a
+  deliberately broken version of itself. The older `cloud_api_config_read` handlers (Config
+  recorder, asset feed), `log_query` and `inventory_reconciliation` **have none yet**.
+- **Declared versus live**: drift, missing resources, and the reverse direction (every inventoried
+  resource declared or excused by a rule verified with the provider). Proven by tagging the extract
+  bucket out of band: the check failed, named it, and attributed it. The tag was reverted and the
+  check passed again.
+- **Inventory currency**: a resource the inventory lists but its service says is gone fails
+  KSI-PIY-GIV's `inventory_current`. Config lagged about 70 minutes on an implicit deletion on
+  2026-09-23.
+- **The SDR**: `sdr/emit.py` emits a schema-valid record for all 46 indicators, and validation was
+  shown to reject six kinds of broken record. `sdr/verify_pins.py` confirms both schema pins against
+  FedRAMP's published copies.
+- **Drift**: green in CI over all 68 persistent resources. The scheduled runs on 2026-09-24 and
+  2026-09-25 passed unattended. `boundary.py --check` runs first on every run.
+- **Bucket protections**: plain HTTP and writes without the KMS header are refused, tested against
+  the admin user.
+- **Posture**: Inspector reproduced the phase 2 image findings (4 critical, 14 high, 12 medium per
+  image) against the persisted images.
+- **Pipeline, application, teardown, federation, cross-cloud trust**: all exercised end to end on
+  2026-09-22 and 2026-09-23. See those entries in `DECISIONS.md`.
 
-### The persistence boundary, which is now a rule
+### The persistence boundary, which is a rule
 
-`infra/aws/boundary.py` owns the split. `teardown.sh --ephemeral` and `drift.yml --persistent` both
-consume it. Implementing it twice would let the halves diverge, and both failure modes are silent: a
-resource the teardown forgets bills forever, and one the drift check forgets stops being watched.
+`infra/aws/boundary.py` owns the split. `teardown.sh` and `drift.yml` both consume it, and neither
+keeps its own list: both now print the boundary's own list rather than a hand-written one.
 
-**The rule, which came up three times in one day: a persistent resource may not reference an
-ephemeral one, and the seam falls between the thing and the permission to use it.** The store
-persists; the grants to transient principals do not. `registry_grants.tf` and the IAM-side
-authorisation for the artifacts key both follow from this.
+- **A persistent resource may not reference an ephemeral one, and the seam falls between the thing
+  and the permission to use it.** A store's own protections persist with it. Grants to transient
+  principals do not. That rule, applied at file level, is how the extract bucket lost its TLS deny
+  between sessions.
+- **Run `boundary.py --check` before moving anything.** It fails, naming file and line, if a
+  persistent file references an ephemeral resource.
+- **Moving something to the persistent side needs a one-time apply targeted by declaration**,
+  because the boundary is derived from state.
+- **Moving a file changes which variables the drift plan needs.** `cross_cloud.tf` brought
+  `GCP_PIPELINE_SA_UNIQUE_ID` with it.
 
-**Moving a file across the boundary changes which variables the drift plan needs**, because
-targeting decides what gets evaluated. `cross_cloud.tf` brought `GCP_PIPELINE_SA_UNIQUE_ID` with it.
+### Running things
 
-`boundary.py` derives from Terraform state, so it lists what exists and cannot propose creating what
-does not. Moving something onto the persistent side needs a one-time apply targeted by declaration.
-Run `boundary.py --check` first. It fails if a persistent file references an ephemeral resource,
-and `drift.yml` runs it on every run.
+```sh
+export TF_VAR_billing_alert_email=aws@elvievalmores.com
+export TF_VAR_gcp_pipeline_sa_unique_id=104894493962317106056
+export TF_VAR_app_domain=caliper.elvievalmores.com   # not a repository variable
+export TF_VAR_billing_account_id=$(gcloud billing projects describe fedramp-20x-ksi-assessment \
+  --format='value(billingAccountName)' | sed 's#billingAccounts/##')
 
-### Applying
+cd collector && ../.venv/bin/python self_test.py
+cd collector && ../.venv/bin/python run_checks.py --json results.json
+cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty
+```
 
-A full AWS apply needs `TF_VAR_billing_alert_email`, `TF_VAR_gcp_pipeline_sa_unique_id` and
-`TF_VAR_app_domain`. The first two are repository variables. **`APP_DOMAIN` is not one**; its value is
-`caliper.elvievalmores.com`. Phase 2 adds `-var deploy_services=true -var
-app_image_tag=git-f9f2c35f8fd1`. Tear down with `infra/aws/teardown.sh`.
+- **AWS phase 1:** `terraform apply` in `infra/aws`.
+- **AWS phase 2:** add `-var deploy_services=true -var app_image_tag=git-f9f2c35f8fd1`.
+- **Teardown:** `infra/aws/teardown.sh`.
 
-The GCP root also needs `TF_VAR_billing_account_id`. Read it with `gcloud billing projects describe
-fedramp-20x-ksi-assessment`.
+**Changes to IAM bindings may be refused by the session's permission controls.** Hand the user the
+command. Do not route around the refusal.
 
 ### The next thing to do
 
-**Evidence coverage is now the bottleneck.** The SDR emitter exists and emits a valid record, but
-only 10 of 46 indicators carry automated evidence: 25 of roughly 380 check definitions exist. The
-other four mechanisms are genuinely blocked, so the unblocked work is:
+**Evidence coverage is the bottleneck.** The deliverable exists, but only 11 of 46 indicators carry
+automated evidence (29 of roughly 380 checks). The other four mechanisms are genuinely blocked. In
+rough priority:
 
-- **More check definitions** against the five built mechanisms. KSI-SVC-SIN rows 41, 42 and 46 wait
-  on the environment. Row 39 waits on the encryption decision (open items).
-- **Negative controls for the older handlers.**
-- **A collector runtime and schedule.** Without one, the SDR's cycle statement and SDR-CSX-KMT's
-  metrics both say "one run, by hand". It also blocks running the emitter in CI.
-- **Link check definitions to matrix rows.** Evidence is attached per indicator today, not per
-  VERIFY or VALIDATE row, so the SDR cannot yet say which row a check proves.
+1. **The evidence-store encryption key.** This is SVC-SIN build row 1, and the recommended design is
+   in `DECISIONS.md`, 2026-09-23, "Four open items". It is a session of its own, because a wrong
+   key-policy grant stops CloudTrail or Config from logging, so confirm fresh logs arrive before
+   calling it done. SVC-SIN row 39's check waits on it.
+2. **The single-sign-on move**, once the user's passkey is in place.
+3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
+   hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
+4. **More check definitions** against the five built mechanisms, and **negative controls for the
+   older handlers**.
+5. **Link check definitions to matrix rows**, so the SDR can say which row each check proves.
+
+**At the next phase 1:** confirm the declared default security group applied with no rules, and that
+`svc-acm-cfg-aws-inventory-is-declared` passes with the environment up. **At the next phase 2:**
+confirm the worker's extracts still land through the VPC endpoint, since that restriction moved to
+the worker role.
 
 ### Open items
 
 | Item | State |
 |---|---|
-| Measure the posture cost | **Before 2026-10-06**, when the Inspector trial ends. GuardDuty's ends about 2026-10-22. Read each service's projected cost and compare it with the 3 to 8 USD estimate. Option B is the fallback |
-| Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which controls report data after the first day |
-| Worker writes through the VPC endpoint | The restriction moved from the bucket policy to the worker role on 2026-09-23. Confirm an extract still lands at the next phase 2 |
-| No collector schedule or runtime exists | The collectors are run by hand. Building one is a prerequisite for the 3-day cadence claim |
-| **AWS `terraform-admin`: static access key, `AdministratorAccess`, no MFA** | The operator identity for every local apply, active since 2026-09-17, and no AWS-side decision is recorded. Identity Center exists, so `aws sso login` with an admin permission set would replace it. The user's call |
-| **Default Compute Engine service account holds `roles/editor`** | `iam-elp-cfg-gcp-basic-roles-allowed-only` fails on it. Removing the binding was refused by the session's permission controls; **the user runs** `gcloud projects remove-iam-policy-binding fedramp-20x-ksi-assessment --member=serviceAccount:921906217926-compute@developer.gserviceaccount.com --role=roles/editor --condition=None`, then `gcloud iam service-accounts disable` on the same account |
-| **Passkey on `admin@`, then single sign-on** | With the user. Identity Center has no users or permission sets yet. The order is in DECISIONS.md, 2026-09-23, "Four open items" |
-| Config lags on implicit deletions | Handled. A stale entry fails `piy-giv-ops-*-inventory-current`, not SVC-ACM. Four AWS types and all of GCP cannot be probed and stay unaccounted when undeclared |
-| Project VPC default security group | Declared with no rules on 2026-09-23. It applies at the next phase 1; confirm `live_is_declared` passes while the environment stands |
-| Customer-managed keys for the evidence stores | SVC-SIN build row 1. Four buckets use SSE-S3. The log store's reason (keys were ephemeral) changed when the artifacts key persisted. A design decision, since a deleted key takes Object Locked logs with it |
-| The analytics image has no build path at all | Blocks GCP phase 2 |
-| `APP_DOMAIN` is not a repository variable | `drift.yml` passes it anyway, and it comes through empty. Harmless while only ephemeral files use it |
+| Measure the posture cost | Before **2026-10-06**. Read each service's projected post-trial cost. Option B (drop Security Hub from the persistent set) is the recorded fallback |
+| Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which report data |
+| Customer-managed keys for the evidence stores | Next thing to do, item 1 |
+| No collector schedule or runtime exists | Next thing to do, item 3 |
+| Config lag on implicit deletions | Handled by `inventory_current`. Four AWS types and all of GCP cannot be probed, and stay unaccounted when undeclared |
+| The analytics image has no build path | Blocks GCP phase 2. Needs GitHub-to-GCP federation and a third matrix entry in `build-and-push.yml` |
+| `APP_DOMAIN` is not a repository variable | `drift.yml` passes it and it arrives empty. Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |
 | Identity Center sign-ins may not reach CloudTrail | Unverified; would affect KSI-MLA-LET |
 | Security Command Center Standard | Console activation outstanding |
-| Passkey on `admin@corp.elvievalmores.com` | Requested, never confirmed. That account had no second factor and administers the whole workforce directory |
-
-**On the analytics image.** `build-and-push.yml`'s matrix is `[api, worker]`, and `app/analytics/` is
-not in it. There is no GitHub-to-GCP workload identity federation and no container runtime on the
-workstation. `infra/README.md` says the image is "pushed by hand until then", which is not currently
-possible by any route. The most likely fix is adding the federation and a third matrix entry.
 
 **Groups, permission sets and assignments do not exist yet.** They are declared in Terraform by
-decision, because SCIM does not sync groups. They can be built now up to the seam. Permission sets,
-groups and account assignments can all be declared. Putting Alex and Sam *into* groups needs the
-users to exist in Identity Center, which needs SCIM, which needs Premium.
+decision, because SCIM does not sync groups. They can be built up to the seam. Putting Alex and Sam
+into groups needs the users to exist in Identity Center, which needs SCIM, which needs Premium.
 
 ## The files in `/docs`
 
