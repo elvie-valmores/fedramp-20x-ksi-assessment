@@ -152,6 +152,16 @@ data "aws_iam_policy_document" "github_drift" {
       "securityhub:Get*",
       "sns:Get*",
       "sns:List*",
+      # Identity Center, from identity_center.tf. The permission set, its
+      # policy attachment and the assignment read through sso; the user
+      # lookup reads through identitystore. Added in the same change as the
+      # resources, so the first drift run after them does not error.
+      "identitystore:DescribeUser",
+      "identitystore:GetUserId",
+      "identitystore:ListUsers",
+      "sso:Describe*",
+      "sso:Get*",
+      "sso:List*",
       "sts:GetCallerIdentity",
       "wafv2:Get*",
       "wafv2:List*",

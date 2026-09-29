@@ -6159,3 +6159,81 @@ on 2026-09-23. It now prints the boundary's own count and file list. The rule is
 **`PROJECT-CONTEXT.md`'s "Resume here" block was rewritten for a cold start.** It now opens with the
 first actions for the next session. It separates what waits on the user from build work, drops a
 duplicated open item, and puts the variables and commands for running everything in one place.
+
+---
+
+## 2026-09-29 — Three of the user's items closed; the operator's permission set is declared
+
+**Re-verified first.** 68 persistent and 0 ephemeral, the 2026-09-25 API sweep all zeros, and the
+scheduled drift runs green on every day from 2026-09-25 to 2026-09-29. The state recorded on
+2026-09-25 held.
+
+**The default Compute Engine account's `roles/editor`: removed, by the user.** They ran the
+`remove-iam-policy-binding` and `service-accounts disable` commands, after saving a policy backup to
+`~/gcp-iam-backup-2026-09-29.json`. The binding is gone, the account reports `disabled: True`, and
+`iam-elp-cfg-gcp-basic-roles-allowed-only` passes: "all 2 basic-role grant(s) are named allowances".
+
+**Passkeys: `admin@` and `alex@`, recorded on the user's word.** 2-Step Verification is allowed in
+the Admin console, and enforcement is deliberately left off until every account is enrolled. Each
+account has a passkey, a second method and offline backup codes. `alex@` had never signed in, so its
+password was reset by `admin@` first. As before, this project's credentials cannot read the
+directory, so none of this can be checked by tool.
+
+**Alex, not `admin@`, is the account that signs in to AWS.** `admin@` is break-glass, per
+2026-09-22, and holds no standing AWS access. Using it daily would make it a working identity.
+
+**The permission set: `InterimOperatorAdmin`, in `identity_center.tf`, persistent.** It has
+AdministratorAccess and four-hour sessions, and is assigned to `alex@` in this account. That is a
+standing grant to the platform engineer, and KSI-IAM-JIT says the platform engineer holds none. It
+is **not a new exception**. The 2026-09-19 entry lets a human identity keep apply until KSI-IAM-JIT
+build step 5 lands, and this moves that same exception from an IAM user with a key that never
+expires and no MFA to a four-hour session behind a passkey. When the elevation workflow exists, the
+assignment goes and the permission set becomes an elevated one.
+
+- **Why AdministratorAccess.** KSI-IAM-ELP rules out managed policies. But the role model is five
+  scoped roles and this is none of them. Applying this root creates and deletes IAM, KMS and network
+  resources, so a narrower policy would just list everything. The exception is the honest name for
+  that.
+- **Why four hours.** A phase 1 and phase 2 apply followed by a teardown fits in one session. A
+  credential that expires mid-apply leaves a held lock and a partial state.
+- **When the JIT check is built,** "Platform engineer holds zero standing assignments" will fail on
+  this assignment. That is correct, and it should be cleared by the exception register, not by
+  loosening the check.
+
+**The drift role gained read on `sso` and `identitystore` in the same apply.** Without it, the
+first scheduled run after the new resources would have errored rather than reported. That is the
+2026-09-22 failure again, so the grant went in with the resources, not after.
+
+**Applied by the user, not by this session.** The apply was refused by the session's permission
+controls as a permission grant, like the GCP change on 2026-09-23. It was a targeted apply of a
+saved plan, by declaration, as the boundary requires: 3 added, 1 changed, 0 destroyed. Verified
+afterwards: the permission set is provisioned to the account, `AWSReservedSSO_InterimOperatorAdmin_*`
+exists, the drift policy carries the six actions, and `boundary.py --persistent` gives **71**. A plan
+scoped exactly as `drift.yml` scopes it returns "No changes" over all 71.
+
+**Two traps on the way, both recorded because they will recur:**
+
+- **`! command` in a real terminal applies nothing.** The `!` prefix runs a command from Claude
+  Code's prompt. In zsh, a leading `!` inverts the exit status instead, so `! cd dir && terraform
+  apply` makes a successful `cd` look like a failure, and `&&` skips Terraform with no error. It
+  looked like it worked, and CloudTrail showed nothing had happened.
+- **A target list in an unquoted zsh variable arrives as one argument.** zsh does not split words
+  the way bash does. `drift.yml` builds a bash array, and a local rerun has to do the same.
+
+**Alex's Identity Center user was created by hand, signed in to the console as root.** Hand
+creation is the recorded exception, because SCIM needs Cloud Identity Premium. Root was the only
+console identity available, because `terraform-admin` has a key but no console password. It is
+recorded here because a root console login is one of KSI-IAM-SUS's local rules. This one is
+explained, and it should be the last: with SSO working, console work goes through Alex.
+
+**Still open from this list:** proving `aws sso login`, then deactivating the `terraform-admin`
+key, and deleting it about a week later.
+
+**A new finding, probably a lag.** Four KMS keys from the 2026-09-23 teardown finished their
+scheduled deletion at 21:47 UTC. `inventory_current` failed on them within minutes, which is
+correct. Config still reported all four as `OK` half an hour later, with its last item dated
+2026-09-21. Three more delete on 2026-09-30. If Config never records a scheduled key deletion
+completing, it is not a lag but a class of implicit deletion Config does not see. Recheck before
+calling it either.
+
+**Collector: 28 of 29.** The remaining failure is that KMS item.

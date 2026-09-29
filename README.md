@@ -118,13 +118,13 @@ set. A missing variable is reported as an error, never as a pass.
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only |
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
-| Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end |
+| Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end. Operator permission set assigned to `alex@` (2026-09-29); `aws sso login` not yet proven |
 | Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
 | GCP analytics pipeline | Phase 1 applied (30 resources). Phase 2 needs an image |
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 | Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
-**Nothing expensive is standing between sessions.** 68 AWS resources persist,
+**Nothing expensive is standing between sessions.** 71 AWS resources persist,
 plus the state backend: the log store, CloudTrail, the Config recorder, Athena,
 both Lambdas, the CI identities, the cross-cloud role, the container registry
 with its signed images, the extract bucket, the artifacts key and the posture

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Twelve files hold everything that survives a teardown. Everything else is the
+Thirteen files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -16,6 +16,7 @@ application environment, rebuilt on the next apply:
     cross_cloud.tf        the role the GCP pipeline assumes
     posture.tf            GuardDuty, Security Hub and Inspector
     account.tf            account-wide guardrails
+    identity_center.tf    the operator's permission set and assignment
 
 pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -86,6 +87,7 @@ PERSISTENT_FILES = {
     "cross_cloud.tf",
     "posture.tf",
     "account.tf",
+    "identity_center.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",

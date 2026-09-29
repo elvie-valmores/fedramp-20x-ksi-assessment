@@ -31,13 +31,13 @@ The design phase is closed. What remains is the build.
 
 ## Where the build has reached
 
-The build is in progress, and `README.md` carries the current status table. As of 2026-09-25:
+The build is in progress, and `README.md` carries the current status table. As of 2026-09-29:
 
-- **Persisting between sessions**: 68 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 71 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
   the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
-  S3 public access block. On GCP: all of
+  S3 public access block, and the operator's Identity Center permission set and assignment. On GCP: all of
   phase 1. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
   in about fifteen minutes and is torn down after each session. Phase 1 was last verified on
@@ -71,7 +71,7 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-09-25
+## Resume here — state as of 2026-09-29
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
@@ -80,34 +80,39 @@ one was found by running the thing rather than reading it. Check against the liv
 
 The build work recorded here was done on 2026-09-23. On 2026-09-25 the session was closed out: the
 state below was re-verified against both clouds, the teardown was confirmed, and this block was
-rewritten.
+rewritten. On 2026-09-29 the user's items were worked through: the editor grant is gone, both
+passkeys are in place, and the operator's permission set is applied. See that day's entry in
+`DECISIONS.md`.
 
 ### First actions for the next session
 
 1. **Verify, do not trust.** These four commands reproduce every claim in "What is standing":
-   - `infra/aws/boundary.py --persistent | wc -l` should give 68, and `--ephemeral` should give 0.
+   - `infra/aws/boundary.py --persistent | wc -l` should give 71, and `--ephemeral` should give 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
    - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
    - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
-     things". Expect 28 of 29.
-2. **Ask the user about their three items**, below. If they ran the `gcloud` commands, re-run
-   `iam-elp-cfg-gcp-basic-roles-allowed-only`; it should now pass, making 29 of 29.
+     things". Expect 29 of 29 once Config records four KMS key deletions (2026-09-29 entry); until
+     then 28.
+2. **Finish the move off the static key**, below, if it is still open.
 3. **Then pick up the build** at "The next thing to do".
 
 ### Waiting on the user
 
 | Item | What they do |
 |---|---|
-| **Passkey on `admin@corp.elvievalmores.com`** | Admin console: allow 2-Step Verification and passkeys. At myaccount.google.com: create a passkey, add a second method, and store backup codes offline. The account is the directory's only super admin and has **no second factor**. Unconfirmed as of 2026-09-25. It can't be verified by tool, because GCP credentials here are not directory admins, so record it on the user's word |
-| **Remove the default Compute Engine account's `roles/editor`** | This session's permission controls refused the change. The user runs `gcloud projects remove-iam-policy-binding fedramp-20x-ksi-assessment --member=serviceAccount:921906217926-compute@developer.gserviceaccount.com --role=roles/editor --condition=None`, then `gcloud iam service-accounts disable 921906217926-compute@developer.gserviceaccount.com --project fedramp-20x-ksi-assessment`. Still bound on 2026-09-25 |
-| **Then: move off the AWS static key** | Only after the passkey. Claude declares an admin permission set, persistent. The user creates their Identity Center user by hand, then tests `aws sso login`. Deactivate the `terraform-admin` key, and delete it a week later. The order is in `DECISIONS.md`, 2026-09-23, "Four open items". On 2026-09-25 Identity Center had 0 permission sets and the key was still active |
+| **Prove `aws sso login` as `alex@`** | `aws configure sso` (start URL `https://d-90667e73f9.awsapps.com/start`, region `us-east-1`, profile `caliper-admin`), then `aws sso login --profile caliper-admin` and `aws sts get-caller-identity`. Claude then checks a plan, `boundary.py` and a collector run under that profile, and whether the sign-in reached CloudTrail |
+| **Then: deactivate the `terraform-admin` key** | Only after the check above passes. The user runs it, since it is a credential change. Delete it about a week later. Still active on 2026-09-29 |
+
+Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
+user's word). The `InterimOperatorAdmin` permission set is assigned to `alex@`, under the 2026-09-19
+exception.
 
 ### What is standing
 
-**AWS: 68 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS: 71 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
 Verified 2026-09-25 against the API: no load balancer, database, ECS cluster, non-default VPC,
 endpoint, NAT gateway, Elastic IP or instance. `teardown.sh` reports "already torn down".
-`terraform state list` prints more lines than 68; the rest are data sources, which `boundary.py`
+`terraform state list` prints more lines than 71; the rest are data sources, which `boundary.py`
 leaves out.
 
 The persistent set, by file (`boundary.py --files`), is:
@@ -120,12 +125,14 @@ The persistent set, by file (`boundary.py --files`), is:
 - **Registry:** the ECR repositories with their signed images, the extract bucket with its TLS and
   encryption denies, and the artifacts key.
 - **Posture:** GuardDuty, Security Hub with CIS and FSBP, and Inspector on ECR.
+- **Operator access:** the `InterimOperatorAdmin` permission set, its policy attachment, and its
+  assignment to `alex@`.
 
 **The posture services are the only standing cost**, estimated at 3 to 8 USD a month and not yet
 measured. The Inspector trial ends **2026-10-06** and GuardDuty's around 2026-10-22.
 
-Fifteen customer keys from the 2026-09-23 teardown are in `PendingDeletion`. They clear on their own
-between 2026-09-26 and 2026-09-30.
+Of the fifteen customer keys from the 2026-09-23 teardown, three are still in `PendingDeletion` and
+clear on 2026-09-30. Config had not recorded the deletion of four that cleared on 2026-09-29.
 
 **Signed images are in ECR. Deploy `git-f9f2c35f8fd1`:** it carries the `/dev/shm` certificate fix.
 `v1` predates the fix, and its api task crashes on start. Phase 2 does not need a rebuild first.
@@ -138,7 +145,8 @@ teardown; phase 1 is meant to stand.
 **Identity.** AWS Organization `o-yyhciflg3u`, IAM Identity Center `ssoins-7223046591f7f9f9` in
 `us-east-1`, identity store `d-90667e73f9`. The SAML identity provider is Google Cloud Identity on
 `corp.elvievalmores.com` (customer ID `C01rucqxe`). Three directory accounts: `admin@`
-(break-glass), `alex@` and `sam@`. **Identity Center has no users and no permission sets yet.**
+(break-glass), `alex@` and `sam@`. **Identity Center has one user, `alex@`, created by hand, and
+one permission set, `InterimOperatorAdmin`.** No groups yet.
 
 **The offering is Caliper**, at `caliper.elvievalmores.com`. The ACM certificate is valid for 197 days
 and expires 2027-04-07. Read certificate dates; do not assume durations.
@@ -147,7 +155,8 @@ and expires 2027-04-07. Read certificate dates; do not assume durations.
 
 Nothing below is "configured". Each was exercised.
 
-- **Collectors**: 29 checks, 28 passing on 2026-09-25. The failure is the editor grant above.
+- **Collectors**: 29 checks, 28 passing on 2026-09-29. The editor grant now passes. The failure is
+  `inventory_current` on four deleted KMS keys that Config still lists.
   5 of 9 mechanisms are built, and 11 of 46 indicators have automated evidence.
   `collector/self_test.py` has negative controls for 16 assertions, each also tested against a
   deliberately broken version of itself. The older `cloud_api_config_read` handlers (Config
@@ -218,7 +227,8 @@ rough priority:
    in `DECISIONS.md`, 2026-09-23, "Four open items". It is a session of its own, because a wrong
    key-policy grant stops CloudTrail or Config from logging, so confirm fresh logs arrive before
    calling it done. SVC-SIN row 39's check waits on it.
-2. **The single-sign-on move**, once the user's passkey is in place.
+2. **Finish the single-sign-on move.** The permission set is applied; `aws sso login` and the key
+   deactivation remain.
 3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
 4. **More check definitions** against the five built mechanisms, and **negative controls for the
@@ -236,6 +246,7 @@ the worker role.
 |---|---|
 | Measure the posture cost | Before **2026-10-06**. Read each service's projected post-trial cost. Option B (drop Security Hub from the persistent set) is the recorded fallback |
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which report data |
+| Config and scheduled KMS key deletion | Four keys deleted 2026-09-29 still `OK` in Config half an hour later. Recheck: lag, or a deletion Config never records |
 | Customer-managed keys for the evidence stores | Next thing to do, item 1 |
 | No collector schedule or runtime exists | Next thing to do, item 3 |
 | Config lag on implicit deletions | Handled by `inventory_current`. Four AWS types and all of GCP cannot be probed, and stay unaccounted when undeclared |
