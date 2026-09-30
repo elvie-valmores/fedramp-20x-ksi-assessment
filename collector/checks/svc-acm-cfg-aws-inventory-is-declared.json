@@ -68,7 +68,7 @@
         "rule": {
           "name_equals": "terraform-admin"
         },
-        "reason": "The operator identity that runs Terraform, created by hand before any root existed so it cannot be declared by what it creates. Excused from this check only: its static access key with AdministratorAccess and no MFA is an open finding (DECISIONS.md, 2026-09-23), not an accepted exclusion."
+        "reason": "The former operator identity, created by hand before any root existed so it cannot be declared by what it creates. Replaced by Identity Center on 2026-09-30: its access key was deactivated that day and is to be deleted about 2026-10-07. Excused from this check only, and not an accepted credential: what the user is for once it holds no key is an open decision (DECISIONS.md, 2026-09-30)."
       }
     ]
   }

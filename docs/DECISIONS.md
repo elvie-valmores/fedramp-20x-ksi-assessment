@@ -6312,3 +6312,17 @@ the inventory has to stop trusting Config for this type. Not decided.
 **Collector: 28 of 29.** The failure is the KMS finding.
 
 **Still open:** deactivate `terraform-admin`'s key, then delete it a week later.
+
+**Addendum, same day: the static key is deactivated.** The user deactivated `AKIA…QVP3` with the
+`caliper-admin` profile, which also proves the new identity can do IAM administration. The key had
+been active since 2026-09-17. Its last use was 22:27 UTC, by this session's CloudTrail polling
+before it switched profiles. An immediate `sts get-caller-identity` with it still succeeded, and
+seconds later it returned `InvalidClientTokenId`. IAM deactivation is eventually consistent, so
+check it twice before calling it done. **Delete it about 2026-10-07.**
+
+**An open decision the deletion creates.** The 2026-09-23 plan keeps `terraform-admin` "as
+break-glass, with no key". But it has no console password either, so after deletion it holds no
+credential at all and cannot break any glass. AWS break-glass is already root, with MFA, per
+2026-09-05. Either give the user a console password and its own MFA and declare it the second
+break-glass identity, or delete it. Not decided. The collector's exclusion wording now says the
+same.

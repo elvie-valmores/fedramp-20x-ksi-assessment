@@ -101,12 +101,14 @@ passkeys are in place, and the operator's permission set is applied. See that da
 
 | Item | What they do |
 |---|---|
-| **Deactivate the `terraform-admin` key** | `aws sso login` is proven. The user runs it, since it is a credential change. Delete it about a week later. Still active on 2026-09-29 |
+| **Delete the `terraform-admin` key, about 2026-10-07** | Deactivated 2026-09-30 and verified rejected. `aws iam delete-access-key --user-name terraform-admin --access-key-id AKIAWLZ2JC3HIVWDQVP3`, then remove it from `~/.aws/credentials` |
+| **Decide what `terraform-admin` is for** | With no key and no console password it holds no credential. Make it a second break-glass identity (password plus MFA) or delete it. See `DECISIONS.md`, 2026-09-30 |
 
 Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
 user's word). The `InterimOperatorAdmin` permission set is assigned to `alex@`, under the 2026-09-19
 exception. On 2026-09-30 `aws sso login` was proven as `alex@` (profile `caliper-admin`), but only
-when the sign-in starts from the Google app tile. See that day's entry.
+when the sign-in starts from the Google app tile, and the static key was deactivated. See that
+day's entry. **The operator identity is now `caliper-admin`: set `AWS_PROFILE=caliper-admin`.**
 
 ### What is standing
 
@@ -228,8 +230,8 @@ rough priority:
    in `DECISIONS.md`, 2026-09-23, "Four open items". It is a session of its own, because a wrong
    key-policy grant stops CloudTrail or Config from logging, so confirm fresh logs arrive before
    calling it done. SVC-SIN row 39's check waits on it.
-2. **Finish the single-sign-on move.** The key deactivation remains, and the AWS-started sign-in
-   fails (2026-09-30 entry).
+2. **Close out the single-sign-on move.** Delete the key about 2026-10-07, decide what
+   `terraform-admin` is for, and fix the AWS-started sign-in (2026-09-30 entry).
 3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
 4. **More check definitions** against the five built mechanisms, and **negative controls for the
