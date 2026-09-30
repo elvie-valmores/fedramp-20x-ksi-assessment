@@ -6349,3 +6349,41 @@ it misses. The 8 stale entries left are all KMS keys.
 **The 2026-09-23 finding is closed.** It was "an IAM user with AdministratorAccess, a static key
 active since 2026-09-17, and no MFA". Every local apply now runs as a four-hour session behind a
 passkey, under the 2026-09-19 exception.
+
+---
+
+## 2026-09-30 — The posture cost, measured: about 15 USD a month, not 3 to 8
+
+**Nothing has been billed yet, which is why the estimate survived.** From 2026-09-17 to 2026-09-30,
+usage was 6.23 USD, all of it covered by credits. Security Hub, GuardDuty and Inspector billed 0,
+because all three are in trial. An idle day (2026-09-24 to 2026-09-28) costs about 0.05 USD, all of
+it outside the posture services. So the bill cannot answer the question yet. Each service's own
+usage figure can.
+
+| Service | Measured | Projected monthly after trial | Trial ends |
+|---|---|---|---|
+| Security Hub | 372 checks observed in the last 24 hours (466 findings updated) | **11 to 14 USD** at 0.001 per check | about 2026-10-23 |
+| Inspector | its own estimate: 2.23 for 8 initial ECR scans, 0.25 for rescans | **about 2.50 USD**, more with each image pushed | 2026-10-06 |
+| GuardDuty | 0.16 USD of trial usage in 7 days (CloudTrail 0.09, RDS 0.06, S3 0.01) | **about 0.70 USD** | about 2026-10-21 |
+
+**Security Hub is most of it, and most of what it checks is nothing.** Of the 372 checks, 331 are
+account-level and 223 end in `WARNING`. These are controls for resource types the scoped Config
+recorder does not record, or that this architecture does not use, so they cannot evaluate. This
+is the "Security Hub control coverage" open item, now with a price: those checks bill daily and
+produce no signal. 362 FSBP controls and 37 CIS controls are enabled.
+
+**Config does not bill for them.** Config charged nothing on idle days despite about 400
+Security Hub evaluations a day, so the service-linked rules' evaluations are not billed by Config
+separately, at least during the trial. Recheck after 2026-10-23.
+
+**Two smaller findings in GuardDuty's configuration.**
+
+- **RDS login monitoring is on, but not declared.** It was enabled by default when the detector was
+  created. `posture.tf` declares only the older `datasources` block, so drift cannot see it. It is
+  cheap and relevant: it bills only while the database exists. But it is undeclared state.
+- **S3 data-event monitoring is on, and declared.** `posture.tf`'s comment calls it "included in the
+  foundational tier". It is a separate protection plan with its own meter. The choice is sound,
+  since it is how exfiltration from the extract bucket would be seen. The comment is wrong.
+
+**Not decided.** The options are in the next entry once the user chooses. The recorded fallback from
+2026-09-23 is to drop Security Hub from the persistent set.

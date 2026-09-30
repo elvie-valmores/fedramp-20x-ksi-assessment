@@ -247,7 +247,7 @@ the worker role.
 
 | Item | State |
 |---|---|
-| Measure the posture cost | Before **2026-10-06**. Read each service's projected post-trial cost. Option B (drop Security Hub from the persistent set) is the recorded fallback |
+| Posture cost: measured, not decided | About 15 USD a month after trials, mostly Security Hub checks that cannot evaluate (2026-09-30 entry). Decide before Inspector's trial ends **2026-10-06**; Security Hub's ends about 2026-10-23 |
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which report data |
 | Config and scheduled KMS key deletion | A finding, not a lag: still `OK` in Config a day after deletion. Correct Config's record or stop trusting Config for this type |
 | AWS-started Identity Center sign-in fails | "Responses must contain exactly one Assertion". Lead: Entity ID versus Identity Center's issuer URL. Start from the Google tile until fixed |
