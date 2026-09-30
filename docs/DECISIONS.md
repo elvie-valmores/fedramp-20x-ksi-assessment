@@ -6237,3 +6237,78 @@ completing, it is not a lag but a class of implicit deletion Config does not see
 calling it either.
 
 **Collector: 28 of 29.** The remaining failure is that KMS item.
+
+---
+
+## 2026-09-30 — `aws sso login` proven as `alex@`; the AWS-started sign-in does not work yet
+
+**Proven by use.** `aws sts get-caller-identity --profile caliper-admin` returns
+`assumed-role/AWSReservedSSO_InterimOperatorAdmin_fb048b20f7be7777/alex@corp.elvievalmores.com`.
+Under that profile: `boundary.py` gives 71 and 0, a plan scoped exactly as `drift.yml` scopes it
+returns "No changes", and the collector runs.
+
+**The start URL is `https://ssoins-7223046591f7f9f9.portal.us-east-1.app.aws`.** The
+`d-90667e73f9.awsapps.com/start` URL given on 2026-09-29 was assumed, not read, and it was in the
+resume block. It also serves a portal, but the working sign-in used the `ssoins-` one.
+
+**Only the Google-started sign-in works.** Five sign-ins started from AWS, on 2026-09-29 and
+2026-09-30, all failed with the same CloudTrail event: `ExternalIdPDirectoryLogin`, "Responses must
+contain exactly one Assertion". So Google replied with no assertion. Clicking the app tile in
+Google's app grid, which starts the sign-in from Google, reached the portal as `alex@` the first
+time. The CLI was then set up by approving its request in the window that already held the portal
+session.
+
+What that rules out, each checked rather than assumed:
+
+- **The app is on for Alex.** User access is ON for all organizational units, and Alex sees the tile.
+- **The Name ID is set correctly:** format `EMAIL`, value `Basic Information > Primary email`.
+- **The assertion, certificate and ACS URL are fine.** A Google-started assertion was accepted.
+
+**The recorded SAML app settings**, which 2026-09-22 did not capture: ACS URL
+`https://us-east-1.sso.signin.aws/platform/saml/acs/4941442d9bf9ddcf-a64b-4b2e-b754-e15ff995f103`,
+Entity ID `https://us-east-1.signin.aws.amazon.com/platform/saml/d-90667e73f9`, start URL empty,
+signed response off, and a certificate expiring 2031-09-21.
+
+**The lead:** the Entity ID and the ACS URL are on different hosts. When AWS starts a sign-in, it
+names itself in the request, and Google refuses the request if that name differs from the Entity
+ID. When Google starts it, nothing is compared. **Unconfirmed.** The next step is to compare the
+issuer URL in Identity Center's service provider metadata with the Entity ID. Until then, a sign-in
+starts at the Google tile.
+
+**Identity Center sign-ins reach CloudTrail.** This closes the 2026-09-22 open item for
+KSI-MLA-LET. Failures log as `ExternalIdPDirectoryLogin` with identity type `Unknown`. Successes
+log as `UserAuthentication`, `Authenticate`, `CreateToken` and `GetRoleCredentials`, attributed to
+Identity Center user `14a83458-a031-70ba-43d2-5a551fd66c1e`. The API calls made with the role
+attribute to an assumed role under the same user ID.
+
+**The root console login on 2026-09-29 used MFA** (`Proton_Auth`), per its `ConsoleLogin` event.
+
+**Provisioning the permission set created an undeclared role, and the collector caught it.**
+`svc-acm-cfg-aws-inventory-is-declared` failed on
+`AWSReservedSSO_InterimOperatorAdmin_fb048b20f7be7777`. That was correct: nothing declared or
+excused it. It is now excused by a new predicate, `identity_center_role`, with two conditions:
+
+- the path IAM reserves for these roles, `/aws-reserved/sso.amazonaws.com/`, not the name
+- a permission set of the same name still provisioned to this account
+
+A role left behind by a deleted permission set is not excused, since it is the orphan the check
+exists to find.
+
+**The first self-test of the real predicate code.** Until now the path predicates were exercised
+only through a fake provider, which proves the bookkeeping but not the predicates.
+`reserved_path_predicates` in `self_test.py` calls `service_linked_role` and `identity_center_role`
+themselves, against a stubbed IAM, on seven roles. It was run against two deliberately broken
+versions of the new predicate, one trusting the name and one skipping the permission-set check, and
+flagged both. The self-test is now 18 of 18.
+
+**The KMS item is not a lag.** Four keys finished their scheduled deletion at 21:47 UTC on
+2026-09-29, and more on 2026-09-30. More than 24 hours later, Config still reports the first four as
+`OK`, with its last item dated 2026-09-21. The 70-minute lag of 2026-09-23 was an implicit deletion
+Config eventually recorded; this one it has not. **Finding (KSI-PIY-GIV):** the Config-backed
+inventory does not see a scheduled KMS key deletion complete. `inventory_current` reports it, which
+is its job. Remediation is the condition, not the check: Config's own record has to be corrected or
+the inventory has to stop trusting Config for this type. Not decided.
+
+**Collector: 28 of 29.** The failure is the KMS finding.
+
+**Still open:** deactivate `terraform-admin`'s key, then delete it a week later.

@@ -71,7 +71,7 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state as of 2026-09-29
+## Resume here — state as of 2026-09-30
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
@@ -91,8 +91,9 @@ passkeys are in place, and the operator's permission set is applied. See that da
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
    - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
    - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
-     things". Expect 29 of 29 once Config records four KMS key deletions (2026-09-29 entry); until
-     then 28.
+     things", and `AWS_PROFILE=caliper-admin` after `aws sso login --profile caliper-admin`. Start
+     the sign-in from the Google app tile as `alex@` (2026-09-30 entry). Expect 28 of 29: the
+     failure is the KMS finding.
 2. **Finish the move off the static key**, below, if it is still open.
 3. **Then pick up the build** at "The next thing to do".
 
@@ -100,12 +101,12 @@ passkeys are in place, and the operator's permission set is applied. See that da
 
 | Item | What they do |
 |---|---|
-| **Prove `aws sso login` as `alex@`** | `aws configure sso` (start URL `https://d-90667e73f9.awsapps.com/start`, region `us-east-1`, profile `caliper-admin`), then `aws sso login --profile caliper-admin` and `aws sts get-caller-identity`. Claude then checks a plan, `boundary.py` and a collector run under that profile, and whether the sign-in reached CloudTrail |
-| **Then: deactivate the `terraform-admin` key** | Only after the check above passes. The user runs it, since it is a credential change. Delete it about a week later. Still active on 2026-09-29 |
+| **Deactivate the `terraform-admin` key** | `aws sso login` is proven. The user runs it, since it is a credential change. Delete it about a week later. Still active on 2026-09-29 |
 
 Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
 user's word). The `InterimOperatorAdmin` permission set is assigned to `alex@`, under the 2026-09-19
-exception.
+exception. On 2026-09-30 `aws sso login` was proven as `alex@` (profile `caliper-admin`), but only
+when the sign-in starts from the Google app tile. See that day's entry.
 
 ### What is standing
 
@@ -155,10 +156,10 @@ and expires 2027-04-07. Read certificate dates; do not assume durations.
 
 Nothing below is "configured". Each was exercised.
 
-- **Collectors**: 29 checks, 28 passing on 2026-09-29. The editor grant now passes. The failure is
-  `inventory_current` on four deleted KMS keys that Config still lists.
+- **Collectors**: 29 checks, 28 passing on 2026-09-30. The failure is `inventory_current` on
+  deleted KMS keys that Config still lists, more than a day later: a finding, not a lag.
   5 of 9 mechanisms are built, and 11 of 46 indicators have automated evidence.
-  `collector/self_test.py` has negative controls for 16 assertions, each also tested against a
+  `collector/self_test.py` has negative controls for 18 assertions, each also tested against a
   deliberately broken version of itself. The older `cloud_api_config_read` handlers (Config
   recorder, asset feed), `log_query` and `inventory_reconciliation` **have none yet**.
 - **Declared versus live**: drift, missing resources, and the reverse direction (every inventoried
@@ -227,8 +228,8 @@ rough priority:
    in `DECISIONS.md`, 2026-09-23, "Four open items". It is a session of its own, because a wrong
    key-policy grant stops CloudTrail or Config from logging, so confirm fresh logs arrive before
    calling it done. SVC-SIN row 39's check waits on it.
-2. **Finish the single-sign-on move.** The permission set is applied; `aws sso login` and the key
-   deactivation remain.
+2. **Finish the single-sign-on move.** The key deactivation remains, and the AWS-started sign-in
+   fails (2026-09-30 entry).
 3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
 4. **More check definitions** against the five built mechanisms, and **negative controls for the
@@ -246,7 +247,8 @@ the worker role.
 |---|---|
 | Measure the posture cost | Before **2026-10-06**. Read each service's projected post-trial cost. Option B (drop Security Hub from the persistent set) is the recorded fallback |
 | Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which report data |
-| Config and scheduled KMS key deletion | Four keys deleted 2026-09-29 still `OK` in Config half an hour later. Recheck: lag, or a deletion Config never records |
+| Config and scheduled KMS key deletion | A finding, not a lag: still `OK` in Config a day after deletion. Correct Config's record or stop trusting Config for this type |
+| AWS-started Identity Center sign-in fails | "Responses must contain exactly one Assertion". Lead: Entity ID versus Identity Center's issuer URL. Start from the Google tile until fixed |
 | Customer-managed keys for the evidence stores | Next thing to do, item 1 |
 | No collector schedule or runtime exists | Next thing to do, item 3 |
 | Config lag on implicit deletions | Handled by `inventory_current`. Four AWS types and all of GCP cannot be probed, and stay unaccounted when undeclared |
@@ -255,7 +257,6 @@ the worker role.
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |
-| Identity Center sign-ins may not reach CloudTrail | Unverified; would affect KSI-MLA-LET |
 | Security Command Center Standard | Console activation outstanding |
 
 **Groups, permission sets and assignments do not exist yet.** They are declared in Terraform by

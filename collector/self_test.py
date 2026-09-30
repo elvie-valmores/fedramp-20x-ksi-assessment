@@ -317,6 +317,53 @@ def live_is_declared() -> list[str]:
     return broken
 
 
+# --- the reserved-path exclusion predicates, run for real ---
+#
+# live_is_declared above hands coverage() a fake provider, so it proves the
+# bookkeeping and not the predicates. These call AwsPredicates' own methods
+# against a stubbed IAM, so a predicate that trusted a name, or matched the
+# wrong reserved path, would be caught here.
+
+class _StubIam:
+    def __init__(self, path: str):
+        self.path = path
+
+    def get_role(self, RoleName: str) -> dict:
+        return {"Role": {"RoleName": RoleName, "Path": self.path}}
+
+
+SSO_PATH = "/aws-reserved/sso.amazonaws.com/"
+PATH_CASES = [
+    # (predicate, role name, IAM path, permission sets provisioned, should excuse)
+    ("service_linked_role", "AWSServiceRoleForConfig", "/aws-service-role/config.amazonaws.com/", set(), True),
+    ("service_linked_role", "AWSServiceRoleForAnything", "/", set(), False),
+    ("service_linked_role", "AWSReservedSSO_Admin_0123456789abcdef", SSO_PATH, {"Admin"}, False),
+    ("identity_center_role", "AWSReservedSSO_Interim_Admin_0123456789abcdef", SSO_PATH, {"Interim_Admin"}, True),
+    # The name alone, at an ordinary path.
+    ("identity_center_role", "AWSReservedSSO_Interim_Admin_0123456789abcdef", "/", {"Interim_Admin"}, False),
+    # The right path, but its permission set is gone: an orphan.
+    ("identity_center_role", "AWSReservedSSO_Deleted_0123456789abcdef", SSO_PATH, {"Interim_Admin"}, False),
+    ("identity_center_role", "AWSServiceRoleForConfig", "/aws-service-role/config.amazonaws.com/", set(), False),
+]
+
+
+def reserved_path_predicates() -> list[str]:
+    broken = []
+    for predicate in dict.fromkeys(p for p, *_ in PATH_CASES):
+        wrong = []
+        for name, path, provisioned, expected in (c[1:] for c in PATH_CASES if c[0] == predicate):
+            p = object.__new__(dvl.AwsPredicates)
+            p.iam, p._permission_sets = _StubIam(path), provisioned
+            if getattr(p, f"_{predicate}")({"name": name}) != expected:
+                wrong.append(f"{name} at {path}")
+        print(f"[{predicate}] {'PASS' if not wrong else 'BROKEN'} -- "
+              f"{sum(c[0] == predicate for c in PATH_CASES)} roles, excused only at the reserved path")
+        if wrong:
+            broken.append(predicate)
+            print(f"    wrong verdict on: {'; '.join(wrong)}")
+    return broken
+
+
 # --- cloud_api_config_read judgements ---
 #
 # Each broken configuration is wrong in exactly one way, named by its key.
@@ -438,9 +485,11 @@ def main() -> int:
     print()
     broken += declared_versus_live_comparison()
     broken += live_is_declared()
+    broken += reserved_path_predicates()
     print()
     broken += cloud_api_config_read()
-    total = len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES) + len(CFG_CASES)
+    total = (len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES)
+             + len({c[0] for c in PATH_CASES}) + len(CFG_CASES))
 
     print()
     if broken:

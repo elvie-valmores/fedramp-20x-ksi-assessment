@@ -485,6 +485,8 @@ class AwsPredicates:
         self.elbv2 = boto3.client("elbv2", region_name=region)
         self.ecr = boto3.client("ecr", region_name=region)
         self.cloudtrail = boto3.client("cloudtrail", region_name=region)
+        self.region = region
+        self._permission_sets = None
 
     def test(self, rule: dict, resource: dict) -> tuple[bool, str | None]:
         if "resource_id_equals" in rule:
@@ -565,6 +567,39 @@ class AwsPredicates:
         # AWS services create; anyone can name a role AWSServiceRoleForX.
         role = self.iam.get_role(RoleName=resource["name"])["Role"]
         return role["Path"].startswith("/aws-service-role/")
+
+    def _identity_center_role(self, resource: dict) -> bool:
+        # The role Identity Center creates in an account when it provisions a
+        # permission set there, and deletes when it deprovisions it. What is
+        # declared is the permission set (identity_center.tf); this role
+        # follows from it. Two conditions: the path IAM reserves for it, for
+        # the same reason as above, and a permission set of that name still
+        # provisioned here. A role left behind by a deleted permission set is
+        # not excused -- it is exactly the orphan this check exists to find.
+        role = self.iam.get_role(RoleName=resource["name"])["Role"]
+        if not role["Path"].startswith("/aws-reserved/sso.amazonaws.com/"):
+            return False
+        # AWSReservedSSO_<permission set name>_<suffix>. Names may contain
+        # underscores; the suffix never does.
+        prefix, _, _ = resource["name"].rpartition("_")
+        return prefix.removeprefix("AWSReservedSSO_") in self._provisioned_permission_sets()
+
+    def _provisioned_permission_sets(self) -> set[str]:
+        if self._permission_sets is None:
+            import boto3
+
+            sso = boto3.client("sso-admin", region_name=self.region)
+            account = boto3.client("sts").get_caller_identity()["Account"]
+            names = set()
+            for instance in sso.list_instances()["Instances"]:
+                arn = instance["InstanceArn"]
+                pages = sso.get_paginator("list_permission_sets_provisioned_to_account")
+                for page in pages.paginate(InstanceArn=arn, AccountId=account):
+                    for ps in page.get("PermissionSets", []):
+                        described = sso.describe_permission_set(InstanceArn=arn, PermissionSetArn=ps)
+                        names.add(described["PermissionSet"]["Name"])
+            self._permission_sets = names
+        return self._permission_sets
 
     def _default_vpc(self, resource: dict) -> bool:
         kind = resource["resource_type"]

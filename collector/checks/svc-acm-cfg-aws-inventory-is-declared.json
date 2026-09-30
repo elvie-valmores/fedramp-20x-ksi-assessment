@@ -22,6 +22,13 @@
         "reason": "Created by an AWS service when it is enabled, under the reserved /aws-service-role/ path, and required by services that persist (Config, GuardDuty, Inspector, Security Hub). Declaring them would put roles the provider owns into a teardown's reach."
       },
       {
+        "resource_type": "AWS::IAM::Role",
+        "rule": {
+          "predicate": "identity_center_role"
+        },
+        "reason": "Created by IAM Identity Center under the reserved /aws-reserved/sso.amazonaws.com/ path when it provisions a permission set to this account, and removed when it deprovisions it. The permission set is what is declared (identity_center.tf); excused only while a permission set of the same name is provisioned here, so a role orphaned by a deleted one is still found."
+      },
+      {
         "resource_type": "AWS::EC2::VPC",
         "rule": {
           "predicate": "default_vpc"
