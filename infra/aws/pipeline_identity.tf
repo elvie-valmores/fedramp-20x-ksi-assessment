@@ -132,6 +132,13 @@ data "aws_iam_policy_document" "github_drift" {
       "guardduty:List*",
       "iam:Get*",
       "iam:List*",
+      # Identity Center, from identity_center.tf. The permission set, its
+      # policy attachment and the assignment read through sso; the user
+      # lookup reads through identitystore. Added in the same change as the
+      # resources, so the first drift run after them does not error.
+      "identitystore:DescribeUser",
+      "identitystore:GetUserId",
+      "identitystore:ListUsers",
       # BatchGetAccountStatus is how the enabler resource reads its own
       # state, and it matches neither `Get*` nor `List*`.
       "inspector2:BatchGet*",
@@ -148,17 +155,16 @@ data "aws_iam_policy_document" "github_drift" {
       "rds:List*",
       "s3:Get*",
       "s3:List*",
+      # The control associations in securityhub_controls.tf read through
+      # ListStandardsControlAssociations and BatchGetStandardsControlAssociations.
+      "securityhub:BatchGet*",
       "securityhub:Describe*",
       "securityhub:Get*",
+      "securityhub:List*",
       "sns:Get*",
       "sns:List*",
-      # Identity Center, from identity_center.tf. The permission set, its
-      # policy attachment and the assignment read through sso; the user
-      # lookup reads through identitystore. Added in the same change as the
-      # resources, so the first drift run after them does not error.
-      "identitystore:DescribeUser",
-      "identitystore:GetUserId",
-      "identitystore:ListUsers",
+      # The SSM document sharing block in account.tf.
+      "ssm:GetServiceSetting",
       "sso:Describe*",
       "sso:Get*",
       "sso:List*",

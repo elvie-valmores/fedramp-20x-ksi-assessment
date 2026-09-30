@@ -20,3 +20,13 @@ resource "aws_s3_account_public_access_block" "main" {
   block_public_policy     = true
   restrict_public_buckets = true
 }
+
+# Security Hub SSM.7, which was failing (DECISIONS.md, 2026-09-30). Nothing
+# here uses SSM documents, and that is the point: the default lets anyone
+# with ssm:ModifyDocumentPermission share a document publicly, and a shared
+# document can carry commands, parameters and account details. The block
+# costs nothing and closes a path before anything uses it.
+resource "aws_ssm_service_setting" "document_public_sharing" {
+  setting_id    = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:servicesetting/ssm/documents/console/public-sharing-permission"
+  setting_value = "Disable"
+}

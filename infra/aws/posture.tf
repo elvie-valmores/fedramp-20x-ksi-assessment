@@ -33,7 +33,9 @@ resource "aws_guardduty_detector" "main" {
   datasources {
     s3_logs {
       # S3 data events, which is how exfiltration from the extract bucket
-      # would be seen. Included in the foundational tier.
+      # would be seen. Not part of the foundational tier, despite what this
+      # comment said until 2026-09-30: it is S3 Protection, a plan with its
+      # own meter. Kept on for that reason; about 0.01 USD a week measured.
       enable = true
     }
 
@@ -55,6 +57,20 @@ resource "aws_guardduty_detector" "main" {
   tags = {
     Name = "fedramp-20x-ksi"
   }
+}
+
+# RDS Protection: GuardDuty watching database logins for anomalies. Enabled
+# by default when the detector was created, and undeclared until 2026-09-30,
+# so drift could not see it. It is declared here because it is wanted, not
+# only because it exists: KSI-IAM-SUS's rules include repeated failed
+# authentication against a privileged identity, and the database's is one.
+# It bills per login event, so only while the application environment is up.
+# The datasources block above predates the features API and has no field
+# for it, so it is a feature resource of its own.
+resource "aws_guardduty_detector_feature" "rds_login_events" {
+  detector_id = aws_guardduty_detector.main.id
+  name        = "RDS_LOGIN_EVENTS"
+  status      = "ENABLED"
 }
 
 # Security Hub. Enabling the account is separate from enabling any

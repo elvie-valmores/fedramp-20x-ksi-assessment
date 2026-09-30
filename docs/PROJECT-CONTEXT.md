@@ -33,7 +33,8 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-29:
 
-- **Persisting between sessions**: 71 AWS resources and 30 GCP ones. On AWS: the log store, CloudTrail,
+- **Persisting between sessions**: 259 AWS resource instances (73 resources plus 186 disabled
+  Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
   the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
@@ -87,7 +88,7 @@ passkeys are in place, and the operator's permission set is applied. See that da
 ### First actions for the next session
 
 1. **Verify, do not trust.** These four commands reproduce every claim in "What is standing":
-   - `infra/aws/boundary.py --persistent | wc -l` should give 71, and `--ephemeral` should give 0.
+   - `infra/aws/boundary.py --persistent | wc -l` should give 259, and `--ephemeral` should give 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
    - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
    - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
@@ -113,22 +114,25 @@ user's `~/.zshrc`.**
 
 ### What is standing
 
-**AWS: 71 persistent resources. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS: 259 persistent resource instances. Nothing ephemeral is in state and nothing expensive is running.**
 Verified 2026-09-25 against the API: no load balancer, database, ECS cluster, non-default VPC,
 endpoint, NAT gateway, Elastic IP or instance. `teardown.sh` reports "already torn down".
-`terraform state list` prints more lines than 71; the rest are data sources, which `boundary.py`
+`terraform state list` prints more lines than 259; the rest are data sources, which `boundary.py`
 leaves out.
 
 The persistent set, by file (`boundary.py --files`), is:
 
 - **Evidence layer:** the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config
   recorder, Athena and Glue, and both Lambdas.
-- **Guardrails:** the budget guardrail and the account-level S3 public access block.
+- **Guardrails:** the budget guardrail, the account-level S3 public access block, and the SSM
+  document public-sharing block.
 - **CI and cross-cloud identity:** the OIDC provider, the drift role, the build role and the
   cross-cloud role.
 - **Registry:** the ECR repositories with their signed images, the extract bucket with its TLS and
   encryption denies, and the artifacts key.
-- **Posture:** GuardDuty, Security Hub with CIS and FSBP, and Inspector on ECR.
+- **Posture:** GuardDuty (with RDS and S3 Protection), Security Hub with CIS and FSBP, and
+  Inspector on ECR. 186 Security Hub controls for undeployed services are disabled, with reasons
+  (`securityhub_controls.tf`).
 - **Operator access:** the `InterimOperatorAdmin` permission set, its policy attachment, and its
   assignment to `alex@`.
 
@@ -247,8 +251,8 @@ the worker role.
 
 | Item | State |
 |---|---|
-| Posture cost: measured, not decided | About 15 USD a month after trials, mostly Security Hub checks that cannot evaluate (2026-09-30 entry). Decide before Inspector's trial ends **2026-10-06**; Security Hub's ends about 2026-10-23 |
-| Security Hub control coverage | Controls on types the scoped Config recorder does not record produce nothing. Check which report data |
+| Posture cost: scoped, saving not yet proven | Option C applied 2026-09-30: 186 controls off. Projected about 8.70 USD a month. **Recount daily checks on 2026-10-01** and confirm `SSM.7` passes |
+| Security Hub control coverage | Undeployed services' controls are off. Kept controls for declared types the Config recorder does not record still warn. Check which |
 | Config and scheduled KMS key deletion | A finding, not a lag: still `OK` in Config a day after deletion. Correct Config's record or stop trusting Config for this type |
 | AWS-started Identity Center sign-in fails | "Responses must contain exactly one Assertion". Lead: Entity ID versus Identity Center's issuer URL. Start from the Google tile until fixed |
 | Customer-managed keys for the evidence stores | Next thing to do, item 1 |

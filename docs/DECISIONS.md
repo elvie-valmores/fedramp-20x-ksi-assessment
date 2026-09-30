@@ -6387,3 +6387,65 @@ separately, at least during the trial. Recheck after 2026-10-23.
 
 **Not decided.** The options are in the next entry once the user chooses. The recorded fallback from
 2026-09-23 is to drop Security Hub from the persistent set.
+
+---
+
+## 2026-09-30 — Security Hub scoped to the architecture; SSM document sharing blocked
+
+**Chosen: option C** of the three put to the user, over keeping everything (about 15 USD a month)
+and dropping Security Hub from the persistent set (about 3, the 2026-09-23 fallback). Security Hub
+stays, and the controls that cannot find anything are disabled, each with a reason. The user asked
+for the recommendation, and for the sequencing too: this first, then the evidence-store key, which
+needs a session of its own.
+
+**The rule, in `securityhub_controls.tf`, persistent:**
+
+- **Off by service, never by result.** A control is disabled only if its service appears nowhere in
+  this project's Terraform. Controls for declared services stay on, even while they fail or warn
+  because the application environment is down. Disabling those would remediate the measurement.
+- **Account-wide guardrails stay on, even for unused services:** `EMR.2` (block public access,
+  passing) and `SSM.7` (document public sharing, failing).
+- **The list was generated from the live FSBP control list,** not typed. So a control AWS adds
+  later arrives enabled and is caught by review.
+
+**186 disabled: 185 in FSBP, and `EFS.1` in CIS**, which is CIS v3.0's only control for an
+undeployed service. 177 FSBP and 36 CIS controls remain enabled. Each disabled control carries its
+reason in Security Hub itself, so the reason reaches an assessor looking at the console, not only
+at this repository.
+
+**Macie is a decision, not an absence, and is recorded as one.** The design classifies data by
+declaration, through KSI-MLA-ALA's three tiers, not by scanning for it, and Macie bills per bucket
+and per GB inspected. `Macie.1` and `Macie.2` are off with that reason. If discovery scanning is ever
+wanted, the reason is where to start.
+
+**`SSM.7` fixed, not excused.** The account's SSM document public sharing permission was `Enable`,
+the default. So anyone holding `ssm:ModifyDocumentPermission` could share a document publicly, and
+a document can carry commands and account details. Nothing uses SSM documents, which makes the block
+free. It is `aws_ssm_service_setting.document_public_sharing` in `account.tf`, now `Disable`.
+
+**GuardDuty's two items from the measurement, closed.** RDS Protection is declared as
+`aws_guardduty_detector_feature.rds_login_events` and adopted on purpose: KSI-IAM-SUS watches for
+repeated failed authentication against a privileged identity, and the database's is one. The
+datasources block predates the features API and cannot express it. `posture.tf`'s comment no
+longer claims S3 Protection is foundational.
+
+**The drift role gained `securityhub:List*`, `securityhub:BatchGet*` and
+`ssm:GetServiceSetting` in the same apply.** Its action list was also put back in alphabetical
+order, which my 2026-09-29 insertion had broken. The IAM policy compares as a set, so the plan
+showed only the three additions.
+
+**Applied by the user**, since the drift role change is a permission grant: 188 added, 1 changed,
+0 destroyed. Verified afterwards in Security Hub (185 and 1 `DISABLED`, `EMR.2` and `SSM.7`
+`ENABLED`), in SSM (`Disable`, `Customized`) and in GuardDuty. A plan scoped as `drift.yml` scopes it
+returns "No changes" in 25 seconds.
+
+**The persistent count is now 259**: 73 resources plus 186 control associations, each its own
+instance in state. Counts in this repository from here on are instances, which is what
+`boundary.py` has always printed.
+
+**Not yet proven: the saving.** The projection is about 5.50 USD a month for Security Hub and about
+8.70 for all three services. It assumes a disabled control stops producing billed checks. Recount the
+daily checks on 2026-10-01 (the method is in the previous entry), and confirm `SSM.7` has turned
+`PASSED`.
+
+**Collector: 28 of 29**, unchanged. Declared-exists-live and no-drift both cover all 259.
