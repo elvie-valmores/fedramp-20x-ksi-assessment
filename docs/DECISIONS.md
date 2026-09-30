@@ -6326,3 +6326,26 @@ credential at all and cannot break any glass. AWS break-glass is already root, w
 2026-09-05. Either give the user a console password and its own MFA and declare it the second
 break-glass identity, or delete it. Not decided. The collector's exclusion wording now says the
 same.
+
+**Addendum, same day: `terraform-admin` is deleted, and the account has no IAM users.** The user
+deleted the access key early rather than waiting a week, then chose deletion over a second
+break-glass identity: root with MFA already fills that role, and a second one would be one more
+credential to guard. Deleting the user took detaching AdministratorAccess and `delete-user`; it held
+no password, MFA, group or other credential. CloudTrail attributes `UpdateAccessKey`,
+`DeleteAccessKey` and `DetachUserPolicy` to `alex@corp.elvievalmores.com`, so administrative
+changes now name a person. `~/.aws/credentials` was removed and `AWS_PROFILE=caliper-admin` set in
+`~/.zshrc`. With no profile set, the CLI finds no credentials, so no static AWS credential remains
+on the workstation.
+
+The collector's `terraform-admin` exclusion was removed along with the user, since an exclusion
+that matches nothing hides nothing and only waits to excuse a new user of that name.
+
+**Config recorded this deletion in seconds, and that sharpens the KMS finding.** The user's
+deletion was recorded at 23:06:29 UTC, seconds after `delete-user`. One run even straddled it: the
+first inventory check saw the user as stale, and the second, moments later, no longer saw it at
+all. So Config records explicit deletions promptly, and a scheduled KMS deletion finishing is what
+it misses. The 8 stale entries left are all KMS keys.
+
+**The 2026-09-23 finding is closed.** It was "an IAM user with AdministratorAccess, a static key
+active since 2026-09-17, and no MFA". Every local apply now runs as a four-hour session behind a
+passkey, under the 2026-09-19 exception.

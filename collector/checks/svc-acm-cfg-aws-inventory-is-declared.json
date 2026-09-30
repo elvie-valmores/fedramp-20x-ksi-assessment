@@ -62,13 +62,6 @@
           "predicate": "kms_pending_deletion"
         },
         "reason": "A customer key a teardown destroyed. KMS holds it in PendingDeletion for its waiting period before removing it; it left state when Terraform scheduled the deletion."
-      },
-      {
-        "resource_type": "AWS::IAM::User",
-        "rule": {
-          "name_equals": "terraform-admin"
-        },
-        "reason": "The former operator identity, created by hand before any root existed so it cannot be declared by what it creates. Replaced by Identity Center on 2026-09-30: its access key was deactivated that day and is to be deleted about 2026-10-07. Excused from this check only, and not an accepted credential: what the user is for once it holds no key is an open decision (DECISIONS.md, 2026-09-30)."
       }
     ]
   }
