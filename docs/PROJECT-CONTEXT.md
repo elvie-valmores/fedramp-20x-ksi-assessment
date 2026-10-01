@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-10-01:
 
-- **Persisting between sessions**: 266 AWS resource instances (80 resources plus 186 disabled
+- **Persisting between sessions**: 269 AWS resource instances (83 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -93,12 +93,16 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    `AWS_PROFILE=caliper-admin`. It is set in the user's `~/.zshrc`, but a shell started earlier may
    not have it. There are no static AWS credentials anywhere, and no IAM users.
 2. **Verify, do not trust:**
-   - `infra/aws/boundary.py --persistent | wc -l` gives **266**, and `--ephemeral` gives 0.
+   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The 05:30 UTC run is
+     expected to be red **only** on the two known findings below. Open its log: the self-test says
+     22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
+     `evidence-<run id>` holds `results.json` and the SDR.
+   - `infra/aws/boundary.py --persistent | wc -l` gives **269**, and `--ephemeral` gives 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
-   - `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running things"
-     gives **30 of 32**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS finding) and
-     `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS orphan log group).
+   - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
+     things" gives **30 of 32**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS
+     finding) and `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS orphan log group).
 3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
    were both done on 2026-10-01 evening.
 
@@ -110,9 +114,9 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
 
 ### What is standing
 
-**AWS: 266 persistent resource instances** (80 resources plus 186 disabled Security Hub
+**AWS: 269 persistent resource instances** (83 resources plus 186 disabled Security Hub
 controls). Nothing ephemeral is in state, and nothing expensive is running (verified 2026-10-01).
-`terraform state list` prints more lines than 266; the rest are data sources.
+`terraform state list` prints more lines than 269; the rest are data sources.
 
 The persistent set, by file (`boundary.py --files`, 15 files):
 
@@ -131,6 +135,11 @@ The persistent set, by file (`boundary.py --files`, 15 files):
   artifacts key.
 - **Posture:** GuardDuty (with RDS and S3 Protection), Security Hub with CIS and FSBP (186 controls
   for undeployed services disabled, with reasons), and Inspector on ECR.
+- **The collector's CI identities:** the AWS role `fedramp-20x-ksi-github-collector` (the drift
+  role's reads plus four collector-only statements), and on GCP the `github-actions` workload
+  identity pool, its GitHub provider pinned to the repository's immutable IDs and `main`, and the
+  custom role `fedrampKsiCollector` granted to the federated principal. `collect.yml` runs daily at
+  05:30 UTC and emits the SDR. Bootstrap's state is in the state bucket since 2026-10-01.
 - **Operator access:** the `InterimOperatorAdmin` permission set (4-hour sessions,
   AdministratorAccess) assigned to `alex@`, under the 2026-09-19 exception.
 
@@ -176,7 +185,7 @@ Nothing below is "configured". Each was exercised.
   `alex@corp.elvievalmores.com` in CloudTrail.
 - **Declared versus live, inventory currency, the SDR, drift, bucket protections, posture,
   pipeline, application, teardown, federation and cross-cloud trust:** as recorded through
-  2026-09-25. Drift is green in CI over all 266.
+  2026-09-25. Drift is green in CI over all 269.
 
 ### The persistence boundary, which is a rule
 
@@ -223,7 +232,7 @@ around a refusal.** Refused so far:
 
 ### The next thing to do
 
-**Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 31
+**Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 32
 of roughly 380 checks. In rough priority:
 
 1. **Close the regional log bucket blind spot:** Cloud Asset does not report
