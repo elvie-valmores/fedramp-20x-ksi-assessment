@@ -208,6 +208,7 @@ data "aws_iam_policy_document" "key_evidence" {
   #
   #   normalize_events     reads CloudTrail files, writes normalized events
   #   run_detection_query  reads normalized events and writes results, via Athena
+  #   github_collector     the same, for the collector's query check in CI
   #
   # The Config recorder role was here until the first apply showed Config
   # never delivers as it (the next statement).
@@ -223,6 +224,7 @@ data "aws_iam_policy_document" "key_evidence" {
       identifiers = [
         aws_iam_role.normalize_events.arn,
         aws_iam_role.run_detection_query.arn,
+        aws_iam_role.github_collector.arn,
       ]
     }
 

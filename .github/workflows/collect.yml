@@ -1,29 +1,31 @@
 # Runs the evidence collector in CI.
 #
-# Built in stages (DECISIONS.md, 2026-10-01). This first stage is manual
-# only and GCP only: it proves that GitHub can reach GCP by workload
-# identity federation, with no key, and fills in the collector's
-# enumerated role by running each GCP check and adding what fails. The
-# schedule, the AWS identity and the SDR come after.
+# Built in stages (DECISIONS.md, 2026-10-01). Stage A proved GitHub reaches
+# GCP by workload identity federation, with no key. Stage C1, this one, runs
+# every check that does not need Terraform state, as the collector's own
+# identity in each cloud: an AWS role through the OIDC provider, and the
+# federated principal in GCP. The state-based checks (C2) wait on two
+# things recorded in DECISIONS.md: bootstrap's state is local by design,
+# and the GCP plan needs its own read role. Manual until both clouds pass.
 name: collect
 
 on:
   workflow_dispatch:
     inputs:
-      checks:
-        description: 'Space-separated check id globs to run'
+      skip:
+        description: 'Space-separated check id globs to leave out'
         required: true
-        default: 'piy-giv-cfg-gcp-* iam-elp-cfg-gcp-* svc-sin-cfg-gcp-* piy-giv-ops-gcp-inventory-has-project'
+        default: 'svc-acm-* *-inventory-is-declared *-inventory-current'
         type: string
 
-# `id-token: write` mints the OIDC token GCP exchanges; nothing else is
-# needed beyond reading the repository.
+# `id-token: write` mints the OIDC token both clouds exchange; nothing else
+# is needed beyond reading the repository.
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  gcp:
+  collect:
     runs-on: ubuntu-latest
     # Seconds normally. A hung job would otherwise run for GitHub's 6-hour default.
     timeout-minutes: 15
@@ -39,6 +41,13 @@ jobs:
       - name: install collector dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: assume the collector role
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_COLLECTOR_ROLE }}
+          aws-region: us-east-1
+          role-session-name: collect-${{ github.run_id }}
+
       # Direct workload identity federation: no service account, so nothing
       # to impersonate. The principal is this repository on main, and it
       # holds the collector's custom role and nothing else.
@@ -52,11 +61,11 @@ jobs:
         working-directory: collector
         env:
           GCP_IMPERSONATE: none
-          CHECKS: ${{ inputs.checks }}
+          SKIP: ${{ inputs.skip }}
         run: |
           set -f  # the globs are for run_checks.py, not the shell
           args=()
-          for g in $CHECKS; do args+=(--only "$g"); done
+          for g in $SKIP; do args+=(--skip "$g"); done
           python run_checks.py --json results.json "${args[@]}"
 
       - name: keep the results

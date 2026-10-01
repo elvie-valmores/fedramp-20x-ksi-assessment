@@ -46,11 +46,17 @@ def main() -> int:
         "--only", action="append", metavar="GLOB",
         help="run only checks whose id matches; repeatable",
     )
+    parser.add_argument(
+        "--skip", action="append", metavar="GLOB",
+        help="leave out checks whose id matches; repeatable, applied after --only",
+    )
     args = parser.parse_args()
 
     checks = load_checks()
     if args.only:
         checks = [c for c in checks if any(fnmatch.fnmatchcase(c.id, g) for g in args.only)]
+    if args.skip:
+        checks = [c for c in checks if not any(fnmatch.fnmatchcase(c.id, g) for g in args.skip)]
     if not checks:
         print("no check definitions found in collector/checks/")
         return 1

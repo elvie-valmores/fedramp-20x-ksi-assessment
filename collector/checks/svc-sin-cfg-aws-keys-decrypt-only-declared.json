@@ -13,6 +13,7 @@
       "alias/fedramp-20x-ksi-evidence": [
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-normalize-events",
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-run-detection-query",
+        "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-collector",
         "service:config.amazonaws.com",
         "service:logs.us-east-1.amazonaws.com",
         "service:cloudwatch.amazonaws.com",
