@@ -1,0 +1,68 @@
+# Runs the evidence collector in CI.
+#
+# Built in stages (DECISIONS.md, 2026-10-01). This first stage is manual
+# only and GCP only: it proves that GitHub can reach GCP by workload
+# identity federation, with no key, and fills in the collector's
+# enumerated role by running each GCP check and adding what fails. The
+# schedule, the AWS identity and the SDR come after.
+name: collect
+
+on:
+  workflow_dispatch:
+    inputs:
+      checks:
+        description: 'Space-separated check id globs to run'
+        required: true
+        default: 'piy-giv-cfg-gcp-* iam-elp-cfg-gcp-* svc-sin-cfg-gcp-* piy-giv-ops-gcp-inventory-has-project'
+        type: string
+
+# `id-token: write` mints the OIDC token GCP exchanges; nothing else is
+# needed beyond reading the repository.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gcp:
+    runs-on: ubuntu-latest
+    # Seconds normally. A hung job would otherwise run for GitHub's 6-hour default.
+    timeout-minutes: 15
+    steps:
+      - name: check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: set up python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+
+      - name: install collector dependencies
+        run: python -m pip install -r requirements.txt
+
+      # Direct workload identity federation: no service account, so nothing
+      # to impersonate. The principal is this repository on main, and it
+      # holds the collector's custom role and nothing else.
+      - name: authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/921906217926/locations/global/workloadIdentityPools/github-actions/providers/github
+          project_id: fedramp-20x-ksi-assessment
+
+      - name: run the checks
+        working-directory: collector
+        env:
+          GCP_IMPERSONATE: none
+          CHECKS: ${{ inputs.checks }}
+        run: |
+          set -f  # the globs are for run_checks.py, not the shell
+          args=()
+          for g in $CHECKS; do args+=(--only "$g"); done
+          python run_checks.py --json results.json "${args[@]}"
+
+      - name: keep the results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: collector-results
+          path: collector/results.json
+          if-no-files-found: warn

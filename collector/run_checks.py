@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 from dataclasses import asdict
@@ -41,9 +42,15 @@ def load_checks() -> list[CheckDefinition]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=Path, help="also write every outcome to this file")
+    parser.add_argument(
+        "--only", action="append", metavar="GLOB",
+        help="run only checks whose id matches; repeatable",
+    )
     args = parser.parse_args()
 
     checks = load_checks()
+    if args.only:
+        checks = [c for c in checks if any(fnmatch.fnmatchcase(c.id, g) for g in args.only)]
     if not checks:
         print("no check definitions found in collector/checks/")
         return 1

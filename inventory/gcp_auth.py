@@ -12,9 +12,19 @@ is a long-lived secret that can leak; a minted token expires on its own.
 This mirrors what infra/gcp/provider.tf does for Terraform, so both the
 Python tooling and the Terraform runs act as the same identity with the
 same permissions.
+
+In CI there is no one to impersonate as. GitHub Actions authenticates by
+workload identity federation, and the federated principal holds the
+collector's own read-only role directly (infra/gcp/github_federation.tf).
+GCP_IMPERSONATE=none says so: the ambient credentials are used as they are.
+Locally it is unset and the two-hop path above applies. CI must never be
+given the token-creator grant on terraform-admin that impersonation needs:
+that would make a read-only workflow a provisioning one.
 """
 
 from __future__ import annotations
+
+import os
 
 import google.auth
 from google.auth import impersonated_credentials
@@ -37,15 +47,22 @@ class GCPNotConfigured(RuntimeError):
     less obvious error surface further down the call stack."""
 
 
-def impersonated_token(project_id: str) -> impersonated_credentials.Credentials:
-    """Return credentials that act as terraform-admin in `project_id`."""
+def impersonated_token(project_id: str):
+    """Credentials for `project_id`: terraform-admin's, or the caller's own.
+
+    The caller's own when GCP_IMPERSONATE is "none" (CI); otherwise a token
+    minted for terraform-admin.
+    """
     try:
-        caller_credentials, _ = google.auth.default()
+        caller_credentials, _ = google.auth.default(scopes=SCOPES)
     except google.auth.exceptions.DefaultCredentialsError as exc:
         raise GCPNotConfigured(
             "No Application Default Credentials found. Run "
             "'gcloud auth application-default login' first."
         ) from exc
+
+    if os.environ.get("GCP_IMPERSONATE", "").lower() == "none":
+        return caller_credentials
 
     return impersonated_credentials.Credentials(
         source_credentials=caller_credentials,
@@ -55,5 +72,5 @@ def impersonated_token(project_id: str) -> impersonated_credentials.Credentials:
 
 
 def asset_client(project_id: str) -> asset_v1.AssetServiceClient:
-    """Cloud Asset Inventory client authenticated as terraform-admin."""
+    """Cloud Asset Inventory client, authenticated as impersonated_token says."""
     return asset_v1.AssetServiceClient(credentials=impersonated_token(project_id))

@@ -1,0 +1,83 @@
+# GitHub Actions to GCP, without a key.
+#
+# The GCP counterpart of infra/aws/pipeline_identity.tf's OIDC provider.
+# Built on 2026-10-01 for the collector's schedule, which cannot run in CI
+# while GCP checks have no identity there, and which is also the missing
+# piece for building the analytics image (DECISIONS.md, 2026-10-01).
+#
+# Two choices, each the same as the AWS side's or stricter:
+#
+#   - Trust is pinned to GitHub's immutable numeric IDs for the owner and
+#     the repository, and to main, not to names. A repository renamed or
+#     recreated with a familiar name does not inherit it. See the long
+#     comment on github_subject in infra/aws/pipeline.tf for why IDs.
+#   - Access is granted to the federated principal directly, with no
+#     service account in between. There is no identity to impersonate and
+#     no token-creator grant to guard, and GCP's audit logs name the
+#     repository itself as the caller.
+#
+# Permanent in practice: a deleted pool or provider keeps its ID reserved
+# for 30 days, and a deleted custom role for 37.
+
+locals {
+  github_owner_id = "181586876"
+  github_repo_id  = "1375137942"
+}
+
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github-actions"
+  display_name              = "GitHub Actions"
+  description               = "Workflows in this project's repository, on main only."
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  display_name                       = "GitHub OIDC"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository_id"
+    "attribute.owner"      = "assertion.repository_owner_id"
+    "attribute.ref"        = "assertion.ref"
+  }
+
+  # Evaluated on every token exchange. A token from any other repository,
+  # owner or branch is refused here, before any grant is consulted.
+  attribute_condition = join(" && ", [
+    "assertion.repository_owner_id == '${local.github_owner_id}'",
+    "assertion.repository_id == '${local.github_repo_id}'",
+    "assertion.ref == 'refs/heads/main'",
+  ])
+}
+
+# What the collector reads. Enumerated, not a predefined role: the
+# 2026-09-05 CNA-DFP decision bars predefined roles on any workload
+# identity, because their contents change when Google changes them.
+# Built up by running every GCP check under this role and adding exactly
+# what each failure named (DECISIONS.md, 2026-10-01).
+resource "google_project_iam_custom_role" "collector" {
+  role_id     = "fedrampKsiCollector"
+  title       = "fedramp-20x-ksi collector"
+  description = "Read-only access for the evidence collector run from GitHub Actions."
+
+  permissions = [
+    # piy-giv-cfg-gcp-asset-feed
+    "cloudasset.feeds.get",
+    "cloudasset.feeds.list",
+    # the inventory generator, and svc-sin-cfg-gcp-stores-use-declared-keys
+    "cloudasset.assets.searchAllResources",
+    # iam-elp-cfg-gcp-basic-roles-allowed-only
+    "cloudasset.assets.searchAllIamPolicies",
+  ]
+}
+
+resource "google_project_iam_member" "github_collector" {
+  project = var.gcp_project_id
+  role    = google_project_iam_custom_role.collector.id
+  member  = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repo_id}"
+}
