@@ -6874,3 +6874,59 @@ with a fresh event after several minutes, never immediately.**
 decrypts are KMS Data Access logs that land in the same bucket (6 for one read). It is bounded,
 triggered only by reads, and negligible at this volume. It would matter for a reader polling the
 bucket constantly.
+
+---
+
+## 2026-10-01 (evening) — GitHub federated to GCP: step A of the collector schedule
+
+**The plan, agreed with the user**, has four steps, in this order:
+
+- **A.** GitHub-to-GCP workload identity federation
+- **B.** an AWS collector role on the existing OIDC provider
+- **C.** a scheduled `collect.yml`
+- **D.** proof, including a missing-permission negative
+
+A comes first: it has the most unknowns, it also unblocks the analytics image build, and a schedule
+without it would emit an SDR with every GCP check erroring.
+
+**Built (`infra/gcp/github_federation.tf`, applied by the user):**
+
+- **A pool and provider pinned to GitHub's immutable IDs.** The pool is `github-actions` and the
+  provider `github`. The condition is `repository_owner_id == '181586876' && repository_id ==
+  '1375137942' && ref == 'refs/heads/main'`, the same immutable-ID reasoning as
+  `infra/aws/pipeline.tf`.
+- **A custom role, `fedrampKsiCollector`**, granted directly to
+  `principalSet://…/attribute.repository/1375137942`. **No service account**: nothing to
+  impersonate, no token-creator grant, and GCP's logs name the repository. It is enumerated, not
+  predefined, per CNA-DFP (2026-09-05). It starts with four Cloud Asset permissions, and grows only
+  by what a CI run fails on.
+- **`inventory/gcp_auth.py`** uses the ambient credentials when `GCP_IMPERSONATE=none`. CI must
+  never get a token-creator grant on `terraform-admin`, because that would make a read-only
+  workflow a provisioning one. Locally nothing changes.
+- **`run_checks.py --only <glob>`**, and a manual-only `.github/workflows/collect.yml` (actions
+  pinned, `google-github-actions/auth` at v3.0.0, `7c6bc770…`).
+
+**`terraform-admin` needed two more roles,** granted by the user like its others:
+`roles/iam.workloadIdentityPoolAdmin` and `roles/iam.roleAdmin`. Its `roles/editor` covers
+neither. The first apply after the grants created the role but was refused on the pool. A
+`testIamPermissions` call minutes later showed both granted: **an IAM grant can take minutes to
+apply, and unevenly across permissions.** Neither widens what `terraform-admin` could already do,
+since it holds `projectIamAdmin`.
+
+**Proven:**
+
+- **The positive.** Run 36936657680, from `main`, passed all four direct GCP checks: asset feed,
+  basic roles, store keys and project inventory. No key, no service account, four permissions.
+- **The negative.** Run 36936757047, the same workflow from a throwaway branch, failed at
+  "authenticate to GCP" with `unauthorized_client`. The ref pin is enforced at token exchange,
+  before any grant is consulted. The branch was deleted.
+
+**The scope that remains,** recorded before it is built:
+
+- **The GCP drift and inventory checks run `terraform plan` and read Terraform state.** The GCP
+  provider impersonates `terraform-admin`, so CI needs that impersonation made optional, a
+  read-only role wide enough for the plan, and AWS read access to the S3 state, which is step B.
+- **The GCP budget sits on the billing account,** which accepts only predefined roles without an
+  organization, and those are barred. The CI plan would exclude it, as a recorded exception.
+- **`requirements.txt` pins versions but not hashes.** The app manifests require hashes. CI
+  installing the collector should too.
