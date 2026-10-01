@@ -226,9 +226,13 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 31
 of roughly 380 checks. In rough priority:
 
-1. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
-   hand", and the emitter cannot run in CI.
-2. **More check definitions**, negative controls for the older handlers, and **links from checks
+1. **A record store for collector runs**, so SDR-CSX-KMT's 30-day and yearly metrics exist. The
+   daily runs are kept as 90-day artifacts but not aggregated.
+2. **Hash-pin `requirements.txt`**, now that CI installs from it, and align CI's Terraform
+   (1.10.5) with local (1.16.3).
+3. **The analytics image build**, now that GitHub can reach GCP: a third image and an Artifact
+   Registry push identity, then GCP phase 2.
+4. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -256,9 +260,7 @@ of roughly 380 checks. In rough priority:
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| No collector schedule or runtime | Next thing to do, item 1 |
-| The analytics image has no build path | Blocks GCP phase 2 |
-| `APP_DOMAIN` is not a repository variable | Harmless while only ephemeral files use it |
+| The analytics image has no build path | GitHub-to-GCP federation now exists; the push identity and build entry remain. Next thing to do, item 3 |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |

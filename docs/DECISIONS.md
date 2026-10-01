@@ -6968,3 +6968,74 @@ plus those four statements was the whole AWS permission set.
   secret values would stop it. CI collection therefore assumes the environment is down, its
   normal state.
 - **Every action runs from a commit**, but `requirements.txt` still has versions without hashes.
+
+---
+
+## 2026-10-01 (night) — The collector runs daily from CI, and the SDR comes with it
+
+**C2: the eight state-based checks.**
+
+- **Bootstrap's state moved into the state bucket** (`bootstrap/terraform.tfstate`), by
+  `terraform init -migrate-state`, run by the user. It was checked first for secrets: the ACM
+  certificate is Amazon-issued, so its `private_key` is empty. After the migration bootstrap plans
+  "No changes", provided `TF_VAR_app_domain` is set. **Without it, the plan destroys the
+  certificate**, because its `count` is 0. The first plan after the migration showed exactly that,
+  and was not applied. Bootstrap's state needed the bucket to exist before it could live in it; if
+  the bucket is ever recreated, bootstrap goes back to local state first (recorded in its
+  `versions.tf`).
+- **The GCP providers impersonate only when asked.** `var.impersonate_service_account` defaults to
+  `terraform-admin` locally, and CI sets it empty, so the plan runs as the read-only federated
+  principal. The CI identity never holds a token-creator grant on `terraform-admin`.
+- **The collector role gained the plan's reads, from the state's resource types plus what CI
+  failed on.** Two corrections came from running:
+  - `logging.settings.get`, not `logging.cmekSettings.get`, which is not a project permission
+  - `serviceusage.services.list`, because the provider reads enabled services by listing
+- **One read was removed instead of granted.** Reading BigQuery's service agent requires
+  `bigquery.jobs.create`, the right to run jobs. The agent exists, and its address matched state
+  exactly, so `analytics.tf` now builds it from the project number, and the plan showed no change
+  to the grant. That reverses the 2026-09-22 "read, not constructed" rule for this one agent, with
+  the reason in the file.
+- **The GCP budget is excluded from CI's plan, and the evidence says so.** The new
+  `ci_plan_exclusions` applies only when running as the read-only identity
+  (`GCP_IMPERSONATE=none`), and lands in each check's evidence as `excluded_from_plan` with its
+  reason. Local runs still cover the budget.
+- **`APP_DOMAIN` is now a repository variable**, which closes the open item: `drift.yml` passed it
+  empty since 2026-09-23.
+
+**D: the negatives.**
+
+- **The ref pin:** a run from another branch is refused at token exchange (run 36936757047).
+- **A missing permission surfaces as an error on exactly the checks that need it.** Run
+  36938488520 lacked `serviceusage.services.list`; the two GCP plan checks errored naming it, and
+  the other 30 were unaffected. With it added, they passed. This was not staged: the role was
+  incomplete, and the run showed precisely where.
+
+**The schedule:**
+
+- `collect.yml` runs at **05:30 UTC daily**, ahead of `drift.yml` at 07:00, so they never contend
+  for a state lock.
+- **Each run:** self-test (22 of 22), then all 32 checks, then the SDR (emitted whatever the checks
+  found), then `results.json` and the record kept as a 90-day artifact. Then the job fails if any
+  check failed. A red run means findings, not a broken job.
+- **`sdr/emit.py` takes a required `--runtime ci|local`,** so its cycle statement says which. SDR-
+  CSX-KMT's limit is restated, not dropped: runs are daily, but no record store aggregates them, so
+  each record's window is still one run.
+
+**Proven: run 36941269154.** Every step ran, 30 of 32 checks passed (the two failures are the known
+real findings), and the SDR is schema-valid at a **clean** version, `61ea761d1e1a`. Getting it
+clean took two fixes:
+
+- **The lock files held macOS hashes only,** so `terraform init` in CI added the Linux ones and
+  changed tracked files. They now carry both platforms.
+- **The Google auth action writes `gha-creds-*.json`** into the workspace (a pointer to the OIDC
+  token, not a key). It is ignored now.
+
+The emitter names the files whenever it marks a version dirty, and that is how both causes were
+found.
+
+**What remains:**
+
+- No record store, so no 30-day or yearly metrics.
+- `requirements.txt` has versions without hashes.
+- Local Terraform is 1.16.3 while CI pins 1.10.5. It works, but they should match.
+- CI collection assumes the environment is down, its normal state.
