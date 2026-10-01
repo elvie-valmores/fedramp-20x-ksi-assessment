@@ -6805,3 +6805,28 @@ handler removed.
 
 **State:** collector 30 of 32 (the KMS finding and the RDS orphan log group), self-test 22 of 22,
 drift clean on both clouds.
+
+**The GCP change feed: a stated reason, and a reader that proves delivery.** The design settles
+what the feed is for:
+
+- KSI-PIY-GIV's build row 2 names it, and its verify line asks that it be enabled.
+- The inventory's "real-time" claim is met by generating at query time from Cloud Asset, not from
+  the feed.
+- GCP's change record is the Admin Activity audit log, 400 days in `_Required`.
+
+So the feed's notices are **not retained**, by decision. Keeping them would duplicate the audit log.
+What it lacked was proof that it delivers. `inventory/self_test.py` already created a subscription
+on the feed's topic as its "unwatched type" seed, but never read from it, and created it after the
+seed bucket, so it could not have received the creation notice anyway. It now:
+
+1. creates the subscription before the bucket
+2. pulls until a feed message names the seed (up to 120 seconds)
+3. fails the GCP self-test if none arrives
+
+Live, it passed for feed delivery, liveness and accuracy, through the encrypted topic. Negative
+control: the same check on a fresh subscription for a resource that never existed returned False
+after its 30-second window.
+
+**The retry build passed** (run 36924507289, triggered by the timeout change). Both images built,
+pushed and signed under the narrowed build-role grant, the api image in under two minutes. The
+earlier hang was transient. The build-role narrowing is fully proven.

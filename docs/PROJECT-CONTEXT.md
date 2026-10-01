@@ -99,10 +99,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    - `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running things"
      gives **30 of 32**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS finding) and
      `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS orphan log group).
-3. **Check the retry build** of `build-and-push.yml` (triggered by the timeout change): both
-   images should push under the narrowed build-role grant. If the api image hangs again, the
-   30-minute timeout now stops it, and the cause is worth chasing.
-4. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
+3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
    were both done on 2026-10-01 evening.
 
 ### Waiting on the user
@@ -229,12 +226,9 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 31
 of roughly 380 checks. In rough priority:
 
-1. **Give the GCP change feed a consumer, or a stated reason to exist**, and give
-   `piy-giv-cfg-gcp-asset-feed` a delivery test in place of a configuration read (2026-10-01
-   evening).
-2. **Decide `_Default`'s Data Access logs:** reroute them to a new regional bucket under the GCP
+1. **Decide `_Default`'s Data Access logs:** reroute them to a new regional bucket under the GCP
    evidence key, or keep the recorded platform exception.
-3. **Try removing the build role's KMS statement entirely.** It made no KMS calls during a push.
+2. **Try removing the build role's KMS statement entirely.** It made no KMS calls during a push.
 4. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", and the emitter cannot run in CI.
 5. **More check definitions**, negative controls for the older handlers, and **links from checks
@@ -256,9 +250,9 @@ of roughly 380 checks. In rough priority:
 
 | Item | State |
 |---|---|
-| GCP change feed has no consumer | It delivers in seconds through the encrypted topic, but nothing subscribes, so notices are discarded. Its check reads configuration only |
+| GCP change feed notices are not retained | By decision: the audit log is the change record. Delivery is proven by `inventory/self_test.py` on every run |
 | Security Hub billed checks | Recount showed about 230 findings a day (from 372), a proxy. Billed count on the console's Usage page; first real bill after about 2026-10-23 |
-| api image build hung 21 minutes on 2026-10-01 | Cause unknown, no logs kept. Jobs now time out |
+| api image build hung 21 minutes on 2026-10-01 | Transient: the retry built in under 2 minutes. Cause unknown, no logs kept. Jobs now time out |
 | Unprovisioned directory accounts leave no CloudTrail trace | Coverage gap for KSI-IAM-SUS and KSI-MLA-LET. Google's SAML audit log is the only record, and nothing collects it |
 | Build role's KMS statement on the artifacts key | Narrowed to ECR and proven. No KMS calls seen during a push: may be removable |
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
