@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-29:
 
-- **Persisting between sessions**: 263 AWS resource instances (77 resources plus 186 disabled
+- **Persisting between sessions**: 266 AWS resource instances (80 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -88,7 +88,7 @@ passkeys are in place, and the operator's permission set is applied. See that da
 ### First actions for the next session
 
 1. **Verify, do not trust.** These four commands reproduce every claim in "What is standing":
-   - `infra/aws/boundary.py --persistent | wc -l` should give 263, and `--ephemeral` should give 0.
+   - `infra/aws/boundary.py --persistent | wc -l` should give 266, and `--ephemeral` should give 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
    - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
    - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
@@ -102,7 +102,7 @@ passkeys are in place, and the operator's permission set is applied. See that da
 
 | Item | What they do |
 |---|---|
-| **Optional: test the evidence key's deletion guard** | As `caliper-admin`, `aws kms disable-key --key-id 402d209c-4e0b-4d63-8170-d61ea215fe76` must fail with `AccessDeniedException`, and an email should arrive. If it succeeds, `aws kms enable-key` with the same ID at once |
+| _Nothing waiting_ | The deletion guard was tested by the user on 2026-10-01: denied, alert delivered |
 
 Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
 user's word). The `InterimOperatorAdmin` permission set is assigned to `alex@`, under the 2026-09-19
@@ -114,10 +114,10 @@ user's `~/.zshrc`.**
 
 ### What is standing
 
-**AWS: 263 persistent resource instances. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS: 266 persistent resource instances. Nothing ephemeral is in state and nothing expensive is running.**
 Verified 2026-09-25 against the API: no load balancer, database, ECS cluster, non-default VPC,
 endpoint, NAT gateway, Elastic IP or instance. `teardown.sh` reports "already torn down".
-`terraform state list` prints more lines than 263; the rest are data sources, which `boundary.py`
+`terraform state list` prints more lines than 266; the rest are data sources, which `boundary.py`
 leaves out.
 
 The persistent set, by file (`boundary.py --files`), is:
@@ -232,9 +232,10 @@ command. Do not route around the refusal.
 automated evidence (29 of roughly 380 checks). The other four mechanisms are genuinely blocked. In
 rough priority:
 
-1. **The rest of SVC-SIN row 1.** The evidence key is done (2026-09-30), apart from the two checks
-   under "Waiting on the user". Next come the other data classes' keys, the stores still on AWS keys
-   (log groups, the detection topic), and collector checks for rows 1 and 6.
+1. **SVC-SIN row 6's check:** key policies grant decrypt only to declared roles, resolved through
+   IAM where a policy delegates to it (the artifacts key does). Row 1's check is built
+   (`svc-sin-cfg-aws-stores-use-declared-keys`, 14 of 15; 2026-10-01 entry). Then row 1 on GCP:
+   GCS, BigQuery and Artifact Registry with customer keys.
 2. **Fix the AWS-started sign-in** (2026-09-30 entry). Until then, sign-in starts at the Google tile.
 3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
@@ -242,7 +243,9 @@ rough priority:
    older handlers**.
 5. **Link check definitions to matrix rows**, so the SDR can say which row each check proves.
 
-**At the next phase 1:** confirm the declared default security group applied with no rules, and that
+**At the next phase 1:** confirm `aws_cloudwatch_log_group.rds["postgresql"]` was imported and is
+under the logs key, and that `svc-sin-cfg-aws-stores-use-declared-keys` then passes. Confirm the
+declared default security group applied with no rules, and that
 `svc-acm-cfg-aws-inventory-is-declared` passes with the environment up. **At the next phase 2:**
 confirm the worker's extracts still land through the VPC endpoint, since that restriction moved to
 the worker role.
@@ -253,8 +256,9 @@ the worker role.
 |---|---|
 | Posture cost: scoped, saving not yet proven | Option C applied 2026-09-30: 186 controls off. Projected about 8.70 USD a month. **Recount daily checks on 2026-10-01** and confirm `SSM.7` passes |
 | Security Hub control coverage | Undeployed services' controls are off. Kept controls for declared types the Config recorder does not record still warn. Check which |
+| Normalized corpus before 2026-10-01 misclassifies sign-ins | Failed sign-ins recorded as successes until the normalizer fix. Ages out by 2026-10-08; read raw CloudTrail for earlier failures |
 | Config and scheduled KMS key deletion | A finding, not a lag: still `OK` in Config a day after deletion. Correct Config's record or stop trusting Config for this type |
-| AWS-started Identity Center sign-in fails | "Responses must contain exactly one Assertion". Lead: Entity ID versus Identity Center's issuer URL. Start from the Google tile until fixed |
+| AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed; Google app-access propagation fits. Watch for a recurrence |
 | No collector schedule or runtime exists | Next thing to do, item 3 |
 | Config lag on implicit deletions | Handled by `inventory_current`. Four AWS types and all of GCP cannot be probed, and stay unaccounted when undeclared |
 | The analytics image has no build path | Blocks GCP phase 2. Needs GitHub-to-GCP federation and a third matrix entry in `build-and-push.yml` |

@@ -6533,3 +6533,134 @@ key. CloudTrail's own encryption calls KMS per file, about 200 an hour across re
 AWS keys: log groups, the detection topic, the registries (already on the artifacts key), state
 machines. Then a collector check for row 1's verify line, "every store reports encryption with the
 expected key", and row 6's, "key policies grant decrypt only to declared roles, resolved".
+
+---
+
+## 2026-10-01 — Three controls that did nothing, found by making them run
+
+The evidence key's verification ran into three controls that were configured, applied and
+internally consistent, and did nothing. Each was found by making it fire, and each is now proven by
+firing it again.
+
+**1. The key's deletion alert could only catch root.** The deny worked first time: as
+`caliper-admin`, the user's `disable-key` was refused with "explicit deny in a resource-based
+policy". But the alert rule never matched. For a denied call, CloudTrail records `resources: null`
+and `requestParameters: null`, and names the key only in `errorMessage`. The rule matched on
+`resources.ARN`, so it could fire only for a successful call, and only root can make one. The
+attempts the deny exists to stop would have raised no alert.
+
+The rule now matches either shape (`$or` on `resources.ARN` and a wildcard on `errorMessage`).
+EventBridge's own `test-event-pattern`, run against the real denied event, gave: old pattern False,
+new pattern True, new pattern aimed at another key False. Live, the user's second denied attempt
+triggered the rule at 00:39, invoked its target with no failures, and SNS delivered it.
+
+**2. Failed sign-ins were recorded as successes, and workforce sign-ins were not authentication.**
+The detection Lambda returned `{"matches": 0}` over a window holding two failed Identity Center
+sign-ins. The normalizer had two faults:
+
+- It decided `status` from `errorCode` alone. Sign-in events carry no `errorCode`; they report
+  `{"<eventName>": "Failure"}` in `responseElements`. So every failed sign-in was a `Success`,
+  including root `ConsoleLogin` failures.
+- Its authentication event list predated federation, so `ExternalIdPDirectoryLogin` and
+  `UserAuthentication` were filed as `API Activity`, where the detection never looks.
+
+Since 2026-09-22, KSI-IAM-SUS's "repeated failed authentication against a privileged identity" could
+not see a single failure. The fix reads `responseElements` and adds the Identity Center events.
+`lambda/normalize_events/test_handler.py` holds the first tests the normalizer has had. They are
+built on real records from this account, with IPs and the console sign-in's OAuth state replaced.
+They include negative controls that reintroduce each fault and confirm the tests fail. The old code
+on the same records: failed IdP sign-in gives API Activity/Success; failed root console login gives
+Authentication/Success.
+
+**Corpus data from before the fix stays misclassified.** It sits under Object Lock and ages out by
+2026-10-08. The raw CloudTrail is intact. A query for failed sign-ins before 2026-10-01 has to read
+`responseElements` from the raw files, not the normalized corpus.
+
+**3. The two Lambda log groups were outside Terraform.** Lambda created them on first run,
+unencrypted and never expiring. The scoped Config recorder does not record log groups, so neither
+drift nor the inventory checks could see them. Both were imported (not recreated, so their history
+stays), put under the evidence key, and given 30-day retention.
+
+**The detection topic is encrypted with the evidence key.** Each publisher was granted in the key
+policy and then made to publish:
+
+| Publisher | Grant | Proof |
+|---|---|---|
+| CloudWatch alarms | `cloudwatch.amazonaws.com` | `set-alarm-state` on the normalizer's error alarm: "Successfully executed action" |
+| EventBridge rules | `events.amazonaws.com` | The key alert above, delivered |
+| Detection Lambda | its role, only through SNS | See the end of this entry |
+
+**Row 1's verify line is built:** `svc-sin-cfg-aws-stores-use-declared-keys`.
+
+- It lists every bucket, log group, topic, ECR repository, trail, Athena workgroup, Config delivery
+  channel, secret and database from the APIs.
+- It fails any store whose key, resolved to an ARN, is not its declared data class's. It also fails
+  any store no class names.
+- Its negative controls cover six bad inputs (wrong key, an AWS key where a customer key is declared,
+  an unclassified store, the SSE-S3 exception in another mode, an expected key that is gone, and no
+  stores). It was run against two broken evaluators, one passing unclassified stores and one comparing
+  raw names, and flagged both. The self-test is 19 of 19.
+
+**Its first run found two real gaps, out of 15 stores:**
+
+- **Athena's `primary` workgroup**, which AWS creates and will not delete, enforced nothing:
+  unencrypted results and no scan limit. It is now imported and governed like the evidence
+  workgroup (`log_corpus.tf`, persistent).
+- **`/aws/rds/instance/fedramp-20x-ksi/postgresql`**, 544 KB of database logs that outlived the
+  2026-09-23 teardown. It is unencrypted and never expires. RDS creates its export log groups itself
+  unless they already exist. Both are now declared in `database.tf`, with the logs key, 30 days, and
+  `depends_on` from the instance, so they go with the database. The orphan is adopted by an `import`
+  block at the next full apply, not deleted now: whether to keep phase 2's database logs is the
+  record's call, not a cleanup's. Until then the check fails on it, correctly.
+
+The check is 14 of 15 now.
+
+**The sign-in started from AWS worked once,** as `alex@` in a fresh private window at 00:40:56 UTC.
+It logged `UserAuthentication` with `CredentialType: EXTERNAL_IDP` and no failure before it. But a
+successful federation logs the same event whichever side started it, so CloudTrail cannot confirm the
+path. The earlier failures' cause stays unconfirmed. Google's app-access propagation, which Google
+says can take up to 24 hours, fits the timing. Record it as working once, not as fixed.
+
+**Persistent count: 266.**
+
+**Row 6's verify line is built too:** `svc-sin-cfg-aws-keys-decrypt-only-declared`. For every
+enabled customer key, listed from the API, it resolves who can decrypt and by which route:
+
+- **named in the key policy**
+- **by grant**
+- **through IAM.** A key policy statement granting the account hands the decision to IAM. The
+  check then simulates `kms:Decrypt` for every IAM role and user, with and without each
+  `kms:ViaService` path, narrowed by any `aws:PrincipalArn` condition on the statement.
+- **public.** `*` with nothing confining it to the account.
+
+It fails any principal outside the key's declared model, and any key with no model. Deny statements
+are not subtracted, so the answer can only be wider than the truth.
+
+Negative controls cover six ways to over-grant: an undeclared role named, a public principal, account
+delegation without the operator-only condition, `kms:*`, `NotAction`, and a grant. It was run against
+two broken resolvers, one matching `kms:Decrypt` literally and one ignoring `aws:PrincipalArn`, and
+flagged both. The self-test is 20 of 20.
+
+**Live: both persistent keys pass.**
+
+- **The evidence key's** decrypt set is exactly its policy's: two Lambda roles, Config, Logs,
+  CloudWatch and EventBridge, and the operator through IAM. CloudTrail is correctly absent, since it
+  can only generate data keys.
+- **The artifacts key** delegates `kms:*` to the account, so its set is resolved through IAM: the
+  operator, the GCP pipeline role (decrypt only through S3), and the **build role**, plus ECR by
+  policy and by four repository-scoped grants.
+
+**Open: the build role's decrypt is unconditioned.** `pipeline.tf` grants it `kms:Decrypt` on the
+artifacts key with no `kms:ViaService`, on the reasoning that publishing layers needs it. That lets
+it decrypt any artifacts-key ciphertext, extracts included, given read access to them. It is declared
+in the model because it is the stated design. Narrowing it to `ecr` needs a CI build to prove a push
+still works.
+
+**Two operational notes.**
+
+- The first full run hit IAM's simulation rate limit, because the simulations ran alongside other
+  checks. The IAM client now uses adaptive retries.
+- Batching every key into one simulation per principal and path cut the run from 141 to 63 seconds.
+
+The ephemeral keys (database, secrets, logs) have no declared model yet. At the next phase 1 they
+will fail as undeclared keys, which is how their models get written.

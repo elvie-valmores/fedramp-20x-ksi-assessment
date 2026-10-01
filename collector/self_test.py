@@ -413,6 +413,39 @@ def _store(kind, name, mode, key=None):
     return {"type": kind, "name": name, "observed": {"mode": mode, "key": key}}
 
 
+# evaluate_decrypt_principals fixtures, run through resolve_decrypt_principals
+# so the resolution is tested along with the judgement. Account 1; "op" is
+# the operator, reachable only through the account, and "other" is a role
+# whose IAM policies would allow decrypt if the key policy let IAM decide.
+_ACCT = "1"
+_ROLE = "arn:aws:iam::1:role/"
+_IAM_CAPABLE = {_ROLE + "op", _ROLE + "other"}
+_IAM_ALL = [_ROLE + "op", _ROLE + "other", _ROLE + "lambda"]
+DECRYPT_DECLARED = {"k": [_ROLE + "lambda", "service:logs.amazonaws.com", _ROLE + "op"]}
+
+
+def _st(principal, action="kms:Decrypt", **extra):
+    return {"Effect": "Allow", "Principal": principal, "Action": action, "Resource": "*", **extra}
+
+
+_OP_ONLY = {"ArnLike": {"aws:PrincipalArn": _ROLE + "op"}}
+_GOOD_KEY = [
+    _st({"AWS": f"arn:aws:iam::{_ACCT}:root"}, ["kms:Describe*", "kms:Put*"]),
+    _st({"AWS": _ROLE + "lambda"}),
+    _st({"Service": "logs.amazonaws.com"}, "kms:Decrypt*"),
+    _st({"AWS": f"arn:aws:iam::{_ACCT}:root"}, Condition=_OP_ONLY),
+    # Encrypt only: not a decrypt route, whoever it names.
+    _st({"AWS": _ROLE + "other"}, "kms:Encrypt"),
+    {"Effect": "Deny", "Principal": "*", "Action": "kms:DisableKey", "Resource": "*"},
+]
+
+
+def _decrypt(statements, grants=()):
+    resolved = {"k": cfg.resolve_decrypt_principals(
+        {"Statement": statements}, list(grants), _IAM_CAPABLE, _IAM_ALL, _ACCT)}
+    return cfg.evaluate_decrypt_principals(resolved, DECRYPT_DECLARED)[:2]
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -465,6 +498,16 @@ CFG_CASES = [
         "expected key gone": [_store("log_group", "/aws/rds/db", "AWS-managed")],
         "no stores": [],
     }),
+    ("evaluate_decrypt_principals", lambda c: _decrypt(*c), (_GOOD_KEY,), {
+        "undeclared role named": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"})],),
+        "public principal": (_GOOD_KEY + [_st("*")],),
+        # The account grant without the operator-only condition lets IAM
+        # decide, and IAM would let "other" decrypt.
+        "account delegation unconfined": (_GOOD_KEY + [_st({"AWS": f"arn:aws:iam::{_ACCT}:root"})],),
+        "wildcard action": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"}, "kms:*")],),
+        "NotAction": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"}, NotAction="kms:Encrypt")],),
+        "grant to undeclared": (_GOOD_KEY, [{"GranteePrincipal": _ROLE + "other", "Operations": ["Decrypt"]}]),
+    }),
 ]
 
 
@@ -488,6 +531,7 @@ CFG_RESOURCES = {
     "evaluate_trail_validation": "cloudtrail_log_file_validation",
     "evaluate_basic_roles": "basic_roles",
     "evaluate_store_keys": "store_encryption_keys",
+    "evaluate_decrypt_principals": "key_decrypt_principals",
 }
 
 

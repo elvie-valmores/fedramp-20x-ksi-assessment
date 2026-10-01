@@ -29,6 +29,7 @@ import fnmatch
 import json
 
 import boto3
+from botocore.config import Config
 
 import _paths  # noqa: F401  (puts inventory/ on the import path)
 from base import CheckDefinition, CheckResult, Mechanism
@@ -60,6 +61,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_basic_roles(check)
         if provider == "aws" and resource == "store_encryption_keys":
             return self._store_encryption_keys(check)
+        if provider == "aws" and resource == "key_decrypt_principals":
+            return self._key_decrypt_principals(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -284,6 +287,96 @@ class CloudAPIConfigRead(Mechanism):
 
         ok, detail, evidence = evaluate_store_keys(stores, check.params["rules"], resolve)
         return CheckResult(check.id, ok, evidence, detail)
+
+
+    def _key_decrypt_principals(self, check: CheckDefinition) -> CheckResult:
+        """Who can decrypt with each customer key, resolved, against who should.
+
+        Requires params: region, declared ({key alias: [principal patterns]}).
+        A pattern is an ARN glob, or "service:<principal>". KSI-SVC-SIN build
+        row 6's verify line: "resolved rather than read as a flag".
+
+        Every enabled customer key in the region is judged, from the API, so
+        a key with no declared model fails rather than going unexamined. A
+        key policy statement granting the account hands the decision to IAM,
+        so for those the answer comes from simulating every IAM role and
+        user -- the artifacts key is entirely that shape.
+        """
+        region = check.params["region"]
+        kms = boto3.client("kms", region_name=region)
+        # A run makes principals x paths simulation calls, and IAM throttles
+        # them hard when other checks run alongside. Adaptive retries slow
+        # down instead of erroring the check out.
+        iam = boto3.client("iam", config=Config(retries={"max_attempts": 12, "mode": "adaptive"}))
+        account = boto3.client("sts").get_caller_identity()["Account"]
+
+        principals = []
+        for page in iam.get_paginator("list_roles").paginate():
+            principals += [r["Arn"] for r in page["Roles"]]
+        for page in iam.get_paginator("list_users").paginate():
+            principals += [u["Arn"] for u in page["Users"]]
+
+        keys = {}
+        for page in kms.get_paginator("list_keys").paginate():
+            for k in page["Keys"]:
+                meta = kms.describe_key(KeyId=k["KeyId"])["KeyMetadata"]
+                if meta["KeyManager"] != "CUSTOMER" or meta["KeyState"] != "Enabled":
+                    continue
+                keys[meta["Arn"]] = meta
+        aliases = {}
+        for page in kms.get_paginator("list_aliases").paginate():
+            for a in page["Aliases"]:
+                if a.get("TargetKeyId"):
+                    aliases.setdefault(a["TargetKeyId"], a["AliasName"])
+
+        capable_by_key = _iam_can_decrypt(iam, principals, list(keys))
+        resolved = {}
+        for arn, meta in keys.items():
+            policy = json.loads(kms.get_key_policy(KeyId=arn, PolicyName="default")["Policy"])
+            grants = []
+            for page in kms.get_paginator("list_grants").paginate(KeyId=arn):
+                grants += page["Grants"]
+            capable = capable_by_key[arn]
+            label = aliases.get(meta["KeyId"], meta["KeyId"])
+            resolved[label] = resolve_decrypt_principals(policy, grants, capable, principals, account)
+
+        ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+
+# Where a key policy delegates to IAM, an identity policy may still restrict
+# decrypt to a path (kms:ViaService). Each path is simulated, and a principal
+# that can decrypt by any of them can decrypt.
+_VIA_SERVICES = ("s3", "sns", "logs", "secretsmanager", "rds", "ecr")
+
+
+def _iam_can_decrypt(iam, principals: list[str], key_arns: list[str]) -> dict[str, set[str]]:
+    """{key ARN: principals whose IAM policies allow kms:Decrypt on it}.
+
+    All keys go into each simulation, which answers per resource, so the
+    cost is principals x paths rather than principals x paths x keys.
+    """
+    capable = {k: set() for k in key_arns}
+    if not key_arns:
+        return capable
+    region = key_arns[0].split(":")[3]
+    contexts = [[]] + [[{"ContextKeyName": "kms:ViaService", "ContextKeyType": "string",
+                         "ContextKeyValues": [f"{svc}.{region}.amazonaws.com"]}] for svc in _VIA_SERVICES]
+    for principal in principals:
+        for context in contexts:
+            result = iam.simulate_principal_policy(
+                PolicySourceArn=principal, ActionNames=["kms:Decrypt"],
+                ResourceArns=key_arns, ContextEntries=context,
+            )["EvaluationResults"]
+            # One result per resource, or one with per-resource detail,
+            # depending on the request; read both shapes.
+            for evaluation in result:
+                if evaluation.get("EvalResourceName") in capable and evaluation["EvalDecision"] == "allowed":
+                    capable[evaluation["EvalResourceName"]].add(principal)
+                for per_key in evaluation.get("ResourceSpecificResults", []):
+                    if per_key["EvalResourceName"] in capable and per_key["EvalResourceDecision"] == "allowed":
+                        capable[per_key["EvalResourceName"]].add(principal)
+    return capable
 
 
 def _list_aws_stores(region: str) -> list[dict]:
@@ -529,3 +622,101 @@ def evaluate_store_keys(stores: list[dict], rules: list[dict], resolve) -> tuple
     if failing:
         return False, f"{len(failing)} of {len(stores)} stores fail: {', '.join(failing)}", evidence
     return True, f"all {len(stores)} stores use their declared key", evidence
+
+
+def _covers_decrypt(statement: dict) -> bool:
+    if "NotAction" in statement:
+        return not any(fnmatch.fnmatchcase("kms:decrypt", a.lower()) for a in _as_list(statement["NotAction"]))
+    return any(fnmatch.fnmatchcase("kms:decrypt", a.lower()) for a in _as_list(statement.get("Action", [])))
+
+
+def _principal_arn_patterns(statement: dict) -> list[str] | None:
+    """aws:PrincipalArn patterns a statement is conditioned on, or None."""
+    patterns = None
+    for operator, block in (statement.get("Condition") or {}).items():
+        if operator.removesuffix("IfExists") not in ("ArnLike", "ArnEquals", "StringLike", "StringEquals"):
+            continue
+        for key, values in block.items():
+            if key.lower() == "aws:principalarn":
+                patterns = (patterns or []) + _as_list(values)
+    return patterns
+
+
+def resolve_decrypt_principals(policy: dict, grants: list[dict], iam_capable: set[str],
+                               iam_principals: list[str], account: str) -> list[dict]:
+    """Every principal able to decrypt with one key, and by which route.
+
+    Routes: "policy" (named in the key policy), "grant", "iam" (the key
+    policy delegates to the account, and the principal's IAM policies allow
+    it), and "public" (Principal "*" with nothing confining it to the
+    account). Deny statements are not subtracted, so the answer can only
+    be wider than the truth -- a failure here is never hidden by a deny
+    this function misread.
+    """
+    found = []
+    root_forms = {f"arn:aws:iam::{account}:root", account}
+    for st in _as_list(policy.get("Statement", [])):
+        if st.get("Effect") != "Allow" or not _covers_decrypt(st):
+            continue
+        principal = st.get("Principal")
+        if principal in ("*", {"AWS": "*"}):
+            conditions = json.dumps(st.get("Condition") or {}).lower()
+            if "kms:calleraccount" in conditions or "aws:principalaccount" in conditions:
+                aws = [account]
+            else:
+                found.append({"principal": "*", "route": "public", "sid": st.get("Sid")})
+                continue
+        else:
+            aws = _as_list((principal or {}).get("AWS", []))
+            for svc in _as_list((principal or {}).get("Service", [])):
+                found.append({"principal": f"service:{svc}", "route": "policy", "sid": st.get("Sid")})
+        for p in aws:
+            if p in root_forms:
+                patterns = _principal_arn_patterns(st)
+                for candidate in sorted(iam_capable & set(iam_principals)):
+                    if patterns is None or any(fnmatch.fnmatchcase(candidate, pat) for pat in patterns):
+                        found.append({"principal": candidate, "route": "iam", "sid": st.get("Sid")})
+            else:
+                found.append({"principal": p, "route": "policy", "sid": st.get("Sid")})
+    for g in grants:
+        if "Decrypt" in g.get("Operations", []):
+            grantee = g["GranteePrincipal"]
+            label = grantee if grantee.startswith("arn:") else f"service:{grantee}"
+            found.append({"principal": label, "route": "grant", "sid": g.get("GrantId")})
+    return found
+
+
+def evaluate_decrypt_principals(resolved: dict[str, list[dict]],
+                                declared: dict[str, list[str]]) -> tuple[bool, str, dict]:
+    """Each key's decrypt set within its declared model, and no key undeclared.
+
+    A declared principal that cannot decrypt is reported, not failed: it is
+    a functional gap, not an exposure, and ephemeral roles are absent while
+    the environment is down.
+    """
+    results, failing = {}, []
+    for key, found in sorted(resolved.items()):
+        if key not in declared:
+            results[key] = {"passed": False, "detail": "no declared decrypt model for this key",
+                            "principals": found}
+            failing.append(key)
+            continue
+        patterns = declared[key]
+        extra = [f for f in found
+                 if f["route"] == "public" or not any(fnmatch.fnmatchcase(f["principal"], p) for p in patterns)]
+        unused = [p for p in patterns if not any(fnmatch.fnmatchcase(f["principal"], p) for f in found)]
+        ok = not extra
+        results[key] = {
+            "passed": ok,
+            "detail": "decrypt confined to the declared model" if ok else
+                      "undeclared: " + ", ".join(f"{f['principal']} ({f['route']})" for f in extra),
+            "principals": found, "declared_but_not_capable": unused,
+        }
+        if not ok:
+            failing.append(key)
+    evidence = {"keys": results, "failing": failing}
+    if not resolved:
+        return False, "no customer keys found -- nothing to judge", evidence
+    if failing:
+        return False, f"{len(failing)} of {len(resolved)} keys fail: {', '.join(failing)}", evidence
+    return True, f"all {len(resolved)} keys decrypt only for declared principals", evidence
