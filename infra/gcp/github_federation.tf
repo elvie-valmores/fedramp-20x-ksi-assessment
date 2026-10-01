@@ -97,6 +97,7 @@ resource "google_project_iam_custom_role" "collector" {
     "resourcemanager.projects.get",
     "resourcemanager.projects.getIamPolicy",
     "serviceusage.services.get",
+    "serviceusage.services.list", # google_project_service reads by listing, found by CI run 36938488520
     "storage.buckets.get",
     "storage.buckets.getIamPolicy",
   ]
