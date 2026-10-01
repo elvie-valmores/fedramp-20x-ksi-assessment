@@ -392,6 +392,27 @@ def _grant(role: str, member: str, resource: str = PROJECT) -> dict:
     return {"resource": resource, "role": role, "member": member}
 
 
+# evaluate_store_keys fixtures. Keys resolve by alias, ID or ARN to one
+# ARN, as describe_key does; "alias/logs" resolves to nothing, like an
+# ephemeral key while the environment is down.
+KEY_RULES = [
+    {"type": "s3_bucket", "name": "log-store-*", "expect": "alias/evidence"},
+    {"type": "log_group", "name": "/aws/lambda/*", "expect": "alias/evidence"},
+    {"type": "log_group", "name": "/aws/rds/*", "expect": "alias/logs"},
+    {"type": "s3_bucket", "name": "tfstate-*", "expect": "SSE-S3", "reason": "recorded"},
+]
+_KEYS = {"alias/evidence": "arn:k/e", "key-e": "arn:k/e", "arn:k/e": "arn:k/e",
+         "alias/artifacts": "arn:k/a", "key-a": "arn:k/a"}
+
+
+def _resolve(ref):
+    return _KEYS.get(ref)
+
+
+def _store(kind, name, mode, key=None):
+    return {"type": kind, "name": name, "observed": {"mode": mode, "key": key}}
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -427,6 +448,23 @@ CFG_CASES = [
         "not logging": ({"LogFileValidationEnabled": True}, {"IsLogging": False}),
         "validation off": ({"LogFileValidationEnabled": False}, {"IsLogging": True}),
     }),
+    ("evaluate_store_keys", lambda c: cfg.evaluate_store_keys(c, KEY_RULES, _resolve)[:2],
+     [_store("s3_bucket", "log-store-1", "KMS", "key-e"),
+      _store("log_group", "/aws/lambda/x", "KMS", "alias/evidence"),
+      _store("s3_bucket", "tfstate-1", "SSE-S3")], {
+        # The same store under another class's key.
+        "wrong key": [_store("s3_bucket", "log-store-1", "KMS", "key-a")],
+        # An AWS-held key where a customer key is declared.
+        "AWS key, customer key declared": [_store("s3_bucket", "log-store-1", "SSE-S3")],
+        # A store no rule names. Must not pass by being unknown.
+        "unclassified store": [_store("s3_bucket", "log-store-1", "KMS", "key-e"),
+                               _store("sns_topic", "new-topic", "none")],
+        # The exception is SSE-S3, not "anything".
+        "exception store, other mode": [_store("s3_bucket", "tfstate-1", "AWS-managed")],
+        # A declared key that no longer exists protects nothing.
+        "expected key gone": [_store("log_group", "/aws/rds/db", "AWS-managed")],
+        "no stores": [],
+    }),
 ]
 
 
@@ -449,6 +487,7 @@ CFG_RESOURCES = {
     "evaluate_object_lock": "s3_object_lock",
     "evaluate_trail_validation": "cloudtrail_log_file_validation",
     "evaluate_basic_roles": "basic_roles",
+    "evaluate_store_keys": "store_encryption_keys",
 }
 
 

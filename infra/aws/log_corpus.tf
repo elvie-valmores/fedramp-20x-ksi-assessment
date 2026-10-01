@@ -259,6 +259,41 @@ resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
   }
 }
 
+# Athena's built-in workgroup. AWS creates it in every account and it cannot
+# be deleted, so it is governed instead: the same enforced settings as the
+# evidence workgroup below, so a query run in it cannot write unencrypted
+# results or scan without a limit. It had none of that until 2026-10-01,
+# when svc-sin-cfg-aws-stores-use-declared-keys found it.
+import {
+  to = aws_athena_workgroup.primary
+  id = "primary"
+}
+
+resource "aws_athena_workgroup" "primary" {
+  name = "primary"
+
+  configuration {
+    enforce_workgroup_configuration    = true
+    bytes_scanned_cutoff_per_query     = 1073741824
+    publish_cloudwatch_metrics_enabled = true
+
+    result_configuration {
+      output_location = "s3://${aws_s3_bucket.athena_results.bucket}/primary/"
+
+      encryption_configuration {
+        encryption_option = "SSE_KMS"
+        kms_key_arn       = aws_kms_key.evidence.arn
+      }
+    }
+  }
+
+  # Deleting the primary workgroup is refused by Athena; a destroy would
+  # fail rather than do anything, and this says so before one is tried.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "aws_athena_workgroup" "log_corpus" {
   name = "fedramp-20x-ksi-log-corpus"
 

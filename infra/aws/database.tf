@@ -210,4 +210,30 @@ resource "aws_db_instance" "main" {
     Name      = "fedramp-20x-ksi"
     DataClass = "customer-data"
   }
+
+  # The export's log groups must exist first, or RDS creates its own:
+  # unencrypted, never expiring, and outside Terraform, so the teardown
+  # leaves them behind. That is how /postgresql outlived the 2026-09-23
+  # teardown with 544 KB of database logs in it (DECISIONS.md, 2026-10-01).
+  depends_on = [aws_cloudwatch_log_group.rds]
+}
+
+# The database's exported logs, declared so they are encrypted with the logs
+# key, expire, and go with the database at teardown. Found by
+# svc-sin-cfg-aws-stores-use-declared-keys on its first run.
+resource "aws_cloudwatch_log_group" "rds" {
+  for_each = toset(["postgresql", "upgrade"])
+
+  name              = "/aws/rds/instance/fedramp-20x-ksi/${each.key}"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs.arn
+}
+
+# The /postgresql group left by the 2026-09-23 teardown, adopted at the next
+# full apply rather than deleted now: its contents are database logs from
+# the phase 2 sessions, and whether to keep them is the record's call, not
+# a cleanup's. Ignored by the drift plan, which targets persistent files.
+import {
+  to = aws_cloudwatch_log_group.rds["postgresql"]
+  id = "/aws/rds/instance/fedramp-20x-ksi/postgresql"
 }

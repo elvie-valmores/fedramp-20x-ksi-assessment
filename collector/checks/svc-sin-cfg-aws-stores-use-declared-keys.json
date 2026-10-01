@@ -1,0 +1,32 @@
+{
+  "id": "svc-sin-cfg-aws-stores-use-declared-keys",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every AWS store -- buckets, log groups, topics, registries, the trail, Athena workgroups, Config delivery, secrets, databases -- reports encryption with the customer key its data class declares (build row 1)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "store_encryption_keys",
+    "region": "us-east-1",
+    "rules": [
+      {"type": "s3_bucket", "name": "fedramp-20x-ksi-log-store-*", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "s3_bucket", "name": "fedramp-20x-ksi-config-*", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "s3_bucket", "name": "fedramp-20x-ksi-athena-results-*", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "s3_bucket", "name": "fedramp-20x-ksi-extracts-*", "expect": "alias/fedramp-20x-ksi-artifacts"},
+      {"type": "s3_bucket", "name": "fedramp-20x-ksi-tfstate-*", "expect": "SSE-S3", "reason": "state bucket, recorded exception (DECISIONS.md, 2026-09-23)"},
+      {"type": "log_group", "name": "/aws/lambda/fedramp-20x-ksi-*", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "log_group", "name": "/fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-logs"},
+      {"type": "log_group", "name": "aws-waf-logs-fedramp-20x-ksi", "expect": "alias/fedramp-20x-ksi-logs"},
+      {"type": "log_group", "name": "/aws/rds/instance/fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-logs"},
+      {"type": "sns_topic", "name": "fedramp-20x-ksi-detection-interim", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "ecr_repository", "name": "fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-artifacts"},
+      {"type": "cloudtrail", "name": "fedramp-20x-ksi-trail", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "athena_workgroup", "name": "fedramp-20x-ksi-log-corpus", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "athena_workgroup", "name": "primary", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "config_delivery_channel", "name": "fedramp-20x-ksi-delivery", "expect": "alias/fedramp-20x-ksi-evidence"},
+      {"type": "secret", "name": "fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-secrets"},
+      {"type": "rds_instance", "name": "fedramp-20x-ksi", "expect": "alias/fedramp-20x-ksi-database"}
+    ]
+  }
+}
