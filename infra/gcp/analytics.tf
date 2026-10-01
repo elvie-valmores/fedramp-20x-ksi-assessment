@@ -124,7 +124,18 @@ resource "google_kms_crypto_key" "evidence" {
 # ties the grant to the identity rather than to a guess about its name.
 data "google_storage_project_service_account" "gcs" {}
 
-data "google_bigquery_default_service_account" "bq" {}
+# BigQuery's agent is the one exception, since 2026-10-01. Reading it calls
+# projects.getServiceAccount, which requires bigquery.jobs.create -- the
+# right to run BigQuery jobs -- and the collector, which plans this root
+# read-only from CI, would have needed that just to learn an address. The
+# reason above no longer applies to it: the agent was created by the read on
+# 2026-09-22 and exists. Its address was checked against state before the
+# switch (identical), and the plan showed no change to the grant that uses
+# it (DECISIONS.md, 2026-10-01). If this project were ever rebuilt from
+# nothing, the agent would need inducing first, as the comment above says.
+locals {
+  bigquery_agent_email = "bq-${data.google_project.current.number}@bigquery-encryption.iam.gserviceaccount.com"
+}
 
 # Artifact Registry has no data source that induces its agent, and the GA
 # provider has no google_project_service_identity. This is the one place
@@ -148,7 +159,7 @@ resource "google_kms_crypto_key_iam_member" "storage_analytics" {
 resource "google_kms_crypto_key_iam_member" "bigquery_analytics" {
   crypto_key_id = google_kms_crypto_key.analytics.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:${data.google_bigquery_default_service_account.bq.email}"
+  member        = "serviceAccount:${local.bigquery_agent_email}"
 }
 
 # Pub/Sub's agent, read the same way as Artifact Registry's.
