@@ -55,6 +55,63 @@ resource "google_project_iam_audit_config" "kms" {
   }
 }
 
+# --- Where Data Access logs are kept ---
+#
+# Until 2026-10-01 they went to _Default: global, under Google's key, and
+# out of KSI-SVC-SIN row 1's reach. Neither built-in bucket can take a
+# customer key -- CMEK is regional-only and set at creation -- so the logs
+# are routed instead: into a regional bucket created with the GCP evidence
+# key, and excluded from _Default. These are the customer-data access logs
+# (who read the landing bucket, who queried the dataset, who decrypted),
+# the audit-log class the evidence key exists for. Admin Activity stays in
+# _Required, which cannot be rerouted. See DECISIONS.md, 2026-10-01.
+
+data "google_logging_project_cmek_settings" "current" {
+  project = var.gcp_project_id
+}
+
+# Logging encrypts the bucket as its own agent, so the agent needs the key
+# before the bucket can be created with it.
+resource "google_kms_crypto_key_iam_member" "logging_evidence" {
+  crypto_key_id = google_kms_crypto_key.evidence.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${data.google_logging_project_cmek_settings.current.service_account_id}"
+}
+
+resource "google_logging_project_bucket_config" "data_access" {
+  project   = var.gcp_project_id
+  location  = var.gcp_region
+  bucket_id = "fedramp-20x-ksi-data-access"
+
+  # The same 30 days _Default kept them for: this change moves where they
+  # are kept and under which key, not how long.
+  retention_days = 30
+
+  # Only settable at creation. Changing the key later means a new bucket.
+  cmek_settings {
+    kms_key_name = google_kms_crypto_key.evidence.id
+  }
+
+  depends_on = [google_kms_crypto_key_iam_member.logging_evidence]
+}
+
+resource "google_logging_project_sink" "data_access" {
+  name        = "fedramp-20x-ksi-data-access"
+  destination = "logging.googleapis.com/${google_logging_project_bucket_config.data_access.id}"
+  filter      = "LOG_ID(\"cloudaudit.googleapis.com/data_access\")"
+}
+
+# Keeps them out of _Default. Exclusions made through this API apply to the
+# _Default sink. Created after the routing sink, so no Data Access log has
+# nowhere to go while the two change over.
+resource "google_logging_project_exclusion" "data_access_from_default" {
+  name        = "fedramp-20x-ksi-data-access-to-own-bucket"
+  description = "Data Access audit logs are routed to fedramp-20x-ksi-data-access, under the evidence key."
+  filter      = "LOG_ID(\"cloudaudit.googleapis.com/data_access\")"
+
+  depends_on = [google_logging_project_sink.data_access]
+}
+
 # --- Posture ---
 #
 # Security Command Center at the Standard tier, activated for this project

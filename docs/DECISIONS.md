@@ -6842,3 +6842,35 @@ The build role is out of the artifacts key's declared decrypt model, and
 set to the operator and the GCP pipeline role (decrypt through S3 only). In one day this went from
 an unconditioned decrypt that row 6 surfaced, to a narrowed one, to none, each step proven by a
 build.
+
+**GCP Data Access logs moved under the evidence key** (`audit.tf`). They record who read the
+landing bucket, who queried the dataset and who decrypted with a key, and they had been going to
+`_Default`, which is global and under Google's key. They are now routed to
+`fedramp-20x-ksi-data-access`:
+
+- a regional bucket in us-central1, created with the GCP evidence key (the only time it can be
+  set), keeping the same 30 days
+- fed by a sink filtering `LOG_ID("cloudaudit.googleapis.com/data_access")`
+- with an exclusion attached to `_Default`'s sink, created after the routing sink
+
+`_Required`, holding Admin Activity, cannot be rerouted and stays the documented exception.
+
+**Two things the apply needed:**
+
+- **A role Terraform lacked.** `terraform-admin` could not create the bucket: `roles/editor` holds
+  none of `logging.buckets.create`, `logging.sinks.create` or `logging.exclusions.create`.
+  `roles/logging.configWriter` holds all three. The user granted it by hand, as `terraform-admin`'s
+  roles were granted on 2026-09-22.
+- **The user applied it,** including the exclusion. An exclusion of audit logs from a bucket is
+  the kind of action this session's controls have treated as tampering. Here it is a reroute.
+
+**Proven by event, not by configuration.** Routing took about six minutes to settle, and
+unevenly. Three minutes after creation, KMS Data Access logs were already routed and excluded,
+while Storage's still went only to `_Default`. A fresh `storage.objects.list` at 22:33:39 then
+landed in the new bucket and not in `_Default`, which received nothing. **Check a routing change
+with a fresh event after several minutes, never immediately.**
+
+**A small loop, recorded:** reading the encrypted bucket makes Logging's agent decrypt, and those
+decrypts are KMS Data Access logs that land in the same bucket (6 for one read). It is bounded,
+triggered only by reads, and negligible at this volume. It would matter for a reader polling the
+bucket constantly.

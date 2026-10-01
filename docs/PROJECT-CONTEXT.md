@@ -226,11 +226,9 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 31
 of roughly 380 checks. In rough priority:
 
-1. **Decide `_Default`'s Data Access logs:** reroute them to a new regional bucket under the GCP
-   evidence key, or keep the recorded platform exception.
-2. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
+1. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", and the emitter cannot run in CI.
-3. **More check definitions**, negative controls for the older handlers, and **links from checks
+2. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -258,7 +256,7 @@ of roughly 380 checks. In rough priority:
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| No collector schedule or runtime | Next thing to do, item 2 |
+| No collector schedule or runtime | Next thing to do, item 1 |
 | The analytics image has no build path | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

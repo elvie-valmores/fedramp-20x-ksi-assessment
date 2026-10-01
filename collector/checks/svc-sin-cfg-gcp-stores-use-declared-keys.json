@@ -48,13 +48,18 @@
         "type": "logging.googleapis.com/LogBucket",
         "name": "_Default",
         "expect": "GOOGLE-MANAGED",
-        "reason": "platform limit: a global bucket, and Cloud Logging supports CMEK only on regional buckets and only at creation (DECISIONS.md, 2026-10-01)"
+        "reason": "platform limit: a global bucket, and Cloud Logging supports CMEK only on regional buckets and only at creation. Data Access logs, the customer-data access record, are routed out of it to fedramp-20x-ksi-data-access (DECISIONS.md, 2026-10-01)"
       },
       {
         "type": "logging.googleapis.com/LogBucket",
         "name": "_Required",
         "expect": "GOOGLE-MANAGED",
         "reason": "platform limit: global and locked by Google, so CMEK is impossible (DECISIONS.md, 2026-10-01)"
+      },
+      {
+        "type": "logging.googleapis.com/LogBucket",
+        "name": "fedramp-20x-ksi-data-access",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence"
       }
     ]
   }
