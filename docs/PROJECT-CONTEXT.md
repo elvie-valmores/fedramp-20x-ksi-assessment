@@ -228,10 +228,9 @@ of roughly 380 checks. In rough priority:
 
 1. **Decide `_Default`'s Data Access logs:** reroute them to a new regional bucket under the GCP
    evidence key, or keep the recorded platform exception.
-2. **Try removing the build role's KMS statement entirely.** It made no KMS calls during a push.
-4. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
+2. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", and the emitter cannot run in CI.
-5. **More check definitions**, negative controls for the older handlers, and **links from checks
+3. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -254,13 +253,12 @@ of roughly 380 checks. In rough priority:
 | Security Hub billed checks | Recount showed about 230 findings a day (from 372), a proxy. Billed count on the console's Usage page; first real bill after about 2026-10-23 |
 | api image build hung 21 minutes on 2026-10-01 | Transient: the retry built in under 2 minutes. Cause unknown, no logs kept. Jobs now time out |
 | Unprovisioned directory accounts leave no CloudTrail trace | Coverage gap for KSI-IAM-SUS and KSI-MLA-LET. Google's SAML audit log is the only record, and nothing collects it |
-| Build role's KMS statement on the artifacts key | Narrowed to ECR and proven. No KMS calls seen during a push: may be removable |
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
 | Config and scheduled KMS key deletion | A finding: 11 deleted keys still `OK` in Config. Correct Config's record, or stop trusting Config for keys |
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| No collector schedule or runtime | Next thing to do, item 4 |
+| No collector schedule or runtime | Next thing to do, item 2 |
 | The analytics image has no build path | Blocks GCP phase 2 |
 | `APP_DOMAIN` is not a repository variable | Harmless while only ephemeral files use it |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

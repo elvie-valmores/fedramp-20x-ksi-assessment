@@ -6830,3 +6830,15 @@ after its 30-second window.
 **The retry build passed** (run 36924507289, triggered by the timeout change). Both images built,
 pushed and signed under the narrowed build-role grant, the api image in under two minutes. The
 earlier hang was transient. The build-role narrowing is fully proven.
+
+**The build role's KMS statement removed outright.** CloudTrail showed it made no KMS calls during
+a push, because ECR encrypts through its own grants. So the narrowed statement was removed rather
+than kept. The user applied the change, being IAM. Build run 36933935004 (tag
+`git-b876c2075ce8-nokms`) then built, pushed, signed and verified **both** images with the role
+holding only `AuthenticateToRegistry`, `PublishImages` and `EmitRepositoryEvents`.
+
+The build role is out of the artifacts key's declared decrypt model, and
+`svc-sin-cfg-aws-keys-decrypt-only-declared` passes. Through IAM it now resolves the key's decrypt
+set to the operator and the GCP pipeline role (decrypt through S3 only). In one day this went from
+an unconditioned decrypt that row 6 surfaced, to a narrowed one, to none, each step proven by a
+build.

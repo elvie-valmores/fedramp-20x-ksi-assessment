@@ -22,7 +22,6 @@
       "alias/fedramp-20x-ksi-artifacts": [
         "service:ecr.amazonaws.com",
         "service:ecr.us-east-1.amazonaws.com",
-        "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-build",
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-gcp-pipeline",
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-task-execution",
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-worker-task",

@@ -146,31 +146,13 @@ data "aws_iam_policy_document" "github_build" {
     resources = [for repo in aws_ecr_repository.service : repo.arn]
   }
 
-  # The image layers are encrypted with the artifacts key, so publishing
-  # requires being able to encrypt under it -- through ECR only. Until
-  # 2026-10-01 this had no condition, so the build role could decrypt any
-  # artifacts-key ciphertext, the worker's extracts included, given read on
-  # them; svc-sin-cfg-aws-keys-decrypt-only-declared resolved it as an
-  # unconditioned decrypt. Narrowed, then proven by a CI build that pushed
-  # and signed under the narrowed grant (DECISIONS.md, 2026-10-01).
-  statement {
-    sid    = "EncryptImageLayers"
-    effect = "Allow"
-
-    actions = [
-      "kms:GenerateDataKey",
-      "kms:Decrypt",
-      "kms:DescribeKey",
-    ]
-
-    resources = [aws_kms_key.artifacts.arn]
-
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["ecr.${data.aws_region.current.name}.amazonaws.com"]
-    }
-  }
+  # No KMS statement. Image layers are encrypted with the artifacts key, but
+  # ECR does that through its own repository-scoped grants (four on the key,
+  # retired by ECR), not with the pusher's permissions. Until 2026-10-01 this
+  # role held kms:Decrypt on the key with no condition; it was narrowed to
+  # ECR, then removed when CloudTrail showed it made no KMS calls during a
+  # push, and a build without it pushed and signed both images
+  # (DECISIONS.md, 2026-10-01).
 
   # KSI-CMT-LMC build row 1: repository events into the corpus. The
   # 2026-09-19 decision chose this over a webhook precisely so that no new
