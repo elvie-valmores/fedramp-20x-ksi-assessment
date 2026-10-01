@@ -21,9 +21,12 @@ What the output does not claim, stated here and in the rendering:
     indicators and not the FRR rules; --frr is a switch so that the omission
     is a stated choice, not a silent one.
 
-    SDR-CSX-KMT's historical metrics do not exist. There is no record store
-    and no collector schedule, so the evidence is one run. The collection
-    window is stated on every indicator.
+    SDR-CSX-KMT's historical metrics do not exist. Since 2026-10-01 the
+    collector runs daily in GitHub Actions (collect.yml), but each run is kept
+    only as that run's artifact; no record store aggregates them, so the
+    evidence in any one record is one run. --runtime says whether this run
+    came from that schedule or from a laptop, so the cycle statement is never
+    wrong about which. The collection window is stated on every indicator.
 
     certificationPackageOverviewUri points at the repository README at the
     emitting commit. It is the project's overview. It is not a FedRAMP
@@ -58,13 +61,22 @@ SCHEMAS = {
                "be90c62c8dd8d270d48965b92e3a2a831b8b81791d509cc92557b72ccb0a1b44"),
 }
 
-# A project-level fact, not a per-row one: the determinations state a
-# required cycle, and nothing yet runs the collectors on it.
-CYCLE_PRACTICE = (
-    "Current practice: the collector is run by hand. No collector schedule or "
-    "runtime exists yet, so the required cycle is a requirement of the "
-    "determination, not yet a property of the system (DECISIONS.md, 2026-09-23)."
-)
+# A project-level fact, not a per-row one: how the run behind this record
+# was produced. Chosen by --runtime, which has no default.
+CYCLE_PRACTICE = {
+    "ci": (
+        "Current practice: the collector runs daily from GitHub Actions "
+        "(.github/workflows/collect.yml), as a read-only identity in each cloud "
+        "with no stored credential, and this record was emitted by that run. "
+        "Daily is stricter than every required cycle above (DECISIONS.md, 2026-10-01)."
+    ),
+    "local": (
+        "Current practice: this record came from a collector run on an operator's "
+        "workstation, not from the daily scheduled run in GitHub Actions "
+        "(.github/workflows/collect.yml), which is the system's cycle "
+        "(DECISIONS.md, 2026-10-01)."
+    ),
+}
 NO_ASSESSOR = (
     "**No independent assessor is engaged.** The statements below are the "
     "provider's own assurance reasoning from the determination. They are not an "
@@ -172,7 +184,7 @@ def indicator(det: Determination, outcomes: list[dict], context: dict, controls:
 
     cadences = sorted({r[3] for t in ("VERIFY", "VALIDATE", "PROVE") for r in det.tables.get(t, []) if r[3]})
     validation = [
-        f"**Cycle.** Required: {', '.join(cadences) or 'not stated'}. {CYCLE_PRACTICE}",
+        f"**Cycle.** Required: {', '.join(cadences) or 'not stated'}. {CYCLE_PRACTICE[context['runtime']]}",
         *[evidence_row_statement(r) for t in ("VERIFY", "VALIDATE", "PROVE") for r in det.tables.get(t, [])],
         collection_statement(mine, context),
     ]
@@ -206,8 +218,8 @@ def collection_statement(mine: list[dict], context: dict) -> str:
     return (
         f"**Automated evidence.** {len(mine)} collector check(s) in one run on "
         f"{context['run_date']}: {tally}. Collection window: that single run. No historical "
-        "metrics exist (no record store, no schedule), so SDR-CSX-KMT's 30-day and yearly "
-        "summaries cannot be produced."
+        "metrics exist: runs are scheduled daily, but no record store aggregates them, so "
+        "SDR-CSX-KMT's 30-day and yearly summaries cannot be produced."
     )
 
 
@@ -348,8 +360,8 @@ def render(sdr: dict, context: dict) -> str:
         f"from one collector run started {context['started_at']}.",
         "- **No independent assessor is engaged.** Assessment statements are the provider's own reasoning.",
         "- **`fedRampRequirements` is empty.** The project determined the 46 indicators, not the FRR rules.",
-        "- **No historical metrics (SDR-CSX-KMT).** No record store and no collector schedule exist, "
-        "so the collection window is one run.",
+        "- **No historical metrics (SDR-CSX-KMT).** The collector runs daily, but no record store "
+        "aggregates the runs, so the collection window is one run.",
         f"- **`certificationPackageOverviewUri`** points at the project README. It is not a FedRAMP "
         "Certification Package Overview.",
         "",
@@ -382,6 +394,8 @@ def main() -> int:
     parser.add_argument("--results", type=Path, required=True, help="collector output from run_checks.py --json")
     parser.add_argument("--frr", choices=["empty", "populated"], required=True,
                         help="how to emit fedRampRequirements; only 'empty' is possible today")
+    parser.add_argument("--runtime", choices=["ci", "local"], required=True,
+                        help="where the collector run came from: the scheduled CI job, or a workstation")
     args = parser.parse_args()
 
     schema, common = load_schemas()
@@ -396,6 +410,7 @@ def main() -> int:
         "emitted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "started_at": run["started_at"],
         "run_date": run["started_at"][:10],
+        "runtime": args.runtime,
     }
 
     sys.path.insert(0, str(REPO / "collector"))

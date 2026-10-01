@@ -94,7 +94,7 @@ cd collector && ../.venv/bin/python run_checks.py
 
 # Emit the SDR from a run's results, into sdr/out/
 cd collector && ../.venv/bin/python run_checks.py --json results.json
-cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty
+cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty --runtime local
 
 # Compare the pinned FedRAMP schemas against the published ones
 cd sdr && ../.venv/bin/python verify_pins.py

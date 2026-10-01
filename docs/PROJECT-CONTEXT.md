@@ -203,7 +203,7 @@ export TF_VAR_billing_account_id=$(gcloud billing projects describe fedramp-20x-
 cd collector && ../.venv/bin/python self_test.py
 cd collector && ../.venv/bin/python run_checks.py --json results.json
 cd lambda/normalize_events && ../../.venv/bin/python -m unittest test_handler.py
-cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty
+cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr empty --runtime local
 ```
 
 - **AWS phase 1:** `terraform apply` in `infra/aws`. **Phase 2:** add `-var deploy_services=true

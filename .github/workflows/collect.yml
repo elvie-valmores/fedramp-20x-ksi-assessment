@@ -4,13 +4,20 @@
 # GCP by workload identity federation, with no key. Stage C1, this one, runs
 # every check that does not need Terraform state, as the collector's own
 # identity in each cloud: an AWS role through the OIDC provider, and the
-# federated principal in GCP. Stage C2 adds the state-based checks: all
+# federated principal in GCP. Stage C2 added the state-based checks: all
 # three roots are initialised against their S3 state, and the GCP plan
-# runs as the read-only principal with no impersonation. Manual until every
-# check runs; then scheduled.
+# runs as the read-only principal with no impersonation.
+#
+# Daily since 2026-10-01: stricter than any cycle a determination requires,
+# and free. 05:30 UTC, ahead of drift.yml at 07:00, so the two never contend
+# for a Terraform state lock. Each run self-tests, collects, emits the SDR
+# whatever the checks found, keeps both, and then fails if any check did --
+# a red run is a finding to look at, not a broken job.
 name: collect
 
 on:
+  schedule:
+    - cron: '30 5 * * *'
   workflow_dispatch:
     inputs:
       skip:
@@ -77,7 +84,14 @@ jobs:
               -backend-config="encrypt=true"
           done
 
+      # The negative controls run every day, not only when someone remembers.
+      - name: self-test the judgements
+        working-directory: collector
+        run: python self_test.py
+
       - name: run the checks
+        id: checks
+        continue-on-error: true
         working-directory: collector
         env:
           GCP_IMPERSONATE: none
@@ -94,10 +108,25 @@ jobs:
           for g in $SKIP; do args+=(--skip "$g"); done
           python run_checks.py --json results.json "${args[@]}"
 
-      - name: keep the results
+      # Emitted whatever the checks found: a failing check is evidence too.
+      - name: emit the security decision record
+        if: always() && hashFiles('collector/results.json') != ''
+        working-directory: sdr
+        run: python emit.py --results ../collector/results.json --frr empty --runtime ci
+
+      - name: keep the results and the record
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: collector-results
-          path: collector/results.json
+          name: evidence-${{ github.run_id }}
+          path: |
+            collector/results.json
+            sdr/out/
           if-no-files-found: warn
+          retention-days: 90
+
+      - name: fail if any check failed
+        if: steps.checks.outcome == 'failure'
+        run: |
+          echo "::error::one or more checks failed or errored; see the run-the-checks step"
+          exit 1
