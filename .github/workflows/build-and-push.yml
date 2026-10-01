@@ -52,6 +52,8 @@ jobs:
   scan-dependencies:
     name: scan dependencies
     runs-on: ubuntu-latest
+    # Seconds normally. Without one a hung job runs for GitHub's 6-hour default. Added 2026-10-01, when an api image build hung 21 minutes in docker build and was cancelled.
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false
@@ -109,6 +111,8 @@ jobs:
   build:
     name: build and publish
     runs-on: ubuntu-latest
+    # Two to three minutes normally, ARM64 under emulation. Without one a hung job runs for GitHub's 6-hour default. Added 2026-10-01, when an api image build hung 21 minutes in docker build and was cancelled.
+    timeout-minutes: 30
     needs: scan-dependencies
 
     strategy:
@@ -235,6 +239,8 @@ jobs:
   emit-change-event:
     name: emit change event
     runs-on: ubuntu-latest
+    # Seconds normally.
+    timeout-minutes: 10
     needs: build
     if: always() && needs.build.result != 'cancelled'
 

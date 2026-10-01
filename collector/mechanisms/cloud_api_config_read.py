@@ -289,11 +289,6 @@ class CloudAPIConfigRead(Mechanism):
         return CheckResult(check.id, ok, evidence, detail)
 
 
-def gcp_key_name(ref: str | None) -> str | None:
-    """A Cloud KMS key name without any /cryptoKeyVersions/N suffix."""
-    return ref.split("/cryptoKeyVersions/")[0] if ref else None
-
-
 # --- fetches ---
 
 
@@ -379,6 +374,11 @@ def gcp_key_name(ref: str | None) -> str | None:
 
         ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
         return CheckResult(check.id, ok, evidence, detail)
+
+
+def gcp_key_name(ref: str | None) -> str | None:
+    """A Cloud KMS key name without any /cryptoKeyVersions/N suffix."""
+    return ref.split("/cryptoKeyVersions/")[0] if ref else None
 
 
 # Where a key policy delegates to IAM, an identity policy may still restrict

@@ -41,6 +41,8 @@ jobs:
   aws:
     name: aws declared state
     runs-on: ubuntu-latest
+    # Under a minute normally, over 266 resources. Without one a hung job runs for GitHub's 6-hour default. Added 2026-10-01, when an api image build hung 21 minutes in docker build and was cancelled.
+    timeout-minutes: 15
 
     steps:
       - name: check out

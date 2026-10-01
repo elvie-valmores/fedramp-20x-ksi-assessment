@@ -581,15 +581,37 @@ def negative_controls() -> dict[tuple[str, str], str]:
     return found
 
 
+def handler_wiring() -> list[str]:
+    """Every handler run() dispatches to must exist on the mechanism.
+
+    Added 2026-10-01, when a module-level function inserted mid-class ended
+    the class early and two handlers became unreachable. The judgement
+    tests all passed, because they call the pure functions directly; only a
+    live run errored. This catches it without one.
+    """
+    import inspect
+    import re
+
+    from mechanisms.cloud_api_config_read import CloudAPIConfigRead
+
+    called = re.findall(r"self\.(_[a-z_]+)\(", inspect.getsource(CloudAPIConfigRead.run))
+    missing = [h for h in called if not hasattr(CloudAPIConfigRead, h)]
+    print(f"[handler wiring] {'PASS' if not missing else 'BROKEN'} -- {len(called)} handlers dispatched"
+          + (f"; missing: {', '.join(missing)}" if missing else ""))
+    return ["handler wiring"] if missing else []
+
+
 def main() -> int:
-    broken = pipeline_config_read()
+    broken = handler_wiring()
+    print()
+    broken += pipeline_config_read()
     print()
     broken += declared_versus_live_comparison()
     broken += live_is_declared()
     broken += reserved_path_predicates()
     print()
     broken += cloud_api_config_read()
-    total = (len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES)
+    total = (1 + len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES)
              + len({c[0] for c in PATH_CASES}) + len(CFG_CASES))
 
     print()

@@ -72,7 +72,7 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-10-01
+## Resume here — state at the end of 2026-10-01 (evening)
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
@@ -97,23 +97,18 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running things"
-     gives **29 of 31**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS finding) and
+     gives **30 of 32**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS finding) and
      `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS orphan log group).
-3. **Finish the one unproven link:** the detection Lambda publishing to the encrypted topic. Ask the
-   user for one failed root console login (a wrong password, once). After 5 to 15 minutes it should
-   appear in `normalized_events` as `Authentication` / `Failure`. Then invoke
-   `fedramp-20x-ksi-run-detection-query`. It should return `matches >= 1`, SNS should show a
-   delivery, and the user should receive the email.
-4. **The Security Hub recount** (it waits a full day after the 2026-09-30 change): count findings by
-   `LastObservedAt` over the last 24 hours, as in the 2026-09-30 posture entry. It should be about
-   185 a day, down from about 372, and `SSM.7` should be `PASSED`.
-5. **Then the build**, at "The next thing to do".
+3. **Check the retry build** of `build-and-push.yml` (triggered by the timeout change): both
+   images should push under the narrowed build-role grant. If the api image hangs again, the
+   30-minute timeout now stops it, and the cause is worth chasing.
+4. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
+   were both done on 2026-10-01 evening.
 
 ### Waiting on the user
 
 | Item | What they do |
 |---|---|
-| **One failed root console login** | `https://signin.aws.amazon.com/` → Root user → wrong password once. It is the detection test in step 3 |
 | _Optional:_ Google SAML audit log | Admin console → Reporting → Audit and investigation → SAML log events, around 2026-10-01 00:42 UTC: was `admin@` issued an assertion? |
 
 ### What is standing
@@ -234,11 +229,12 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 31
 of roughly 380 checks. In rough priority:
 
-1. **First actions, steps 3 and 4.**
-2. **Narrow the build role's decrypt on the artifacts key** to `kms:ViaService` ECR, and prove it
-   with a CI build (2026-10-01 entry).
-3. **SVC-SIN row 1 on GCP:** customer keys for GCS, BigQuery and Artifact Registry, and the same
-   check against the GCP APIs.
+1. **Give the GCP change feed a consumer, or a stated reason to exist**, and give
+   `piy-giv-cfg-gcp-asset-feed` a delivery test in place of a configuration read (2026-10-01
+   evening).
+2. **Decide `_Default`'s Data Access logs:** reroute them to a new regional bucket under the GCP
+   evidence key, or keep the recorded platform exception.
+3. **Try removing the build role's KMS statement entirely.** It made no KMS calls during a push.
 4. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", and the emitter cannot run in CI.
 5. **More check definitions**, negative controls for the older handlers, and **links from checks
@@ -260,10 +256,11 @@ of roughly 380 checks. In rough priority:
 
 | Item | State |
 |---|---|
-| Detection Lambda to the encrypted topic | Unproven. First actions, step 3 |
-| Security Hub saving | Projected, not yet counted. First actions, step 4 |
+| GCP change feed has no consumer | It delivers in seconds through the encrypted topic, but nothing subscribes, so notices are discarded. Its check reads configuration only |
+| Security Hub billed checks | Recount showed about 230 findings a day (from 372), a proxy. Billed count on the console's Usage page; first real bill after about 2026-10-23 |
+| api image build hung 21 minutes on 2026-10-01 | Cause unknown, no logs kept. Jobs now time out |
 | Unprovisioned directory accounts leave no CloudTrail trace | Coverage gap for KSI-IAM-SUS and KSI-MLA-LET. Google's SAML audit log is the only record, and nothing collects it |
-| Build role's unconditioned decrypt on the artifacts key | Declared in the row 6 model as the stated design. Narrow to ECR, prove with CI |
+| Build role's KMS statement on the artifacts key | Narrowed to ECR and proven. No KMS calls seen during a push: may be removable |
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
 | Config and scheduled KMS key deletion | A finding: 11 deleted keys still `OK` in Config. Correct Config's record, or stop trusting Config for keys |
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |

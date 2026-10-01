@@ -6738,3 +6738,70 @@ rules, and the detection Lambda.
   Settings → Usage page, and on the first bill after the trial ends (about 2026-10-23).
 - **Revised projection:** about 7 USD a month for Security Hub, and about 10 for all three services
   (from about 15).
+
+**The build role's decrypt narrowed to ECR, and proven by a build.** `pipeline.tf`'s
+`EncryptImageLayers` now carries `kms:ViaService = ecr.us-east-1.amazonaws.com`. The user applied
+it, being an IAM change. Build run 36920315329 (tag `git-bd43e9e59bab-kmsvia`) then pushed, signed
+and verified the **worker** image under it in two minutes.
+
+CloudTrail shows **no KMS calls by the build role at all** during that push. ECR encrypts layers
+through its own repository-scoped grants, not with the pusher's permissions. So the statement
+appears to be unused, not merely narrowed, and could be removed outright. Proving that takes
+another build without it. Narrowed is the proven state.
+
+**The api image's build hung,** 21 minutes in `docker build` with no ECR call, and was cancelled.
+GitHub kept no log for the cancelled step, so the cause is unknown. It is not the grant: nothing
+reached ECR. Neither workflow had a `timeout-minutes`, so a hung job would have run for GitHub's
+6-hour default. Every job now has one: build 30, scans and the change event 10, drift 15. The
+change to `build-and-push.yml` triggers a fresh build, which retries the api image under the
+narrowed grant.
+
+**A GuardDuty decrypt in CloudTrail, explained.** `AWSServiceRoleForAmazonGuardDuty` decrypted with
+`alias/aws/lambda`, the AWS-managed key, in an encryption context naming the detection Lambda.
+That is Lambda Protection reading function configuration. It is outside row 6, which covers
+customer keys. The Lambdas' environment variables (names and ARNs, nothing secret) sit under AWS's
+key, a low-priority row 1 item.
+
+**SVC-SIN row 1 on GCP.** The analytics bucket, dataset and table, and Artifact Registry were
+already on customer keys. What remained was audit and inventory data:
+
+- **The asset-feed topic now uses a new GCP `evidence` key** (`analytics.tf`), the audit-log class
+  (option C, chosen by the user). It is permanent: Cloud KMS keys cannot be deleted. Pub/Sub's
+  service agent is read through `google_project_service_identity` and granted on that key alone.
+  The topic changed in place. Applied by the user: 3 added, 1 changed.
+- **`_Default` and `_Required` cannot take a customer key.** Google's documentation: "After a log
+  bucket is created, you can't reconfigure the log bucket to change or remove CMEK" and "You can't
+  enable CMEK for log buckets created in the global region". Both are `global`, and `_Required` is
+  also `locked`. They are recorded exceptions for that reason, as `GOOGLE-MANAGED` in the check. An
+  option kept open: route `_Default`'s Data Access logs to a new regional bucket created with the
+  key. `_Required` cannot be rerouted.
+
+**The feed was proven through the encrypted topic, by a seed.** A temporary subscription and a
+throwaway GCS bucket were used. The feed's creation message arrived 4 seconds after the bucket was
+created, and its deletion message 13 seconds after the bucket was deleted. Pub/Sub decrypted both
+for the subscriber. Both seeds were removed.
+
+**That probe exposed a gap: nothing consumes the GCP change feed.** The topic had **no
+subscriptions**, so every change notice it carried was discarded. Cloud Monitoring showed no
+publish data for it in seven days, consistent with that, though messages are not retained, so it
+cannot be shown what was lost. The inventory generator queries Cloud Asset directly and is
+unaffected. But `piy-giv-cfg-gcp-asset-feed` passes on "feed exists with asset types configured",
+which proves configuration, not delivery. The feed needs a consumer or a stated reason to exist,
+and its check needs a delivery test.
+
+**`svc-sin-cfg-gcp-stores-use-declared-keys`**, the GCP half of row 1. One Cloud Asset search gives
+both the stores and the key each reports, so the population comes from the API, as on AWS. It
+reuses the AWS judgement, with a resolver that drops a version suffix, since BigQuery tables
+report the key version. `GOOGLE-MANAGED` is now a declarable exception mode beside `SSE-S3`. Three
+new negative controls: Google's key where a customer key is declared, another key's version, and
+an exception store given a customer key. **Live: 7 of 7 stores pass.**
+
+**A regression, caught by the live run and now guarded.** Adding the GCP handler put a module-level
+function in the middle of `CloudAPIConfigRead`. That ended the class early, and the next two
+handlers became unreachable. The two AWS SIN checks errored with "has no attribute". The self-test
+passed throughout, because it calls the pure judgements directly. A new `handler_wiring` test
+checks that every handler `run()` dispatches exists on the class. It was shown to fail with a
+handler removed.
+
+**State:** collector 30 of 32 (the KMS finding and the RDS orphan log group), self-test 22 of 22,
+drift clean on both clouds.

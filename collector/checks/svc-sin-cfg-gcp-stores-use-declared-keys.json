@@ -19,10 +19,43 @@
       "secretmanager.googleapis.com/Secret"
     ],
     "rules": [
-      {"type": "storage.googleapis.com/Bucket", "name": "fedramp-20x-ksi-assessment-landing", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
-      {"type": "bigquery.googleapis.com/Dataset", "name": "measurements", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
-      {"type": "bigquery.googleapis.com/Table", "name": "measurements", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
-      {"type": "artifactregistry.googleapis.com/Repository", "name": "fedramp-20x-ksi", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/artifacts"}
+      {
+        "type": "storage.googleapis.com/Bucket",
+        "name": "fedramp-20x-ksi-assessment-landing",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+      },
+      {
+        "type": "bigquery.googleapis.com/Dataset",
+        "name": "measurements",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+      },
+      {
+        "type": "bigquery.googleapis.com/Table",
+        "name": "measurements",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+      },
+      {
+        "type": "artifactregistry.googleapis.com/Repository",
+        "name": "fedramp-20x-ksi",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/artifacts"
+      },
+      {
+        "type": "pubsub.googleapis.com/Topic",
+        "name": "fedramp-20x-ksi-asset-feed",
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence"
+      },
+      {
+        "type": "logging.googleapis.com/LogBucket",
+        "name": "_Default",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "platform limit: a global bucket, and Cloud Logging supports CMEK only on regional buckets and only at creation (DECISIONS.md, 2026-10-01)"
+      },
+      {
+        "type": "logging.googleapis.com/LogBucket",
+        "name": "_Required",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "platform limit: global and locked by Google, so CMEK is impossible (DECISIONS.md, 2026-10-01)"
+      }
     ]
   }
 }
