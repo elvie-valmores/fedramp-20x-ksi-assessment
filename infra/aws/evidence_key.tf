@@ -261,6 +261,73 @@ data "aws_iam_policy_document" "key_evidence" {
     }
   }
 
+  # The two Lambdas' log groups (log_normalization.tf, detection.tf). Logs
+  # encrypts and decrypts with the log group's ARN as context, so this is
+  # scoped to this project's Lambda log groups by name.
+  statement {
+    sid    = "LogsEncryptsLambdaLogGroups"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
+    }
+
+    actions = [
+      "kms:Decrypt*",
+      "kms:Describe*",
+      "kms:Encrypt*",
+      "kms:GenerateDataKey*",
+      "kms:ReEncrypt*",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "ArnLike"
+      variable = "kms:EncryptionContext:aws:logs:arn"
+      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/fedramp-20x-ksi-*"]
+    }
+  }
+
+  # The detection topic (detection.tf) is encrypted with this key since
+  # 2026-10-01, and every publisher must be able to use it -- a publisher
+  # that cannot is not refused loudly; its alerts simply do not arrive.
+  # CloudWatch alarms and EventBridge rules publish as their services, as
+  # AWS documents for encrypted topics. The topic's own policy already
+  # limits publishing to this account.
+  statement {
+    sid    = "AlertServicesPublishToTopic"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com", "events.amazonaws.com"]
+    }
+
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+    resources = ["*"]
+  }
+
+  # The detection Lambda publishes as its role, only through SNS.
+  statement {
+    sid    = "DetectionLambdaPublishesThroughSns"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.run_detection_query.arn]
+    }
+
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["sns.${data.aws_region.current.name}.amazonaws.com"]
+    }
+  }
+
   # The operator reads evidence through S3 and Athena: the collector's
   # log_query checks and any investigation. Standing, under the same
   # exception as the operator's permission set, and closing with it.
@@ -297,14 +364,22 @@ resource "aws_cloudwatch_event_rule" "evidence_key_threat" {
   name        = "fedramp-20x-ksi-evidence-key-threat"
   description = "ScheduleKeyDeletion or DisableKey against the evidence key, routed to the interim detection topic."
 
+  # Two shapes, because CloudTrail records the two outcomes differently. A
+  # successful call names the key in `resources`. A denied one has
+  # `resources` and `requestParameters` both null, and names the key only
+  # in `errorMessage` ("... on resource: <key ARN> with an explicit deny").
+  # The first version matched `resources` alone, so it could only ever
+  # catch root -- the one principal allowed -- and never the attempts the
+  # deny exists to stop. Found by attempting it (DECISIONS.md, 2026-10-01).
   event_pattern = jsonencode({
     source      = ["aws.kms"]
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
       eventName = ["ScheduleKeyDeletion", "DisableKey"]
-      resources = {
-        ARN = [aws_kms_key.evidence.arn]
-      }
+      "$or" = [
+        { resources = { ARN = [aws_kms_key.evidence.arn] } },
+        { errorMessage = [{ wildcard = "*${aws_kms_key.evidence.arn}*" }] },
+      ]
     }
   })
 }

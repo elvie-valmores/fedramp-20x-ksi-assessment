@@ -16,6 +16,11 @@
 
 resource "aws_sns_topic" "detection_interim" {
   name = "fedramp-20x-ksi-detection-interim"
+
+  # Alerts are derived from the audit log, so the evidence key. Every
+  # publisher is granted in that key's policy (evidence_key.tf); each was
+  # made to publish after the change (DECISIONS.md, 2026-10-01).
+  kms_master_key_id = aws_kms_key.evidence.arn
 }
 
 # Email subscriptions require the recipient to click a confirmation link
@@ -125,6 +130,19 @@ data "aws_iam_policy_document" "run_detection_query_permissions" {
 resource "aws_iam_role" "run_detection_query" {
   name               = "fedramp-20x-ksi-run-detection-query"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+# Same as the normalizer's log group: created by Lambda, undeclared,
+# unencrypted and never expiring until 2026-10-01.
+import {
+  to = aws_cloudwatch_log_group.run_detection_query
+  id = "/aws/lambda/fedramp-20x-ksi-run-detection-query"
+}
+
+resource "aws_cloudwatch_log_group" "run_detection_query" {
+  name              = "/aws/lambda/fedramp-20x-ksi-run-detection-query"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.evidence.arn
 }
 
 resource "aws_iam_role_policy" "run_detection_query" {

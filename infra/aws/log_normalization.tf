@@ -60,6 +60,22 @@ data "aws_iam_policy_document" "normalize_events_permissions" {
   }
 }
 
+# The function's log group. Lambda created it on first run, unencrypted and
+# kept forever, and nothing declared it, so neither drift nor the inventory
+# checks could see it (the scoped Config recorder does not record log
+# groups). Imported on 2026-10-01 rather than recreated, so its history
+# stays.
+import {
+  to = aws_cloudwatch_log_group.normalize_events
+  id = "/aws/lambda/fedramp-20x-ksi-normalize-events"
+}
+
+resource "aws_cloudwatch_log_group" "normalize_events" {
+  name              = "/aws/lambda/fedramp-20x-ksi-normalize-events"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.evidence.arn
+}
+
 resource "aws_iam_role_policy" "normalize_events" {
   name   = "normalize-events-permissions"
   role   = aws_iam_role.normalize_events.id

@@ -43,14 +43,41 @@ AUTH_EVENT_NAMES = {
     "AssumeRoleWithWebIdentity",
     "GetSessionToken",
     "GetFederationToken",
+    # Identity Center sign-in, the workforce path since 2026-09-22. Missing
+    # until 2026-10-01, so every workforce sign-in -- failed or not -- was
+    # filed as API Activity, where the failed-authentication detection
+    # never looks.
+    "ExternalIdPDirectoryLogin",
+    "UserAuthentication",
+    "CredentialChallenge",
+    "CredentialVerification",
+    "Authenticate",
+    "Federate",
 }
+
+
+def _failed(record: dict) -> bool:
+    """Whether CloudTrail recorded this event as a failure.
+
+    Two conventions. Most API calls fail by carrying an errorCode. Sign-in
+    events do not: ConsoleLogin, ExternalIdPDirectoryLogin and their kin
+    report the outcome as {"<eventName>": "Failure"} in responseElements,
+    with no errorCode at all. Reading errorCode alone recorded every failed
+    sign-in as a success (DECISIONS.md, 2026-10-01).
+    """
+    if record.get("errorCode"):
+        return True
+    response = record.get("responseElements")
+    if isinstance(response, dict):
+        return response.get(record.get("eventName")) == "Failure"
+    return False
 
 
 def _to_ocsf(record: dict, account_id: str) -> dict:
     """Rewrite one CloudTrail event into the normalized schema."""
     event_name = record.get("eventName", "")
     is_auth = event_name in AUTH_EVENT_NAMES
-    error_code = record.get("errorCode")
+    failed = _failed(record)
 
     # Timestamps become epoch milliseconds so events from different
     # clouds sort together without any timezone ambiguity. If CloudTrail
@@ -74,10 +101,11 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
         "class_name": "Authentication" if is_auth else "API Activity",
         "category_uid": 3 if is_auth else 6,
         "severity_id": 1,
-        # CloudTrail reports failure by including an errorCode, not by a
-        # status field, so absence of that key means success.
-        "status": "Failure" if error_code else "Success",
-        "status_detail": error_code,
+        "status": "Failure" if failed else "Success",
+        # The errorCode where there is one; a sign-in failure has only its
+        # message ("Failed authentication", "Responses must contain exactly
+        # one Assertion").
+        "status_detail": record.get("errorCode") or (record.get("errorMessage") if failed else None),
         "cloud": {
             "provider": "AWS",
             "account_uid": account_id,
@@ -86,8 +114,11 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
         "actor": {
             "user": {
                 # Named users have userName; assumed roles and services
-                # only carry an ARN.
-                "name": user_identity.get("userName") or user_identity.get("arn"),
+                # only carry an ARN; an Identity Center user carries
+                # neither, only the directory's user ID in onBehalfOf.
+                "name": user_identity.get("userName")
+                or user_identity.get("arn")
+                or (user_identity.get("onBehalfOf") or {}).get("userId"),
                 "uid": user_identity.get("principalId"),
                 "type": user_identity.get("type"),
             }

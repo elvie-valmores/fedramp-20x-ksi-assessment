@@ -1,0 +1,120 @@
+{
+ "_note": "Real CloudTrail records from this account (2026-09-29/30), source IPs replaced with 203.0.113.10. console_login_failure is derived from console_login_success using AWS's documented failure shape; no failed ConsoleLogin has occurred here. Console LoginTo and the MFA device name are replaced with placeholders.",
+ "idp_login_failure": {
+  "eventVersion": "1.11",
+  "userIdentity": {
+   "type": "Unknown",
+   "arn": "",
+   "accountId": "437672023758",
+   "accessKeyId": "",
+   "credentialId": "aa4b2fb9-d5f2-4f01-b756-585d85c8f9e1"
+  },
+  "eventTime": "2026-09-30T22:25:48Z",
+  "eventSource": "signin.amazonaws.com",
+  "eventName": "ExternalIdPDirectoryLogin",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.10",
+  "errorMessage": "Responses must contain exactly one Assertion",
+  "responseElements": {
+   "ExternalIdPDirectoryLogin": "Failure"
+  },
+  "eventID": "e19262d3-9bf5-42d4-98cc-df30ac52ef9b",
+  "eventType": "AwsConsoleSignIn",
+  "managementEvent": true,
+  "eventCategory": "Management",
+  "recipientAccountId": "437672023758"
+ },
+ "user_authentication_success": {
+  "eventVersion": "1.11",
+  "userIdentity": {
+   "type": "IdentityCenterUser",
+   "arn": "",
+   "accountId": "437672023758",
+   "accessKeyId": "",
+   "onBehalfOf": {
+    "userId": "14a83458-a031-70ba-43d2-5a551fd66c1e",
+    "identityStoreArn": "arn:aws:identitystore::437672023758:identitystore/d-90667e73f9"
+   },
+   "credentialId": "cedb343b-ae8c-4eb7-bfd0-0043693e674e"
+  },
+  "eventTime": "2026-09-30T22:32:39Z",
+  "eventSource": "signin.amazonaws.com",
+  "eventName": "UserAuthentication",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.10",
+  "responseElements": null,
+  "additionalEventData": {
+   "AuthWorkflowID": "f531282f-c89e-49f4-9804-1d46ba814495",
+   "UserName": "alex@corp.elvievalmores.com",
+   "LoginTo": "https://ssoins-7223046591f7f9f9.portal.us-east-1.app.aws",
+   "CredentialType": "EXTERNAL_IDP"
+  },
+  "eventID": "a64c9385-a951-415d-b4d9-706f51819240",
+  "eventType": "AwsServiceEvent",
+  "managementEvent": true,
+  "eventCategory": "Management",
+  "recipientAccountId": "437672023758",
+  "serviceEventDetails": {
+   "UserAuthentication": "Success"
+  }
+ },
+ "console_login_success": {
+  "eventVersion": "1.11",
+  "userIdentity": {
+   "type": "Root",
+   "principalId": "437672023758",
+   "arn": "arn:aws:iam::437672023758:root",
+   "accountId": "437672023758",
+   "accessKeyId": ""
+  },
+  "eventTime": "2026-09-29T22:08:43Z",
+  "eventSource": "signin.amazonaws.com",
+  "eventName": "ConsoleLogin",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.10",
+  "responseElements": {
+   "ConsoleLogin": "Success"
+  },
+  "additionalEventData": {
+   "LoginTo": "https://console.aws.amazon.com/console/home",
+   "MobileVersion": "No",
+   "MFAIdentifier": "arn:aws:iam::437672023758:mfa/root-mfa",
+   "MFAUsed": "Yes"
+  },
+  "eventID": "0881bc8c-aad4-4f7f-964a-71a8317ae6bd",
+  "eventType": "AwsConsoleSignIn",
+  "managementEvent": true,
+  "eventCategory": "Management",
+  "recipientAccountId": "437672023758"
+ },
+ "console_login_failure": {
+  "eventVersion": "1.11",
+  "userIdentity": {
+   "type": "Root",
+   "principalId": "437672023758",
+   "arn": "arn:aws:iam::437672023758:root",
+   "accountId": "437672023758",
+   "accessKeyId": ""
+  },
+  "eventTime": "2026-09-29T22:08:43Z",
+  "eventSource": "signin.amazonaws.com",
+  "eventName": "ConsoleLogin",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.10",
+  "responseElements": {
+   "ConsoleLogin": "Failure"
+  },
+  "additionalEventData": {
+   "LoginTo": "https://console.aws.amazon.com/console/home",
+   "MobileVersion": "No",
+   "MFAIdentifier": "arn:aws:iam::437672023758:mfa/root-mfa",
+   "MFAUsed": "Yes"
+  },
+  "eventID": "00000000-0000-0000-0000-000000000000",
+  "eventType": "AwsConsoleSignIn",
+  "managementEvent": true,
+  "eventCategory": "Management",
+  "recipientAccountId": "437672023758",
+  "errorMessage": "Failed authentication"
+ }
+}
