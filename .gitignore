@@ -63,3 +63,8 @@ __pycache__/
 # a commit and a run; see DECISIONS.md, 2026-09-23.
 sdr/out/
 collector/results*.json
+
+# Written into the workspace by google-github-actions/auth in CI: a pointer
+# to GitHub's short-lived OIDC token, not a key. Ignored so it never leaves
+# the runner and never marks an SDR's version -dirty.
+gha-creds-*.json
