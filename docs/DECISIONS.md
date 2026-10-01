@@ -6512,9 +6512,11 @@ role, since Config never writes as it.
 
 **Not yet verified:**
 
-- **The first digest after the change.** It was due at about 00:14 UTC. The read-only check was
-  refused by this session's permission controls (classified as a secret-store write), so it is left
-  to the user. If digests stopped, `LatestDigestDeliveryError` will say so.
+- **The first digest after the change: now verified, by the user.** This session's read-only check
+  was refused by its permission controls (classified as a secret-store write), so the user ran
+  `get-trail-status`. `LatestDigestDeliveryTime` was 2026-10-01T00:14:31Z, after the change, and
+  `LatestDigestDeliveryError` was null. The validation chain is unbroken. Which encryption path the
+  digest took was not read, and `CloudTrailWritesThroughBucketDefault` stays either way.
 - **The deny on `DisableKey` and `ScheduleKeyDeletion`, and the alert.** The test is an attempt by
   the operator that must be refused. It was refused by this session's permission controls as
   audit-log tampering, which is fair: if the deny were wrong, the test would disable the key. Left to

@@ -102,7 +102,6 @@ passkeys are in place, and the operator's permission set is applied. See that da
 
 | Item | What they do |
 |---|---|
-| **Check the first CloudTrail digest under the evidence key** | `aws cloudtrail get-trail-status --name fedramp-20x-ksi-trail`: `LatestDigestDeliveryTime` after 2026-10-01T00:00Z and no `LatestDigestDeliveryError`. Refused to this session's permission controls (2026-09-30 key entry) |
 | **Optional: test the evidence key's deletion guard** | As `caliper-admin`, `aws kms disable-key --key-id 402d209c-4e0b-4d63-8170-d61ea215fe76` must fail with `AccessDeniedException`, and an email should arrive. If it succeeds, `aws kms enable-key` with the same ID at once |
 
 Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
