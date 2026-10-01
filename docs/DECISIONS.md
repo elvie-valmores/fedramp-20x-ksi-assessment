@@ -6664,3 +6664,38 @@ still works.
 
 The ephemeral keys (database, secrets, logs) have no declared model yet. At the next phase 1 they
 will fail as undeclared keys, which is how their models get written.
+
+**A failed sign-in that AWS never recorded.** To give the detection Lambda a real failure to find,
+the user signed in to the portal as `admin@`, a directory account with no Identity Center user.
+AWS showed "Something went wrong / Looks like this code isn't right" at 00:42:49 UTC (request
+`413ffb22-…`). CloudTrail has no sign-in event from it in any region, and nothing reached the
+normalized corpus in 25 minutes. That matches 2026-09-22's symptom, where the cause was on Google's
+side; here it may instead be AWS refusing an unknown user before logging. **Either way, an
+unprovisioned directory account trying AWS leaves no trace in CloudTrail.** That is a coverage gap
+for KSI-IAM-SUS and KSI-MLA-LET. The trace, if any, is in Google's SAML audit log (Admin console →
+Reporting → Audit and investigation → SAML log events), which nothing here collects.
+
+**So the detection Lambda's publish to the encrypted topic is not yet proven.** The proposed test
+is one failed root console login (a wrong password, once). CloudTrail always records it, and it is
+the exact shape the old normalizer filed as a success.
+
+---
+
+## 2026-10-01 — Session closed out: re-verified, torn down, resume block rewritten
+
+**Re-verified at about 01:07 UTC:**
+
+- **AWS:** `boundary.py` gives 266 persistent and 0 ephemeral, and `--check` is clean. The API
+  sweep found nothing expensive (no load balancer, database, ECS cluster, non-default VPC,
+  endpoint, NAT gateway, Elastic IP or instance), and no IAM users.
+- **Evidence:** the evidence key is `Enabled`. CloudTrail delivery and digest errors are both
+  `None`, and Config's last delivery `SUCCESS`.
+- **Teardown:** `teardown.sh` reports "already torn down".
+- **Drift:** a plan scoped as `drift.yml` returns "No changes", and so does GCP.
+- **CI drift, run on demand (run 36799600607):** green, "No changes". This was triggered to prove
+  the drift role can read everything added since the last scheduled run (the key, the log groups,
+  `primary`, the SSM setting, the Security Hub controls), rather than learn it at 07:00.
+- **Collector:** 29 of 31. The two failures are the KMS inventory finding and the RDS orphan log
+  group, which is adopted at the next full apply.
+- **Tests:** the self-test is 20 of 20, and the normalizer's tests pass. `sdr/emit.py` writes a valid
+  record with 46 indicators and 31 evidence objects.

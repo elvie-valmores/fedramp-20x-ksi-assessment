@@ -113,10 +113,10 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented. 29 check definitions, 28 passing; the failure is a real standing `roles/editor` grant. Run by hand; no schedule or runtime exists yet |
+| Collector framework | 5 of 9 mechanisms implemented. 31 check definitions, 29 passing (2026-10-01); the failures are real findings, a Config inventory gap on deleted KMS keys and an orphaned RDS log group. Run by hand; no schedule or runtime exists yet |
 | SDR emitter | Emits a schema-valid record for all 46 indicators; automated evidence for 11 |
 | Central log store and query engine | Done |
-| Log normalization and detection | Done, AWS side only |
+| Log normalization and detection | Done, AWS side only. Sign-in classification fixed and tested 2026-10-01; the detection Lambda's alert path to the encrypted topic is not yet proven |
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
 | Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end. Operator permission set assigned to `alex@` (2026-09-29); `aws sso login` not yet proven |
 | Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
