@@ -7039,3 +7039,16 @@ found.
 - `requirements.txt` has versions without hashes.
 - Local Terraform is 1.16.3 while CI pins 1.10.5. It works, but they should match.
 - CI collection assumes the environment is down, its normal state.
+
+**A blind spot found at the end: Cloud Asset does not report regional log buckets.**
+`svc-sin-cfg-gcp-stores-use-declared-keys` kept counting 7 stores after
+`fedramp-20x-ksi-data-access` was created. Hours later, `gcloud asset search-all-resources` for
+`logging.googleapis.com/LogBucket` still returns only the two global buckets, while Logging's own
+`buckets list` shows the regional one under the evidence key. So the check passed "7 of 7" while
+not covering the bucket that holds the customer-data access logs. Its rule for that bucket simply
+matched nothing, which the evidence reports only as an unmatched rule.
+
+It also means the GCP inventory source misses regional log buckets. **Fix, next:** take log buckets
+from Logging's API, which is authoritative and listed it, not from Cloud Asset, and add
+`logging.buckets.list` to the collector role. More generally, **an unmatched rule for a store
+known to exist should fail, not just be reported.**
