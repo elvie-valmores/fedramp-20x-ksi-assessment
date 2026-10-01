@@ -7052,3 +7052,21 @@ It also means the GCP inventory source misses regional log buckets. **Fix, next:
 from Logging's API, which is authoritative and listed it, not from Cloud Asset, and add
 `logging.buckets.list` to the collector role. More generally, **an unmatched rule for a store
 known to exist should fail, not just be reported.**
+
+**The blind spot, closed the same night.** `svc-sin-cfg-gcp-stores-use-declared-keys` now takes log
+buckets from Logging's own API (`locations/-/buckets`), which lists the regional bucket, and no
+longer from Cloud Asset. The collector role gained `logging.buckets.list`, applied by the user. In
+CI (run 36941973250) it reports **8 stores, `fedramp-20x-ksi-data-access` under the evidence key**,
+and the SDR is clean at `5579ee273c67`.
+
+**The general fix is in the judgement.** A rule can be marked `required`, and a required rule that
+matches no store now **fails** ("required store not found in the population") instead of being
+listed as unmatched. Every GCP rule is required. AWS rules are not yet, because several name
+application-environment stores that legitimately do not exist while it is down. A new negative
+control, "required store missing", feeds the judgement a population without a required store; the
+old evaluator passed it, and the new one fails it.
+
+**Still open from this:** the GCP inventory generator (`inventory/gcp_source.py`) also reads Cloud
+Asset, so the inventory misses regional log buckets too. The bucket is declared, so no check fails
+on it, but "the inventory is complete" is not true for that type until the generator reads Logging
+too.
