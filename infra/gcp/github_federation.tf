@@ -73,6 +73,32 @@ resource "google_project_iam_custom_role" "collector" {
     "cloudasset.assets.searchAllResources",
     # iam-elp-cfg-gcp-basic-roles-allowed-only
     "cloudasset.assets.searchAllIamPolicies",
+
+    # The GCP drift checks' terraform plan: one read per resource type in
+    # state, seeded from the state's types and corrected by CI runs.
+    "artifactregistry.repositories.get",
+    "bigquery.datasets.get",
+    "bigquery.tables.get",
+    "cloudkms.cryptoKeys.get",
+    "cloudkms.cryptoKeys.getIamPolicy",
+    "cloudkms.keyRings.get",
+    "iam.roles.get",
+    "iam.serviceAccounts.get",
+    "iam.workloadIdentityPoolProviders.get",
+    "iam.workloadIdentityPools.get",
+    "logging.buckets.get",
+    "logging.settings.get",
+    "logging.exclusions.get",
+    "logging.sinks.get",
+    # At the TESTING support level for custom roles: accepted, and may change.
+    "monitoring.notificationChannels.get",
+    "pubsub.topics.get",
+    "pubsub.topics.getIamPolicy",
+    "resourcemanager.projects.get",
+    "resourcemanager.projects.getIamPolicy",
+    "serviceusage.services.get",
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
   ]
 }
 

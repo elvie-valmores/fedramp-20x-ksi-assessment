@@ -11,6 +11,12 @@
     "variables": [
       "TF_VAR_billing_account_id",
       "TF_VAR_billing_alert_email"
+    ],
+    "ci_plan_exclusions": [
+      {
+        "address": "google_billing_budget.*",
+        "reason": "The GCP budget lives on the billing account, which without an organization accepts only predefined roles, and CNA-DFP bars predefined roles on workload identities. The read-only collector cannot read it, so CI's plan leaves it out; local runs as terraform-admin cover it (DECISIONS.md, 2026-10-01)."
+      }
     ]
   }
 }

@@ -4,18 +4,19 @@
 # GCP by workload identity federation, with no key. Stage C1, this one, runs
 # every check that does not need Terraform state, as the collector's own
 # identity in each cloud: an AWS role through the OIDC provider, and the
-# federated principal in GCP. The state-based checks (C2) wait on two
-# things recorded in DECISIONS.md: bootstrap's state is local by design,
-# and the GCP plan needs its own read role. Manual until both clouds pass.
+# federated principal in GCP. Stage C2 adds the state-based checks: all
+# three roots are initialised against their S3 state, and the GCP plan
+# runs as the read-only principal with no impersonation. Manual until every
+# check runs; then scheduled.
 name: collect
 
 on:
   workflow_dispatch:
     inputs:
       skip:
-        description: 'Space-separated check id globs to leave out'
-        required: true
-        default: 'svc-acm-* *-inventory-is-declared *-inventory-current'
+        description: 'Space-separated check id globs to leave out (default: none)'
+        required: false
+        default: ''
         type: string
 
 # `id-token: write` mints the OIDC token both clouds exchange; nothing else
@@ -57,11 +58,36 @@ jobs:
           workload_identity_provider: projects/921906217926/locations/global/workloadIdentityPools/github-actions/providers/github
           project_id: fedramp-20x-ksi-assessment
 
+      - name: set up terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.10.5
+          terraform_wrapper: false
+
+      # The drift and inventory checks read each root's state, and plan the
+      # aws and gcp roots. Same backend settings as drift.yml.
+      - name: initialise the roots
+        run: |
+          for root in aws gcp bootstrap; do
+            terraform -chdir=infra/$root init -input=false \
+              -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+              -backend-config="key=$root/terraform.tfstate" \
+              -backend-config="region=us-east-1" \
+              -backend-config="use_lockfile=true" \
+              -backend-config="encrypt=true"
+          done
+
       - name: run the checks
         working-directory: collector
         env:
           GCP_IMPERSONATE: none
           SKIP: ${{ inputs.skip }}
+          # Plan as the federated principal itself; never as terraform-admin.
+          TF_VAR_impersonate_service_account: ''
+          TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL }}
+          TF_VAR_billing_account_id: ${{ vars.GCP_BILLING_ACCOUNT_ID }}
+          TF_VAR_gcp_pipeline_sa_unique_id: ${{ vars.GCP_PIPELINE_SA_UNIQUE_ID }}
+          TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
         run: |
           set -f  # the globs are for run_checks.py, not the shell
           args=()

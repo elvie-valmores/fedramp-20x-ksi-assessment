@@ -10,7 +10,7 @@ provider "google" {
   # The point is that no service account key file exists to be leaked.
   # inventory/gcp_auth.py does the same thing for the Python tooling, so
   # both act as the same identity.
-  impersonate_service_account = "terraform-admin@${var.gcp_project_id}.iam.gserviceaccount.com"
+  impersonate_service_account = var.impersonate_service_account == "" ? null : var.impersonate_service_account
 }
 
 # Same identity and the same two-hop auth as above. Declared separately
@@ -20,5 +20,5 @@ provider "google-beta" {
   project = var.gcp_project_id
   region  = var.gcp_region
 
-  impersonate_service_account = "terraform-admin@${var.gcp_project_id}.iam.gserviceaccount.com"
+  impersonate_service_account = var.impersonate_service_account == "" ? null : var.impersonate_service_account
 }

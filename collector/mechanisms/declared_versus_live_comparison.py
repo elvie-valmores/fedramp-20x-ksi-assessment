@@ -83,6 +83,7 @@ rather than hidden by it.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -103,7 +104,7 @@ TIMEOUT_SECONDS = 600
 # double a slow step to answer the same question. Nothing survives the
 # process, for the reason aws_source gives: a cached answer describes
 # what existed last time, not now.
-_PLANS: dict[str, dict[str, Any]] = {}
+_PLANS: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {}
 
 
 class DeclaredVersusLiveComparison(Mechanism):
@@ -126,11 +127,15 @@ class DeclaredVersusLiveComparison(Mechanism):
             )
 
         root = check.params["root"]
-        if root not in _PLANS:
-            _PLANS[root] = plan(root)
+        excluded = _plan_exclusions(check)
+        key = (root, tuple(sorted(e["address"] for e in excluded)))
+        if key not in _PLANS:
+            _PLANS[key] = plan(root, [e["address"] for e in excluded])
 
-        passed, evidence, message = evaluate(assertion, _PLANS[root])
+        passed, evidence, message = evaluate(assertion, _PLANS[key])
         evidence["root"] = root
+        # Stated, never silent: what this plan did not cover, and why.
+        evidence["excluded_from_plan"] = excluded
         return CheckResult(check.id, passed, evidence, message)
 
     def _live_is_declared(self, check: CheckDefinition) -> CheckResult:
@@ -166,7 +171,21 @@ class DeclaredVersusLiveComparison(Mechanism):
 # --- running Terraform ---
 
 
-def plan(root: str) -> dict[str, Any]:
+def _plan_exclusions(check: CheckDefinition) -> list[dict]:
+    """Addresses this run leaves out of the plan, each with its reason.
+
+    Only when running as the read-only collector identity in CI
+    (GCP_IMPERSONATE=none), and only addresses that identity cannot read by
+    design -- the GCP budget, on a billing account that accepts only
+    predefined roles, which are barred. Locally, as terraform-admin, the
+    plan covers everything. See DECISIONS.md, 2026-10-01.
+    """
+    if os.environ.get("GCP_IMPERSONATE", "").lower() != "none":
+        return []
+    return check.params.get("ci_plan_exclusions", [])
+
+
+def plan(root: str, excluded: list[str] = ()) -> dict[str, Any]:
     """Plan every managed address in state and return the plan as JSON.
 
     Raises on any Terraform failure. A plan that errors is not a plan that
@@ -179,6 +198,7 @@ def plan(root: str) -> dict[str, Any]:
     addresses = [
         a for a in _terraform(workdir, "state", "list").splitlines()
         if a and not a.startswith("data.")
+        and not any(fnmatch.fnmatchcase(a, g) for g in excluded)
     ]
     if not addresses:
         # Nothing in state is a finding, not a pass. evaluate() says so,
