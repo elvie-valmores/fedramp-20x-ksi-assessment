@@ -401,7 +401,11 @@ def main() -> int:
     schema, common = load_schemas()
     run = json.loads(args.results.read_text())
     commit = git("rev-parse", "HEAD")
-    dirty = bool(git("status", "--porcelain"))
+    changed = git("status", "--porcelain")
+    dirty = bool(changed)
+    if dirty:
+        # Name what made it dirty, so a "-dirty" version is never a mystery.
+        print("checkout has uncommitted changes; the version is marked -dirty:\n" + changed, file=sys.stderr)
     context = {
         "commit": commit,
         # Evidence links point at this commit. If the tree has uncommitted
