@@ -6930,3 +6930,41 @@ since it holds `projectIamAdmin`.
   organization, and those are barred. The CI plan would exclude it, as a recorded exception.
 - **`requirements.txt` pins versions but not hashes.** The app manifests require hashes. CI
   installing the collector should too.
+
+**Step B: the AWS collector role, `fedramp-20x-ksi-github-collector`** (`collector_identity.tf`,
+persistent, applied by the user). It is assumed from `main` through the existing OIDC provider,
+with the drift role's trust document.
+
+- **Its reads are the drift role's read policy, attached again**, so one list serves both, since
+  several collector checks run the same plan.
+- **One more policy covers only what the collector does:** `iam:SimulatePrincipalPolicy` (row 6),
+  `secretsmanager:ListSecrets` (row 1; the drift policy's deny on secret values still applies),
+  `config:SelectResourceConfig` (the inventory's query API), query execution in the evidence
+  workgroup only, and writes under `athena-results/results/`.
+- **The evidence key's policy names it,** through S3 only, as it does the two Lambdas, and so does
+  row 6's declared model.
+- **`AWS_COLLECTOR_ROLE`** is a repository variable.
+
+**Step C1: `collect.yml` runs both clouds from CI.** One job assumes the collector role and the GCP
+federated principal, and runs every check that needs no Terraform state. **Run 36937116498: 23 of
+24 passed, with no permission error on either cloud.** The one failure is the known RDS orphan log
+group, a real finding. That meant the Athena check read the encrypted corpus and wrote encrypted
+results as the new role, and row 6's simulations and key-policy reads ran in CI. The drift policy
+plus those four statements was the whole AWS permission set.
+
+**Step C2, the remaining eight checks, needs two decisions:**
+
+1. **Bootstrap's state is local by design.** It creates the bucket every other root uses, so it
+   cannot start in it. The AWS inventory checks read it to know the state bucket is declared.
+   **The usual answer is to migrate bootstrap's state into that bucket once it exists**
+   (`terraform init -migrate-state`).
+2. **The GCP plan in CI** needs the provider's impersonation of `terraform-admin` made optional, a
+   read role wide enough for the plan, and the budget left out as a recorded exception.
+
+**Known limits, recorded now:**
+
+- **The collector's AWS plan covers everything in state,** where `drift.yml` covers only the
+  persistent targets. With phase 2 up, it would try to refresh secret versions, and the deny on
+  secret values would stop it. CI collection therefore assumes the environment is down, its
+  normal state.
+- **Every action runs from a commit**, but `requirements.txt` still has versions without hashes.
