@@ -87,6 +87,7 @@ resource "google_project_iam_custom_role" "collector" {
     "iam.workloadIdentityPoolProviders.get",
     "iam.workloadIdentityPools.get",
     "logging.buckets.get",
+    "logging.buckets.list", # log buckets come from Logging, which reports regional ones; Cloud Asset does not
     "logging.settings.get",
     "logging.exclusions.get",
     "logging.sinks.get",

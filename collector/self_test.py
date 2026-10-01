@@ -405,7 +405,8 @@ _GKEY = "projects/p/locations/l/keyRings/r/cryptoKeys/analytics"
 GCP_KEY_RULES = [
     {"type": "bigquery.googleapis.com/Table", "name": "*", "expect": _GKEY},
     {"type": "storage.googleapis.com/Bucket", "name": "*", "expect": _GKEY},
-    {"type": "logging.googleapis.com/LogBucket", "name": "_Required", "expect": "GOOGLE-MANAGED", "reason": "test"},
+    {"type": "logging.googleapis.com/LogBucket", "name": "_Required", "expect": "GOOGLE-MANAGED", "reason": "test",
+     "required": True},
 ]
 _KEYS = {"alias/evidence": "arn:k/e", "key-e": "arn:k/e", "arn:k/e": "arn:k/e",
          "alias/artifacts": "arn:k/a", "key-a": "arn:k/a"}
@@ -514,6 +515,10 @@ CFG_CASES = [
         "Google key where customer key declared": [_store("storage.googleapis.com/Bucket", "b", "GOOGLE-MANAGED")],
         "another key's version": [_store("bigquery.googleapis.com/Table", "t", "KMS", _GKEY + "-other/cryptoKeyVersions/1")],
         "exception store given a customer key": [_store("logging.googleapis.com/LogBucket", "_Required", "KMS", _GKEY)],
+        # The 2026-10-01 blind spot: a required store missing from the
+        # population must fail, not pass with an unmatched rule.
+        "required store missing": [_store("bigquery.googleapis.com/Table", "t", "KMS", _GKEY + "/cryptoKeyVersions/3"),
+                                   _store("storage.googleapis.com/Bucket", "b", "KMS", _GKEY)],
     }),
     ("evaluate_decrypt_principals", lambda c: _decrypt(*c), (_GOOD_KEY,), {
         "undeclared role named": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"})],),

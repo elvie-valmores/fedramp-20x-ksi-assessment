@@ -279,7 +279,10 @@ class CloudAPIConfigRead(Mechanism):
             "scope": f"projects/{project_id}",
             "asset_types": check.params["asset_types"],
         })
-        stores = []
+        # Log buckets come from Logging, not Cloud Asset: Cloud Asset does not
+        # report regional ones (DECISIONS.md, 2026-10-01), and the bucket it
+        # missed is the one holding the customer-data access logs.
+        stores = _gcp_log_buckets(project_id)
         for res in results:
             keys = list(res.kms_keys) or ([res.kms_key] if res.kms_key else [])
             observed = {"mode": "KMS", "key": keys[0]} if keys else {"mode": "GOOGLE-MANAGED", "key": None}
@@ -374,6 +377,31 @@ class CloudAPIConfigRead(Mechanism):
 
         ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
         return CheckResult(check.id, ok, evidence, detail)
+
+
+def _gcp_log_buckets(project_id: str) -> list[dict]:
+    """Every log bucket in every location, from Logging's own API."""
+    from google.auth.transport.requests import AuthorizedSession
+
+    from gcp_auth import impersonated_token
+
+    session = AuthorizedSession(impersonated_token(project_id))
+    url = f"https://logging.googleapis.com/v2/projects/{project_id}/locations/-/buckets"
+    stores, page = [], None
+    while True:
+        response = session.get(url, params={"pageToken": page} if page else None, timeout=30)
+        response.raise_for_status()
+        body = response.json()
+        for bucket in body.get("buckets", []):
+            key = (bucket.get("cmekSettings") or {}).get("kmsKeyName")
+            stores.append({
+                "type": "logging.googleapis.com/LogBucket",
+                "name": bucket["name"].split("/")[-1],
+                "observed": {"mode": "KMS", "key": key} if key else {"mode": "GOOGLE-MANAGED", "key": None},
+            })
+        page = body.get("nextPageToken")
+        if not page:
+            return stores
 
 
 def gcp_key_name(ref: str | None) -> str | None:
@@ -657,8 +685,20 @@ def evaluate_store_keys(stores: list[dict], rules: list[dict], resolve) -> tuple
         if not ok:
             failing.append(label)
 
+    # A rule marked required names a store that must exist. Unmatched, it is
+    # a store the population did not show -- deleted, or missed by the
+    # source -- and that fails. Unrequired rules (an ephemeral environment's
+    # stores) are reported only. Added 2026-10-01, after a rule for a
+    # regional log bucket sat unmatched while the check passed.
+    unmatched = [i for i, _ in enumerate(rules) if i not in used]
+    for i in unmatched:
+        if rules[i].get("required"):
+            label = f"{rules[i]['type']}:{rules[i]['name']}"
+            results[label] = {"passed": False, "detail": "required store not found in the population"}
+            failing.append(label)
+
     evidence = {"stores": results, "failing": failing,
-                "rules_unmatched": [f"{r['type']}:{r['name']}" for i, r in enumerate(rules) if i not in used]}
+                "rules_unmatched": [f"{rules[i]['type']}:{rules[i]['name']}" for i in unmatched]}
     if not stores:
         return False, "no stores found -- nothing to judge", evidence
     if failing:

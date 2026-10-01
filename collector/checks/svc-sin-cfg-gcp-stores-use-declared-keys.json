@@ -3,7 +3,7 @@
   "indicator": "KSI-SVC-SIN",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "Every GCP store -- buckets, BigQuery datasets and tables, Artifact Registry, Pub/Sub topics, log buckets, secrets -- reports encryption with the customer key its data class declares (build row 1)",
+  "description": "Every GCP store -- buckets, BigQuery datasets and tables, Artifact Registry, Pub/Sub topics, log buckets (from Logging's API), secrets -- reports encryption with the customer key its data class declares (build row 1)",
   "required_cadence": "3 days",
   "params": {
     "provider": "gcp",
@@ -15,51 +15,58 @@
       "bigquery.googleapis.com/Table",
       "artifactregistry.googleapis.com/Repository",
       "pubsub.googleapis.com/Topic",
-      "logging.googleapis.com/LogBucket",
       "secretmanager.googleapis.com/Secret"
     ],
     "rules": [
       {
         "type": "storage.googleapis.com/Bucket",
         "name": "fedramp-20x-ksi-assessment-landing",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics",
+        "required": true
       },
       {
         "type": "bigquery.googleapis.com/Dataset",
         "name": "measurements",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics",
+        "required": true
       },
       {
         "type": "bigquery.googleapis.com/Table",
         "name": "measurements",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics",
+        "required": true
       },
       {
         "type": "artifactregistry.googleapis.com/Repository",
         "name": "fedramp-20x-ksi",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/artifacts"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/artifacts",
+        "required": true
       },
       {
         "type": "pubsub.googleapis.com/Topic",
         "name": "fedramp-20x-ksi-asset-feed",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence",
+        "required": true
       },
       {
         "type": "logging.googleapis.com/LogBucket",
         "name": "_Default",
         "expect": "GOOGLE-MANAGED",
-        "reason": "platform limit: a global bucket, and Cloud Logging supports CMEK only on regional buckets and only at creation. Data Access logs, the customer-data access record, are routed out of it to fedramp-20x-ksi-data-access (DECISIONS.md, 2026-10-01)"
+        "reason": "platform limit: a global bucket, and Cloud Logging supports CMEK only on regional buckets and only at creation. Data Access logs, the customer-data access record, are routed out of it to fedramp-20x-ksi-data-access (DECISIONS.md, 2026-10-01)",
+        "required": true
       },
       {
         "type": "logging.googleapis.com/LogBucket",
         "name": "_Required",
         "expect": "GOOGLE-MANAGED",
-        "reason": "platform limit: global and locked by Google, so CMEK is impossible (DECISIONS.md, 2026-10-01)"
+        "reason": "platform limit: global and locked by Google, so CMEK is impossible (DECISIONS.md, 2026-10-01)",
+        "required": true
       },
       {
         "type": "logging.googleapis.com/LogBucket",
         "name": "fedramp-20x-ksi-data-access",
-        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence"
+        "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence",
+        "required": true
       }
     ]
   }
