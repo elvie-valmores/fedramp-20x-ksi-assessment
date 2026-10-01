@@ -57,15 +57,27 @@ resource "aws_s3_bucket_object_lock_configuration" "log_store" {
   depends_on = [aws_s3_bucket_versioning.log_store]
 }
 
+# The evidence key (evidence_key.tf), since 2026-09-30. Objects written
+# before then stay SSE-S3 until the 7-day retention ages them out.
 resource "aws_s3_bucket_server_side_encryption_configuration" "log_store" {
   bucket = aws_s3_bucket.log_store.id
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.evidence.arn
     }
+    # One KMS call per bucket key rather than per object, which is what keeps
+    # a CloudTrail-and-Config write rate cheap under a customer key.
     bucket_key_enabled = true
   }
+
+  # After the trail has its own key, never before. If the bucket default
+  # switched first and the trail update then failed, CloudTrail would write
+  # with no key of its own, S3 would apply this one under an encryption
+  # context the key policy does not grant CloudTrail, and delivery would
+  # stop without an error anyone sees.
+  depends_on = [aws_cloudtrail.main]
 }
 
 resource "aws_s3_bucket_public_access_block" "log_store" {
@@ -148,6 +160,13 @@ resource "aws_cloudtrail" "main" {
   include_global_service_events = true
   is_multi_region_trail         = true
 
+  # CloudTrail encrypts each file itself with this key, rather than relying
+  # on the bucket default, so the encryption context names the trail and the
+  # key policy can scope CloudTrail to it. UpdateTrail checks that CloudTrail
+  # can use the key, so a wrong key policy fails the apply rather than
+  # silently stopping delivery.
+  kms_key_id = aws_kms_key.evidence.arn
+
   depends_on = [aws_s3_bucket_policy.log_store]
 }
 
@@ -210,13 +229,17 @@ resource "aws_s3_bucket_policy" "athena_results" {
   policy = data.aws_iam_policy_document.athena_results_bucket.json
 }
 
+# Query results are evidence derived from the log store, so the same key.
 resource "aws_s3_bucket_server_side_encryption_configuration" "athena_results" {
   bucket = aws_s3_bucket.athena_results.id
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.evidence.arn
     }
+    # One KMS call per bucket key rather than per object, which is what keeps
+    # a CloudTrail-and-Config write rate cheap under a customer key.
     bucket_key_enabled = true
   }
 }
@@ -253,6 +276,15 @@ resource "aws_athena_workgroup" "log_corpus" {
 
     result_configuration {
       output_location = "s3://${aws_s3_bucket.athena_results.bucket}/results/"
+
+      # Stated as well as inherited from the bucket default, because
+      # enforce_workgroup_configuration above makes this the setting every
+      # query uses, and a result written with an explicit weaker setting
+      # would otherwise override the bucket's.
+      encryption_configuration {
+        encryption_option = "SSE_KMS"
+        kms_key_arn       = aws_kms_key.evidence.arn
+      }
     }
   }
 }

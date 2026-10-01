@@ -75,13 +75,17 @@ resource "aws_s3_bucket_public_access_block" "config_delivery" {
   restrict_public_buckets = true
 }
 
+# The evidence key (evidence_key.tf), since 2026-09-30.
 resource "aws_s3_bucket_server_side_encryption_configuration" "config_delivery" {
   bucket = aws_s3_bucket.config_delivery.id
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.evidence.arn
     }
+    # One KMS call per bucket key rather than per object, which is what keeps
+    # a CloudTrail-and-Config write rate cheap under a customer key.
     bucket_key_enabled = true
   }
 }
@@ -161,6 +165,10 @@ resource "aws_config_configuration_recorder" "main" {
 resource "aws_config_delivery_channel" "main" {
   name           = "fedramp-20x-ksi-delivery"
   s3_bucket_name = aws_s3_bucket.config_delivery.bucket
+
+  # Config encrypts what it delivers with this key, as the recorder role,
+  # which the key policy names (evidence_key.tf).
+  s3_kms_key_arn = aws_kms_key.evidence.arn
 
   depends_on = [aws_config_configuration_recorder.main]
 }

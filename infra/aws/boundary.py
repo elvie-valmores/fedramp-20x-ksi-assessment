@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Fourteen files hold everything that survives a teardown. Everything else is the
+Fifteen files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -18,6 +18,7 @@ application environment, rebuilt on the next apply:
     account.tf            account-wide guardrails
     identity_center.tf    the operator's permission set and assignment
     securityhub_controls.tf  the Security Hub controls disabled, and why
+    evidence_key.tf       the key the evidence stores encrypt with
 
 pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -90,6 +91,7 @@ PERSISTENT_FILES = {
     "account.tf",
     "identity_center.tf",
     "securityhub_controls.tf",
+    "evidence_key.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",

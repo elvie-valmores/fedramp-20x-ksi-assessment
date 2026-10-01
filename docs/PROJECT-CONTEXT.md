@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-09-29:
 
-- **Persisting between sessions**: 259 AWS resource instances (73 resources plus 186 disabled
+- **Persisting between sessions**: 263 AWS resource instances (77 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -88,7 +88,7 @@ passkeys are in place, and the operator's permission set is applied. See that da
 ### First actions for the next session
 
 1. **Verify, do not trust.** These four commands reproduce every claim in "What is standing":
-   - `infra/aws/boundary.py --persistent | wc -l` should give 259, and `--ephemeral` should give 0.
+   - `infra/aws/boundary.py --persistent | wc -l` should give 263, and `--ephemeral` should give 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md`.
    - `gh run list --workflow drift.yml -L 3`: the daily 07:00 UTC run should be green.
    - `cd collector && ../.venv/bin/python run_checks.py`, with the variables under "Running
@@ -102,7 +102,8 @@ passkeys are in place, and the operator's permission set is applied. See that da
 
 | Item | What they do |
 |---|---|
-| _Nothing waiting_ | All of the user's items are closed as of 2026-09-30 |
+| **Check the first CloudTrail digest under the evidence key** | `aws cloudtrail get-trail-status --name fedramp-20x-ksi-trail`: `LatestDigestDeliveryTime` after 2026-10-01T00:00Z and no `LatestDigestDeliveryError`. Refused to this session's permission controls (2026-09-30 key entry) |
+| **Optional: test the evidence key's deletion guard** | As `caliper-admin`, `aws kms disable-key --key-id 402d209c-4e0b-4d63-8170-d61ea215fe76` must fail with `AccessDeniedException`, and an email should arrive. If it succeeds, `aws kms enable-key` with the same ID at once |
 
 Done on 2026-09-29: the editor grant removed (verified), and passkeys on `admin@` and `alex@` (on the
 user's word). The `InterimOperatorAdmin` permission set is assigned to `alex@`, under the 2026-09-19
@@ -114,16 +115,17 @@ user's `~/.zshrc`.**
 
 ### What is standing
 
-**AWS: 259 persistent resource instances. Nothing ephemeral is in state and nothing expensive is running.**
+**AWS: 263 persistent resource instances. Nothing ephemeral is in state and nothing expensive is running.**
 Verified 2026-09-25 against the API: no load balancer, database, ECS cluster, non-default VPC,
 endpoint, NAT gateway, Elastic IP or instance. `teardown.sh` reports "already torn down".
-`terraform state list` prints more lines than 259; the rest are data sources, which `boundary.py`
+`terraform state list` prints more lines than 263; the rest are data sources, which `boundary.py`
 leaves out.
 
 The persistent set, by file (`boundary.py --files`), is:
 
 - **Evidence layer:** the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config
-  recorder, Athena and Glue, and both Lambdas.
+  recorder, Athena and Glue, and both Lambdas. All under the evidence key since 2026-09-30
+  (`evidence_key.tf`).
 - **Guardrails:** the budget guardrail, the account-level S3 public access block, and the SSM
   document public-sharing block.
 - **CI and cross-cloud identity:** the OIDC provider, the drift role, the build role and the
@@ -231,10 +233,9 @@ command. Do not route around the refusal.
 automated evidence (29 of roughly 380 checks). The other four mechanisms are genuinely blocked. In
 rough priority:
 
-1. **The evidence-store encryption key.** This is SVC-SIN build row 1, and the recommended design is
-   in `DECISIONS.md`, 2026-09-23, "Four open items". It is a session of its own, because a wrong
-   key-policy grant stops CloudTrail or Config from logging, so confirm fresh logs arrive before
-   calling it done. SVC-SIN row 39's check waits on it.
+1. **The rest of SVC-SIN row 1.** The evidence key is done (2026-09-30), apart from the two checks
+   under "Waiting on the user". Next come the other data classes' keys, the stores still on AWS keys
+   (log groups, the detection topic), and collector checks for rows 1 and 6.
 2. **Fix the AWS-started sign-in** (2026-09-30 entry). Until then, sign-in starts at the Google tile.
 3. **A collector runtime and schedule.** Until one exists, the SDR's cycle statement says "run by
    hand", SDR-CSX-KMT's metrics are one run, and the emitter cannot run in CI.
@@ -255,7 +256,6 @@ the worker role.
 | Security Hub control coverage | Undeployed services' controls are off. Kept controls for declared types the Config recorder does not record still warn. Check which |
 | Config and scheduled KMS key deletion | A finding, not a lag: still `OK` in Config a day after deletion. Correct Config's record or stop trusting Config for this type |
 | AWS-started Identity Center sign-in fails | "Responses must contain exactly one Assertion". Lead: Entity ID versus Identity Center's issuer URL. Start from the Google tile until fixed |
-| Customer-managed keys for the evidence stores | Next thing to do, item 1 |
 | No collector schedule or runtime exists | Next thing to do, item 3 |
 | Config lag on implicit deletions | Handled by `inventory_current`. Four AWS types and all of GCP cannot be probed, and stay unaccounted when undeclared |
 | The analytics image has no build path | Blocks GCP phase 2. Needs GitHub-to-GCP federation and a third matrix entry in `build-and-push.yml` |

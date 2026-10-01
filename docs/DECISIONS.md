@@ -6449,3 +6449,85 @@ daily checks on 2026-10-01 (the method is in the previous entry), and confirm `S
 `PASSED`.
 
 **Collector: 28 of 29**, unchanged. Declared-exists-live and no-drift both cover all 259.
+
+---
+
+## 2026-09-30 — The evidence key: three stores, the trail and Athena under one customer key
+
+**Built: SVC-SIN build row 1, for the audit-log data class.** One customer-managed key,
+`alias/fedramp-20x-ksi-evidence` (`402d209c-…`), in `evidence_key.tf`, persistent. It has
+`prevent_destroy`, a 30-day deletion window and annual rotation. It encrypts:
+
+- the log store: CloudTrail files and normalized events
+- the Config delivery bucket
+- the Athena results bucket
+- CloudTrail's own encryption of each file (`kms_key_id` on the trail)
+- the Athena workgroup's results (`SSE_KMS`, enforced)
+
+All three buckets were SSE-S3 before. The state bucket stays SSE-S3, as recorded on 2026-09-23.
+
+**Build row 6, decrypt only to declared roles, is in the key policy and not delegated to IAM.** The
+account can administer the key, which Terraform and the drift role need, but no statement lets an
+IAM policy alone decrypt. Use is granted by name:
+
+- the normalization Lambda and the detection Lambda, only through S3
+- CloudTrail and Config, the services, scoped to this trail and this account
+- the operator's SSO role, by ARN pattern, only through S3, under the 2026-09-19 exception
+
+`ScheduleKeyDeletion` and `DisableKey` are denied to every principal except root. An EventBridge
+rule sends any attempt on either, successful or denied, to the interim detection topic.
+
+**What is not built: key policy changes still do not need JIT.** The operator's standing admin can
+rewrite this policy, including to grant itself more. That is the 2026-09-19 exception again.
+Policy changes appear in CloudTrail but raise no alert.
+
+**The first apply half-failed, in exactly the way this change was meant to catch.** The key, the
+trail, the Athena workgroup and all three bucket defaults applied. The Config delivery channel was
+refused: "Insufficient delivery policy … unable to write to bucket". The key policy named Config's
+recorder role, but Config delivers as the service `config.amazonaws.com`, which is what the Config
+bucket's policy grants. So `PutDeliveryChannel`'s writability check failed. Worse, the bucket default
+had already moved to the key, so Config's next scheduled delivery would also have been refused, with
+no error anyone reads. It was caught at apply, because the writability check makes this failure
+loud, with about four hours before the next delivery. The fix grants `config.amazonaws.com` the key,
+scoped by `aws:SourceAccount`, which is AWS's documented statement. It also removes the recorder
+role, since Config never writes as it.
+
+**Two failure orders closed before the first apply:**
+
+- **The log store's default waits for the trail.** If the bucket switched first and the trail update
+  failed, CloudTrail would write with no key of its own. S3 would then apply the evidence key under an
+  S3 encryption context the policy does not grant CloudTrail, and delivery would stop.
+- **CloudTrail may also use the key through the bucket default, for this trail only.** This is in
+  case digest files, which carry log validation, are written without CloudTrail's own encryption.
+
+**Verified by watching each writer write, after the fix:**
+
+| Writer | Evidence |
+|---|---|
+| CloudTrail | File at 00:10:06 UTC: `aws:kms`, the evidence key, bucket key on. No delivery error |
+| Normalization Lambda | Read that file and wrote `normalized-raw/…` at 00:10:07 UTC under the key |
+| Config | Forced snapshot `15a41756-…` delivered at 00:11:20 UTC, `SUCCESS`, under the key |
+| Operator, through Athena | A count over 2026-10-01 returned 512. The result object is under the key |
+| Detection Lambda | Invoked: `{"matches": 0}`, no error. Its query `SUCCEEDED` and scanned 515,337 bytes, so zero is a result, not a failure. Results `SSE_KMS` |
+
+**Not yet verified:**
+
+- **The first digest after the change.** It was due at about 00:14 UTC. The read-only check was
+  refused by this session's permission controls (classified as a secret-store write), so it is left
+  to the user. If digests stopped, `LatestDigestDeliveryError` will say so.
+- **The deny on `DisableKey` and `ScheduleKeyDeletion`, and the alert.** The test is an attempt by
+  the operator that must be refused. It was refused by this session's permission controls as
+  audit-log tampering, which is fair: if the deny were wrong, the test would disable the key. Left to
+  the user, with the restore commands beside it.
+
+**Afterwards:** a plan scoped as `drift.yml` scopes it returns "No changes" over **263** instances.
+The collector is 28 of 29 (the KMS finding). Every SVC-SIN check passes.
+
+**Cost:** 1 USD a month for the key, plus requests. Bucket keys keep S3's requests to one per bucket
+key. CloudTrail's own encryption calls KMS per file, about 200 an hour across regions, about
+150,000 a month. After the free 20,000, that is under 0.50 USD.
+
+**Next in row 1:** keys for the other data classes, and the stores the row names that are still on
+AWS keys: log groups, the detection topic, the registries (already on the artifacts key), state
+machines. Then a collector check for row 1's verify line, "every store reports encryption with the
+expected key", and row 6's, "key policies grant decrypt only to declared roles, resolved".
