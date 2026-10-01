@@ -401,6 +401,12 @@ KEY_RULES = [
     {"type": "log_group", "name": "/aws/rds/*", "expect": "alias/logs"},
     {"type": "s3_bucket", "name": "tfstate-*", "expect": "SSE-S3", "reason": "recorded"},
 ]
+_GKEY = "projects/p/locations/l/keyRings/r/cryptoKeys/analytics"
+GCP_KEY_RULES = [
+    {"type": "bigquery.googleapis.com/Table", "name": "*", "expect": _GKEY},
+    {"type": "storage.googleapis.com/Bucket", "name": "*", "expect": _GKEY},
+    {"type": "logging.googleapis.com/LogBucket", "name": "_Required", "expect": "GOOGLE-MANAGED", "reason": "test"},
+]
 _KEYS = {"alias/evidence": "arn:k/e", "key-e": "arn:k/e", "arn:k/e": "arn:k/e",
          "alias/artifacts": "arn:k/a", "key-a": "arn:k/a"}
 
@@ -498,6 +504,17 @@ CFG_CASES = [
         "expected key gone": [_store("log_group", "/aws/rds/db", "AWS-managed")],
         "no stores": [],
     }),
+    # The same judgement with the GCP resolver: a table reports the key
+    # version, which must still match its key, and Google's own key is not
+    # a customer key.
+    ("evaluate_store_keys (gcp)", lambda c: cfg.evaluate_store_keys(c, GCP_KEY_RULES, cfg.gcp_key_name)[:2],
+     [_store("bigquery.googleapis.com/Table", "t", "KMS", _GKEY + "/cryptoKeyVersions/3"),
+      _store("storage.googleapis.com/Bucket", "b", "KMS", _GKEY),
+      _store("logging.googleapis.com/LogBucket", "_Required", "GOOGLE-MANAGED")], {
+        "Google key where customer key declared": [_store("storage.googleapis.com/Bucket", "b", "GOOGLE-MANAGED")],
+        "another key's version": [_store("bigquery.googleapis.com/Table", "t", "KMS", _GKEY + "-other/cryptoKeyVersions/1")],
+        "exception store given a customer key": [_store("logging.googleapis.com/LogBucket", "_Required", "KMS", _GKEY)],
+    }),
     ("evaluate_decrypt_principals", lambda c: _decrypt(*c), (_GOOD_KEY,), {
         "undeclared role named": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"})],),
         "public principal": (_GOOD_KEY + [_st("*")],),
@@ -532,6 +549,7 @@ CFG_RESOURCES = {
     "evaluate_basic_roles": "basic_roles",
     "evaluate_store_keys": "store_encryption_keys",
     "evaluate_decrypt_principals": "key_decrypt_principals",
+    "evaluate_store_keys (gcp)": "store_encryption_keys",
 }
 
 

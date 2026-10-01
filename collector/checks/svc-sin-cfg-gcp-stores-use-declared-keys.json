@@ -1,0 +1,28 @@
+{
+  "id": "svc-sin-cfg-gcp-stores-use-declared-keys",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every GCP store -- buckets, BigQuery datasets and tables, Artifact Registry, Pub/Sub topics, log buckets, secrets -- reports encryption with the customer key its data class declares (build row 1)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "store_encryption_keys",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "asset_types": [
+      "storage.googleapis.com/Bucket",
+      "bigquery.googleapis.com/Dataset",
+      "bigquery.googleapis.com/Table",
+      "artifactregistry.googleapis.com/Repository",
+      "pubsub.googleapis.com/Topic",
+      "logging.googleapis.com/LogBucket",
+      "secretmanager.googleapis.com/Secret"
+    ],
+    "rules": [
+      {"type": "storage.googleapis.com/Bucket", "name": "fedramp-20x-ksi-assessment-landing", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
+      {"type": "bigquery.googleapis.com/Dataset", "name": "measurements", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
+      {"type": "bigquery.googleapis.com/Table", "name": "measurements", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/analytics"},
+      {"type": "artifactregistry.googleapis.com/Repository", "name": "fedramp-20x-ksi", "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/artifacts"}
+    ]
+  }
+}

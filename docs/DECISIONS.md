@@ -6699,3 +6699,42 @@ the exact shape the old normalizer filed as a success.
   group, which is adopted at the next full apply.
 - **Tests:** the self-test is 20 of 20, and the normalizer's tests pass. `sdr/emit.py` writes a valid
   record with 46 indicators and 31 evidence objects.
+
+---
+
+## 2026-10-01 (evening) — The detection chain proven end to end; Security Hub recounted
+
+**Re-verified at the start (20:11 UTC):** 266 persistent and 0 ephemeral, the API sweep all zeros,
+no IAM users. The **scheduled drift run at 14:07 UTC was green**, the first unattended run over the
+previous session's additions. The SSO session from the night before had expired, as four-hour
+sessions should; the user signed in from the Google tile.
+
+**The detection Lambda's alert path, the one link unproven at close-out, is proven.** The user made
+one failed root console sign-in, a wrong password once, at 20:10:52 UTC. It went through every
+stage:
+
+| Stage | Evidence |
+|---|---|
+| CloudTrail | `ConsoleLogin`, `Root`, `{"ConsoleLogin": "Failure"}`, "Failed authentication"; visible to lookup at 20:13 |
+| Normalizer | In `normalized_events` by 20:16 as `Authentication` / `Failure` / "Failed authentication" / `Root`. The pre-fix code filed this exact shape as a success |
+| Detection Lambda | Invoked at 20:16:18: `{"matches": 1}` |
+| Encrypted topic, as the Lambda's role | SNS `NumberOfNotificationsDelivered` 1 and `NumberOfNotificationsFailed` 0, at 20:16 |
+| Inbox | The user received "fedramp-20x-ksi: failed authentication detected" |
+
+All three publishers to the encrypted detection topic are now proven: CloudWatch alarms, EventBridge
+rules, and the detection Lambda.
+
+**Security Hub recount: the saving is real, and the method has a limit.**
+
+- **Disabled controls produced no findings** after 00:00 UTC, against 187 a day before.
+- **`SSM.7` is `PASSED`.** The document-sharing block works.
+- **Findings refreshed a day are down from 372 to about 230**, against a projected 185. The
+  difference is the controls that stay on, now evaluating about a dozen resources added the
+  evening before: the key, the log groups, topic encryption, `primary`, the alert rule and the SSM
+  setting.
+- **The limit:** a finding records only its *last* observation. Observations cluster at 00, 10 and
+  18 UTC, so a control checked twice a day counts once. Both counts are the same proxy, so they
+  compare, but neither is the billed number. The billed number is on the console's Security Hub →
+  Settings → Usage page, and on the first bill after the trial ends (about 2026-10-23).
+- **Revised projection:** about 7 USD a month for Security Hub, and about 10 for all three services
+  (from about 15).

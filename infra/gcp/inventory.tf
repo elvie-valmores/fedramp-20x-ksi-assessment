@@ -33,6 +33,13 @@ locals {
 
 resource "google_pubsub_topic" "asset_feed" {
   name = "fedramp-20x-ksi-asset-feed"
+
+  # The evidence key (analytics.tf), since 2026-10-01. Pub/Sub encrypts as
+  # its own agent, so the agent's grant must exist before the topic uses
+  # the key, or publishing fails.
+  kms_key_name = google_kms_crypto_key.evidence.id
+
+  depends_on = [google_kms_crypto_key_iam_member.pubsub_evidence]
 }
 
 # Cloud Asset Inventory publishes as its own Google-managed service

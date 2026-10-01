@@ -63,6 +63,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._store_encryption_keys(check)
         if provider == "aws" and resource == "key_decrypt_principals":
             return self._key_decrypt_principals(check)
+        if provider == "gcp" and resource == "store_encryption_keys":
+            return self._gcp_store_encryption_keys(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -255,6 +257,41 @@ class CloudAPIConfigRead(Mechanism):
         ]
         ok, detail, evidence = evaluate_basic_roles(grants, check.params["allowed"])
         return CheckResult(check.id, ok, evidence, detail)
+
+
+    def _gcp_store_encryption_keys(self, check: CheckDefinition) -> CheckResult:
+        """The GCP half of build row 1: every store reports its declared key.
+
+        Requires params: project_id, asset_types, rules (as the AWS check,
+        with each rule's type an asset type and expect a full key name, or
+        "GOOGLE-MANAGED" where Google's key is a recorded exception).
+
+        One Cloud Asset search gives both the population and the key each
+        resource reports, so the stores come from the API as on AWS. Key
+        names are compared without their version suffix: BigQuery tables
+        report the key version in use, everything else the key. Keys are
+        not resolved for existence -- Cloud KMS keys cannot be deleted, only
+        their versions destroyed, so a named key is always there.
+        """
+        project_id = check.params["project_id"]
+        client = asset_client(project_id)
+        results = client.search_all_resources(request={
+            "scope": f"projects/{project_id}",
+            "asset_types": check.params["asset_types"],
+        })
+        stores = []
+        for res in results:
+            keys = list(res.kms_keys) or ([res.kms_key] if res.kms_key else [])
+            observed = {"mode": "KMS", "key": keys[0]} if keys else {"mode": "GOOGLE-MANAGED", "key": None}
+            stores.append({"type": res.asset_type, "name": res.name.split("/")[-1], "observed": observed})
+
+        ok, detail, evidence = evaluate_store_keys(stores, check.params["rules"], gcp_key_name)
+        return CheckResult(check.id, ok, evidence, detail)
+
+
+def gcp_key_name(ref: str | None) -> str | None:
+    """A Cloud KMS key name without any /cryptoKeyVersions/N suffix."""
+    return ref.split("/cryptoKeyVersions/")[0] if ref else None
 
 
 # --- fetches ---
@@ -576,6 +613,11 @@ def evaluate_basic_roles(grants: list[dict], allowed: list[dict]) -> tuple[bool,
     return True, f"all {len(grants)} basic-role grant(s) are named allowances", evidence
 
 
+# Rule values naming a provider-held key rather than a customer key. Each is
+# an exception a rule must give a reason for, never a default.
+PROVIDER_HELD_KEY_MODES = ("SSE-S3", "GOOGLE-MANAGED")
+
+
 def evaluate_store_keys(stores: list[dict], rules: list[dict], resolve) -> tuple[bool, str, dict]:
     """Each store matched to its data class's rule, and its key compared.
 
@@ -599,9 +641,9 @@ def evaluate_store_keys(stores: list[dict], rules: list[dict], resolve) -> tuple
         else:
             used.add(rule)
             expect = rules[rule]["expect"]
-            if expect == "SSE-S3":
-                ok = observed["mode"] == "SSE-S3"
-                why = f"SSE-S3 as declared ({rules[rule].get('reason', '')})" if ok else f"expected SSE-S3, reports {observed['mode']}"
+            if expect in PROVIDER_HELD_KEY_MODES:
+                ok = observed["mode"] == expect
+                why = f"{expect} as declared ({rules[rule].get('reason', '')})" if ok else f"expected {expect}, reports {observed['mode']}"
             else:
                 want = resolve(expect)
                 got = resolve(observed["key"]) if observed["key"] else None

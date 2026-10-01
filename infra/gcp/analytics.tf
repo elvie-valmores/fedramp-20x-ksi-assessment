@@ -93,6 +93,24 @@ resource "google_kms_crypto_key" "artifacts" {
   }
 }
 
+# The audit-log class, the GCP counterpart of AWS's evidence key, added on
+# 2026-10-01. It encrypts the asset-feed topic. The two log buckets that
+# hold GCP's audit logs, _Default and _Required, cannot take it: both are
+# in the global region, which CMEK does not support, and CMEK can only be
+# set when a bucket is created. That is a platform limit, recorded as an
+# exception (DECISIONS.md, 2026-10-01). Permanent, like every key here:
+# Cloud KMS keys cannot be deleted, only their versions destroyed.
+resource "google_kms_crypto_key" "evidence" {
+  name                       = "evidence"
+  key_ring                   = google_kms_key_ring.main.id
+  rotation_period            = "31536000s"
+  destroy_scheduled_duration = "2592000s"
+
+  labels = {
+    data_class = "audit-log"
+  }
+}
+
 # Each service encrypts with its own agent identity, so each needs its own
 # grant on the key it uses. Scoped per key rather than per key ring: a
 # grant on the ring would let the storage agent decrypt image layers.
@@ -131,6 +149,18 @@ resource "google_kms_crypto_key_iam_member" "bigquery_analytics" {
   crypto_key_id = google_kms_crypto_key.analytics.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${data.google_bigquery_default_service_account.bq.email}"
+}
+
+# Pub/Sub's agent, read the same way as Artifact Registry's.
+resource "google_project_service_identity" "pubsub" {
+  provider = google-beta
+  service  = "pubsub.googleapis.com"
+}
+
+resource "google_kms_crypto_key_iam_member" "pubsub_evidence" {
+  crypto_key_id = google_kms_crypto_key.evidence.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
 
 resource "google_kms_crypto_key_iam_member" "artifactregistry_artifacts" {

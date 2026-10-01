@@ -147,7 +147,12 @@ data "aws_iam_policy_document" "github_build" {
   }
 
   # The image layers are encrypted with the artifacts key, so publishing
-  # requires being able to encrypt under it.
+  # requires being able to encrypt under it -- through ECR only. Until
+  # 2026-10-01 this had no condition, so the build role could decrypt any
+  # artifacts-key ciphertext, the worker's extracts included, given read on
+  # them; svc-sin-cfg-aws-keys-decrypt-only-declared resolved it as an
+  # unconditioned decrypt. Narrowed, then proven by a CI build that pushed
+  # and signed under the narrowed grant (DECISIONS.md, 2026-10-01).
   statement {
     sid    = "EncryptImageLayers"
     effect = "Allow"
@@ -159,6 +164,12 @@ data "aws_iam_policy_document" "github_build" {
     ]
 
     resources = [aws_kms_key.artifacts.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ecr.${data.aws_region.current.name}.amazonaws.com"]
+    }
   }
 
   # KSI-CMT-LMC build row 1: repository events into the corpus. The
