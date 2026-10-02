@@ -33,7 +33,9 @@ high-water mark, the database time it read through, and each cycle starts five
 minutes behind the newest mark so that a row committed late is not missed. Rows
 in that overlap land twice, and a failed landing leaves the mark where it was,
 so its rows are read again rather than lost. The analytics side deduplicates on
-`id`. This is stated here because it is a contract between the two clouds, not
+`id` and `recorded_at` together: the database is rebuilt every session and its
+ids restart, so `id` alone would take a new session's row for an old one and
+drop it (found 2026-10-02). This is stated here because it is a contract between the two clouds, not
 an implementation detail of one.
 
 ## Constraints both services are built to

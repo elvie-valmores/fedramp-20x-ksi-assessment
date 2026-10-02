@@ -14,12 +14,20 @@ on either side, and the AWS role's trust policy matches the service
 account's numeric ID rather than its email, so the trust cannot be
 re-pointed by recreating an account with a familiar name.
 
-**Landings are at-least-once.** The AWS worker's extract window is wider
-than its interval, so rows appear in more than one extract file. That is a
-deliberate trade made on the AWS side -- losing customer data is worse than
-duplicating it -- and it makes deduplication this job's responsibility. The
-load is therefore into a staging table followed by a MERGE on the source
-primary key, not a plain append.
+**Landings are at-least-once.** The AWS worker re-reads a five-minute
+overlap behind each high-water mark, so rows appear in more than one extract
+file. That is a deliberate trade made on the AWS side -- losing customer
+data is worse than duplicating it -- and it makes deduplication this job's
+responsibility. The load is therefore into a staging table followed by a
+MERGE, not a plain append.
+
+**A row is (id, recorded_at), not id.** The AWS database is rebuilt every
+session and its ids restart at 1, so id alone names a different row in each
+session. Until 2026-10-02 the MERGE matched on id, and a new session's row
+whose id an earlier session had used was taken for a duplicate and dropped,
+silently: the run reported fewer rows merged and nothing else. A re-landed
+row carries the same id and the same recorded_at; a different row reusing an
+id does not. See DECISIONS.md, 2026-10-02.
 """
 
 import json
@@ -131,10 +139,11 @@ def load(uri: str, project: str, dataset: str, table: str, kms_key: str) -> int:
     """Load the landed file, then merge it into the target table.
 
     Two steps rather than one. A direct append would duplicate every row
-    that appeared in more than one AWS extract, and the overlapping extract
-    window guarantees that happens. Staging plus MERGE on the source
-    primary key makes the pipeline idempotent: running it twice over the
-    same data produces the same table.
+    that appeared in more than one AWS extract, and the worker's overlap
+    guarantees that happens. Staging plus MERGE on (id, recorded_at) makes
+    the pipeline idempotent: running it twice over the same data produces
+    the same table, and a row from a rebuilt database that reuses an id is
+    still a new row.
     """
     client = bigquery.Client(project=project)
     staging_id = f"{project}.{dataset}.{table}_staging"
@@ -164,7 +173,7 @@ def load(uri: str, project: str, dataset: str, table: str, kms_key: str) -> int:
         f"""
         MERGE `{project}.{dataset}.{table}` AS target
         USING `{staging_id}` AS source
-        ON target.id = source.id
+        ON target.id = source.id AND target.recorded_at = source.recorded_at
         WHEN NOT MATCHED THEN
           INSERT (id, customer, metric, value, recorded_at)
           VALUES (source.id, source.customer, source.metric, source.value, source.recorded_at)

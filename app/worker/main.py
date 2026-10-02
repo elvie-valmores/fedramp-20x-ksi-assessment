@@ -43,8 +43,8 @@ def _handle_term(signum, frame) -> None:
 # How far behind the previous extract's mark each extract starts. A row is
 # stamped when its transaction starts (recorded_at defaults to now()) but is
 # visible only once it commits, so a row can be stamped before a mark and
-# appear after it. The overlap re-reads that tail; the analytics MERGE on id
-# makes the repeat harmless.
+# appear after it. The overlap re-reads that tail; the analytics MERGE on
+# (id, recorded_at) makes the repeat harmless.
 OVERLAP = timedelta(minutes=5)
 
 # The mark's place in the object key, and the pattern that reads it back.
@@ -108,8 +108,9 @@ def land(records: list[dict], through: datetime, bucket: str, prefix: str, regio
     **This is at-least-once delivery.** Rows in the overlap behind each
     mark land twice, and a retry after a write whose response was lost
     lands them again. It is a contract the analytics side has to honour:
-    **deduplicate on `id`, which is the table's primary key and stable
-    across landings.**
+    **deduplicate on (`id`, `recorded_at`)**, which together name one row
+    across landings and across database rebuilds; `id` alone restarts with
+    every rebuilt database.
     """
     now = datetime.now(timezone.utc)
     # Wall-clock first, so keys list in landing order for a reader.
