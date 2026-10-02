@@ -93,7 +93,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    `AWS_PROFILE=caliper-admin`. It is set in the user's `~/.zshrc`, but a shell started earlier may
    not have it. There are no static AWS credentials anywhere, and no IAM users.
 2. **Verify, do not trust:**
-   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The 05:30 UTC run is
+   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The scheduled run (05:30 UTC, but GitHub has started it hours late) is
      expected to be red **only** on the one known finding below. Open its log: the self-test says
      22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
      `evidence-<run id>` holds `results.json` and the SDR.
@@ -101,7 +101,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
-     things" gives **31 of 32**. The failure is `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS
+     things" gives **34 of 35**. The failure is `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS
      orphan log group, adopted at the next phase 1).
 3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
    were both done on 2026-10-01 evening.
@@ -232,11 +232,11 @@ around a refusal.** Refused so far:
 
 ### The next thing to do
 
-**Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 34
+**Evidence coverage is still the bottleneck:** 12 of 46 indicators carry automated evidence, from 35
 of roughly 380 checks. In rough priority:
 
-1. **GCP phase 2:** deploy the Cloud Run job pinned to the signed analytics digest
-   (`analytics@sha256:19f7fda8…`, 2026-10-02 entry).
+1. **An end-to-end analytics run with data:** AWS phase 2 up, so the worker writes extracts, and
+   the GCP job loads them into BigQuery. Everything up to the empty bucket is proven (2026-10-02).
 2. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
@@ -266,7 +266,7 @@ of roughly 380 checks. In rough priority:
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| GCP phase 2 not deployed | The image exists, signed (2026-10-02). Next thing to do, item 1 |
+| GCP phase 2 deployed, but no data has crossed yet | The job runs every 6 hours and the cross-cloud handshake is proven; the extract bucket stays empty until AWS phase 2 runs the worker |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |

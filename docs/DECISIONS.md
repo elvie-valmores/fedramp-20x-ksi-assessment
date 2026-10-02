@@ -7202,3 +7202,66 @@ Two new checks cover its signing, as the existing two cover the ECR job's:
 `analytics@sha256:19f7fda8771949788a858b389ca0cc83e16536dfbfcd1b133ef9fcf1c4df5d9f` (tag
 `git-193454c1a7b2`), with its cosign signature and attestations, and the log shows the claims
 validated for that digest. **The blocker on GCP phase 2 since 2026-09-22 is gone.**
+
+---
+
+## 2026-10-02 — GCP phase 2 deployed; the cross-cloud path proven from both clouds
+
+**The first unattended collector run, and what it found.**
+
+- **It started at 11:15 UTC, not 05:30.** GitHub delays scheduled workflows under load, so the
+  cycle is daily but the hour is not guaranteed.
+- **It caught a gap of mine.** The two GCP drift checks errored: the collector role could not read
+  the Artifact Registry repository's IAM (`artifactregistry.repositories.getIamPolicy`). The
+  repository grant to `build-and-push.yml` was added on 2026-10-02 without its drift read, which is
+  this project's own rule, followed for the Cloud Run job the same night and missed for this. The
+  role has it now.
+- **Everything else in it was right:** the self-test passed 22 of 22, both test suites passed, and
+  the SDR was clean.
+
+**Phase 2 is declared in code.** `deploy_pipeline` defaults to true, and `pipeline_image` defaults
+to `analytics@sha256:19f7fda8…`, the digest build run 36954218125 signed and verified. Changing what
+runs is a reviewed commit, and the collector's CI plan, which passes no variables, sees the job as
+declared and not as something to destroy.
+
+**The first phase 2 apply was partial, and silently broken.** The job and the schedule were
+created, but the schedule's invoke grant was not: `terraform-admin` could not set IAM on a Cloud
+Run job. **From 18:00 on 2026-10-01 the schedule fired every six hours, and every attempt was
+`PERMISSION_DENIED` (status code 7). The job never ran once.** No check and no alarm noticed. Every
+configuration check passed, because the job existed and the schedule existed. That is this
+project's recurring failure: configured, applied, consistent, non-functional. It was found by
+reading the plan, which still listed the grant as "to be created".
+
+The fix:
+
+- **`roles/run.admin` for `terraform-admin`,** granted by the user like its other roles, and
+  confirmed live with `testIamPermissions` before planning.
+- **The grant applied,** with the collector role fix in the same apply.
+
+**Proven, from both clouds:**
+
+- **By hand, execution `analytics-pipeline-zstgv`:** it logged "read 0 records from 0 objects" and
+  "no extracts found, nothing loaded", then exit 0. The extract bucket is empty while AWS phase 2 is
+  down, and the job says so in words.
+- **By the schedule, triggered at once and not waited for:** HTTP 200, where every earlier attempt
+  had been code 7, starting `analytics-pipeline-mwnlh`, which succeeded.
+- **AWS CloudTrail:** two `AssumeRoleWithWebIdentity` calls into `fedramp-20x-ksi-gcp-pipeline`,
+  one per run (14:19:01 and 14:20:45). The issuer is `accounts.google.com`, the subject and audience
+  are the pipeline service account's numeric ID `104894493962317106056` (the immutable identity the
+  trust is pinned to), and there was no error. The S3 list itself is a data event, which the trail
+  does not record; the job's own log covers it.
+
+**The check that would have caught it:** `svc-vcm-ops-gcp-pipeline-schedule-runs`. It passes only
+if the schedule is enabled and its last attempt succeeded within 7 hours. Its negative controls are:
+
+- **"last attempt refused"** (today's failure exactly: on time, code 7)
+- paused
+- never attempted
+- stale
+- missing
+
+It passes in CI as the collector (run 37019681402). It is **KSI-SVC-VCM's first automated
+evidence**, so 12 of 46 indicators now have some. There are 35 checks; the self-test is 23 of 23.
+
+**State:** the collector is 34 of 35, the one failure being the RDS orphan log group, which waits for
+AWS phase 1. GCP drift covers 46 resources, including the job.
