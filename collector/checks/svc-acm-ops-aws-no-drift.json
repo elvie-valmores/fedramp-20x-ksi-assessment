@@ -13,5 +13,14 @@
       "TF_VAR_gcp_pipeline_sa_unique_id",
       "TF_VAR_app_domain"
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.validate.1",
+      "covers": "full",
+      "with": [
+        "svc-acm-ops-gcp-no-drift"
+      ]
+    }
+  ]
 }

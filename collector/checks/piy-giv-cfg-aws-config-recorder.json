@@ -9,5 +9,12 @@
     "provider": "aws",
     "resource": "config_recorder",
     "region": "us-east-1"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-GIV.verify.1",
+      "covers": "partial",
+      "gap": "Checks the recorder exists and is recording in us-east-1. It does not assert that all supported resource types are recorded, or enumerate the in-scope regions."
+    }
+  ]
 }

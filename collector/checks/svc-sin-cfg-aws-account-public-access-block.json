@@ -10,5 +10,12 @@
     "resource": "s3_account_public_access_block",
     "region": "us-east-1",
     "account_id": "437672023758"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.2",
+      "covers": "partial",
+      "gap": "AWS only. GCS public access prevention is not checked."
+    }
+  ]
 }

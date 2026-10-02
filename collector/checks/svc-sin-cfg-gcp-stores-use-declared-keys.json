@@ -69,5 +69,14 @@
         "required": true
       }
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-stores-use-declared-keys"
+      ]
+    }
+  ]
 }

@@ -108,5 +108,14 @@
         "expect": "alias/fedramp-20x-ksi-database"
       }
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-gcp-stores-use-declared-keys"
+      ]
+    }
+  ]
 }

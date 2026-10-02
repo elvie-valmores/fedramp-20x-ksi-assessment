@@ -10,5 +10,12 @@
     "region": "us-east-1",
     "resource_type": "AWS::S3::Bucket",
     "min_count": 2
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-GIV.validate.1",
+      "covers": "partial",
+      "gap": "A floor on the count of S3 buckets in the inventory, not a reconciliation against a direct listing."
+    }
+  ]
 }

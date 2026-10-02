@@ -8,5 +8,15 @@
   "params": {
     "workflow": "drift.yml",
     "assertion": "actions_pinned_to_sha"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-DFP.verify.4",
+      "covers": "full",
+      "with": [
+        "cna-dfp-cfg-actions-pinned-build",
+        "cna-dfp-cfg-actions-pinned-collect"
+      ]
+    }
+  ]
 }

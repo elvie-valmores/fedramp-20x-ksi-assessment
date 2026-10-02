@@ -10,5 +10,12 @@
     "project_id": "fedramp-20x-ksi-assessment",
     "resource_type": "cloudresourcemanager.googleapis.com/Project",
     "min_count": 1
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-GIV.validate.3",
+      "covers": "partial",
+      "gap": "Confirms the one GCP project appears. AWS regions are not enumerated against the inventory."
+    }
+  ]
 }

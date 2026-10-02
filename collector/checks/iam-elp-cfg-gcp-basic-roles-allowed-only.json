@@ -21,5 +21,12 @@
         "reason": "The provisioning identity. With projectIamAdmin it is owner-equivalent by necessity: declaring project IAM in Terraform requires the identity that applies it to be able to set project IAM (DECISIONS.md, 2026-09-22)."
       }
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-ELP.verify.3",
+      "covers": "partial",
+      "gap": "Two named allowances hold basic roles, each with a recorded reason: the account that created the project as owner, and terraform-admin as editor. The row as written allows none for an in-scope principal."
+    }
+  ]
 }

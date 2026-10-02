@@ -12,5 +12,6 @@
     "location": "us-central1",
     "job": "analytics-pipeline",
     "max_age_hours": 7
-  }
+  },
+  "unlinked_reason": "Shows the cross-cloud path runs on schedule, a precondition for validate.1. It does not observe the federated token the row asks about."
 }

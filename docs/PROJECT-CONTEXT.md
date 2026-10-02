@@ -31,42 +31,40 @@ The design phase is closed. What remains is the build.
 
 ## Where the build has reached
 
-The build is in progress, and `README.md` carries the current status table. As of 2026-10-01:
+The build is in progress, and `README.md` carries the current status table. As of 2026-10-02:
 
 - **Persisting between sessions**: 269 AWS resource instances (83 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
   the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
-  S3 public access block, and the operator's Identity Center permission set and assignment. On GCP: all of
-  phase 1. "Resume here" below has the detail.
+  S3 public access block, and the operator's Identity Center permission set and assignment. On GCP:
+  everything, phase 2 included. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
-  in about fifteen minutes and is torn down after each session. Phase 1 was last verified on
-  2026-09-22. Phase 2 was verified on 2026-09-23, when it served a request authenticated to the
-  database through IAM. **Do not assume it is running.** Check before building anything that talks
+  in about fifteen minutes and is torn down after each session. Both phases last ran on 2026-10-02,
+  when data crossed end to end into BigQuery. **Do not assume it is running.** Check before building anything that talks
   to it.
-- **Applied up to a gate**: the GCP analytics pipeline. Phase 1 is standing. The Cloud Run job waits
-  behind `deploy_pipeline = false` for an image that has no way to be built yet (below).
+- **Standing, phase 2 included**: the GCP analytics pipeline. The Cloud Run job and its six-hourly
+  schedule have been deployed since 2026-10-02, with the image pinned by digest in `pipeline.tf`.
+  Checked live on 2026-10-02: the schedule was enabled, with its last attempt at 18:00 UTC.
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Built, first version**: the SDR emitter (`sdr/emit.py`). It emits a valid record for all 46
-  indicators, with automated evidence for 11 of them. See the 2026-09-23 entry in `DECISIONS.md`.
-- **Not started**: the three workflows, policy-as-code, and the remaining check definitions. 31 of
-  roughly 380 exist. 5 of 9 collector mechanisms are implemented and self-tested.
-  The other four are registered and raise a clear error naming what they wait on, and all four
-  are genuinely blocked. **No collector schedule or runtime exists.** The collectors are run by
-  hand.
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 36 checks
+  from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
+  mechanisms are implemented and self-tested. The other four raise a clear error naming what they
+  wait on.
+- **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
+  7 are fully automated, 11 partly, and 362 not yet.
+- **Not started**: the three workflows and policy-as-code.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
 GCP root each apply in two phases. KSI-SVC-VRI requires images referenced by digest, and a digest
-cannot be looked up before the image exists. AWS phase 2 is now reachable in a single apply. GCP
-phase 2 is still blocked on the analytics image.
+cannot be looked up before the image exists. Both are resolved:
 
-**The analytics image has no path to existing yet.** `build-and-push.yml` builds `api` and `worker`
-only, there is no GitHub-to-GCP workload identity federation, and there is no container runtime on
-the workstation. `infra/README.md` says the image is "pushed by hand until then", which is not
-currently possible. Resolve this before planning GCP phase 2.
+- AWS phase 2 is reachable in a single apply.
+- GCP phase 2 has been deployed since 2026-10-02. The analytics image is built, signed and pushed by
+  `build-and-push.yml`'s `build-analytics` job, through GitHub-to-GCP federation.
 
 The build order below is the plan; the status table in `README.md` is what has actually happened.
 
@@ -148,10 +146,10 @@ real bill is about 0.05 USD a day plus the key (1 USD a month). After the trials
 about 8.70 USD a month. Inspector's trial ends **2026-10-06**, GuardDuty's about 2026-10-21, and
 Security Hub's about 2026-10-23.
 
-**Signed images are in ECR. Deploy `git-f9f2c35f8fd1`:** it carries the `/dev/shm` certificate fix.
+**Signed images are in ECR. Deploy `git-70600724abeb`:** see "At the next phase 2".
 
-**GCP: 30 resources, phase 1, no drift.** The Cloud Run job stays off (`deploy_pipeline = false`)
-until there is an image. GCP has no teardown; phase 1 is meant to stand.
+**GCP: phase 1 and phase 2, both standing.** `deploy_pipeline` has defaulted to true since 2026-10-02.
+GCP has no teardown; it is meant to stand.
 
 **Identity.** AWS Organization `o-yyhciflg3u`. IAM Identity Center `ssoins-7223046591f7f9f9`, portal
 `https://ssoins-7223046591f7f9f9.portal.us-east-1.app.aws`, identity store `d-90667e73f9`. The SAML
@@ -235,11 +233,17 @@ around a refusal.** Refused so far:
 
 ### The next thing to do
 
-**Evidence coverage is still the bottleneck:** 12 of 46 indicators carry automated evidence, from 35
-of roughly 380 checks. In rough priority:
+**Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 7 are fully automated, 11 partly, and 362 not
+yet. 9 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
+by any check at all. In rough priority:
 
-1. **More check definitions**, negative controls for the older handlers, and **links from checks
-   to matrix rows**.
+1. **Close the partial rows cheaply.** Each gap is stated in the coverage report. Several are the
+   other cloud of a row that is already done on one: GCS public access prevention, and Cloud KMS
+   decrypt principals.
+2. **More check definitions,** taken row by row from the report. Rows the existing mechanisms can
+   already read come first: `cloud_api_config_read` and `pipeline_config_read` CFG rows.
+3. **Negative controls for the older handlers.**
 
 **At the next phase 1:**
 

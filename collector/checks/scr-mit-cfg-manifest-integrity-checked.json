@@ -11,5 +11,6 @@
     "job": "scan-dependencies",
     "before": "require hashed",
     "after": "install scanner"
-  }
+  },
+  "unlinked_reason": "Proves build row 4 (build-time resolution only, verified rather than assumed). No VERIFY or VALIDATE row asks for manifest hashes."
 }

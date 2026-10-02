@@ -9,5 +9,12 @@
     "provider": "aws",
     "resource": "s3_buckets_block_public_access",
     "region": "us-east-1"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.2",
+      "covers": "partial",
+      "gap": "AWS only. GCS public access prevention is not checked."
+    }
+  ]
 }

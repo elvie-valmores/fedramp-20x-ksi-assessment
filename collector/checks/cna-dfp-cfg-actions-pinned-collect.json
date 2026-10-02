@@ -1,12 +1,12 @@
 {
-  "id": "cna-dfp-cfg-actions-pinned-build",
+  "id": "cna-dfp-cfg-actions-pinned-collect",
   "indicator": "KSI-CNA-DFP",
   "mechanism": "pipeline_config_read",
   "evidence_type": "CFG",
-  "description": "Every third-party action in the image build workflow is pinned to a commit SHA",
+  "description": "Every third-party action in the evidence collection workflow is pinned to a commit SHA",
   "required_cadence": "on every pipeline change",
   "params": {
-    "workflow": "build-and-push.yml",
+    "workflow": "collect.yml",
     "assertion": "actions_pinned_to_sha"
   },
   "matrix_rows": [
@@ -14,8 +14,8 @@
       "row": "KSI-CNA-DFP.verify.4",
       "covers": "full",
       "with": [
-        "cna-dfp-cfg-actions-pinned-drift",
-        "cna-dfp-cfg-actions-pinned-collect"
+        "cna-dfp-cfg-actions-pinned-build",
+        "cna-dfp-cfg-actions-pinned-drift"
       ]
     }
   ]

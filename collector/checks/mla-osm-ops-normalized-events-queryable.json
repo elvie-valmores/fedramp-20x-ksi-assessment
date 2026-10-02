@@ -11,5 +11,12 @@
     "workgroup": "fedramp-20x-ksi-log-corpus",
     "query": "SELECT class_name FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -1, current_date), '%Y-%m-%d') LIMIT 1",
     "expect": "any_rows"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.validate.3",
+      "covers": "partial",
+      "gap": "Queries AWS-sourced normalized events from the last day. GCP events are not in the corpus yet, so no query returns both clouds."
+    }
+  ]
 }

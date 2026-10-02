@@ -1,0 +1,3802 @@
+[
+  {
+    "id": "KSI-IAM-APM.verify.1",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Authentication method configuration and permitted factor types",
+    "source": "AWS IAM Identity Center API",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.verify.2",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "2SV enforcement setting and OU scope, confirming no exempted population",
+    "source": "GCP Admin SDK",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.verify.3",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Registered credential type per identity, root enumerated separately",
+    "source": "AWS iam list-mfa-devices and list-virtual-mfa-devices; GCP Directory API",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.verify.4",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Password policy for fallback-lane identities against the cited position",
+    "source": "AWS account password policy",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.validate.1",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Factor actually used at AWS sign-in, including every root console login",
+    "source": "CloudTrail ConsoleLogin events, MFAUsed and additionalEventData",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.validate.2",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Factor actually used at GCP sign-in",
+    "source": "GCP Cloud Audit Logs login events",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-APM.validate.3",
+    "indicator": "KSI-IAM-APM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every human identity in both clouds appears in the credential inventory, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.verify.1",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No IAM users with access keys exist for workload purposes",
+    "source": "AWS iam list-users, list-access-keys",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.verify.2",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every service account has zero user-managed keys",
+    "source": "GCP IAM service account keys, filtered to user-managed",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.verify.3",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Org policy denying service account key creation is enforced, no exempted project",
+    "source": "GCP Organization Policy",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.verify.4",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Role trust policies name a specific subject and audience, no wildcard principals",
+    "source": "AWS iam get-role trust policy documents",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.verify.5",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Federation pool and provider configured with the expected issuer and subject constraint",
+    "source": "AWS OIDC provider config; GCP workload identity pool",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.validate.1",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Cross-cloud access observed using an assumed role via federation, not a static credential",
+    "source": "CloudTrail AssumeRoleWithWebIdentity events",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.validate.2",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero authentication events using long-lived credentials, standing query, zero results expected",
+    "source": "CloudTrail sigv4 events attributable to a static access key",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.validate.3",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every non-user identity in the inventory appears in the credential review, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SNU.validate.4",
+    "indicator": "KSI-IAM-SNU",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Credentials unused within the window are surfaced by name",
+    "source": "AWS IAM credential report last-used; GCP service account last authentication",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.verify.1",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every identity maps to exactly one declared role",
+    "source": "Role definitions versus IAM Identity Center assignments and GCP bindings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.verify.2",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No wildcard actions or resources in any attached policy",
+    "source": "AWS IAM policy documents; GCP custom role definitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.verify.3",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No GCP primitive roles bound to any in-scope principal",
+    "source": "GCP IAM policy bindings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.verify.4",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No inline or directly attached policies, all access via role",
+    "source": "AWS iam list-attached-user-policies, list-user-policies",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.verify.5",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "IAM and organization policy mutation held only by platform engineer",
+    "source": "AWS IAM policy simulation; GCP Policy Analyzer",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.validate.1",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero access events by an identity to a resource its role prohibits, standing query, zero results expected",
+    "source": "CloudTrail and GCP Cloud Audit Logs, filtered per role prohibition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.validate.2",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero AWS authentication or API events attributable to the data analyst identity",
+    "source": "CloudTrail, zero results expected",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.validate.3",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero IAM mutation events by any principal other than platform engineer",
+    "source": "CloudTrail IAM write events; GCP Audit Logs SetIamPolicy",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.validate.4",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Permissions unused across the full window surfaced by name and role",
+    "source": "IAM Access Analyzer unused access findings; GCP recommender",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-ELP.validate.5",
+    "indicator": "KSI-IAM-ELP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every identity in the inventory appears in the role mapping, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.verify.1",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every entitlement declares maximum duration, justification requirement, and IAM Conditions on granted roles",
+    "source": "GCP PAM entitlements API",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.verify.2",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Elevated permission sets exist with zero default account assignments",
+    "source": "AWS Identity Center list-account-assignments per permission set",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.verify.3",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Platform engineer holds zero standing assignments in either cloud",
+    "source": "Identity Center assignments; GCP IAM bindings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.verify.4",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Elevated permission sets carry condition keys binding to session attributes",
+    "source": "AWS permission set inline and managed policy documents",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.verify.5",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Revocation backstop schedule exists and is enabled",
+    "source": "EventBridge Scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.validate.1",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every elevation grant observed carries a justification and an expiry",
+    "source": "GCP PAM grant audit logs; Step Functions execution history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.validate.2",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero elevated assignments exist older than their TTL, standing query, zero results expected",
+    "source": "Identity Center assignment timestamps; GCP IAM binding conditions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.validate.3",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Revocation observed firing: an assignment created by an elevation is absent after expiry",
+    "source": "Assignment state compared before and after TTL",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.validate.4",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero privileged actions performed by an identity with no active grant covering that action",
+    "source": "CloudTrail and GCP Audit Logs correlated against grant windows",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-JIT.validate.5",
+    "indicator": "KSI-IAM-JIT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every identity in the inventory carries a lane assignment, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.verify.1",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Identity source is the external provider and auto-provisioning is enabled",
+    "source": "AWS Identity Center settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.verify.2",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "SCIM access token present and not within the expiry warning window",
+    "source": "Identity Center provisioning configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.verify.3",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every Identity Center group and assignment appears in declared state",
+    "source": "Terraform state versus Identity Store list-groups and list-account-assignments",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.verify.4",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Deprovisioning behaviour configured for suspend and delete events",
+    "source": "Cloud Identity provisioning settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.verify.5",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every workforce identity maps to an active Cloud Identity account",
+    "source": "Identity Store versus Cloud Identity Directory API",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.validate.1",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A suspension in Cloud Identity is observed removing the corresponding AWS identity within the deprovisioning window",
+    "source": "Directory API state change correlated with Identity Store state",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.validate.2",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero identity or group mutations by any principal other than the declared pipeline, standing query, zero results expected",
+    "source": "CloudTrail Identity Store write events; GCP Admin audit logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.validate.3",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero drift between declared state and live Identity Center state, standing query, zero results expected",
+    "source": "Terraform plan exit status in check mode",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-AAM.validate.4",
+    "indicator": "KSI-IAM-AAM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every account, role and group in the inventory is attributable to SCIM or Terraform, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.1",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Threat detection enabled with optional plans off",
+    "source": "GuardDuty detector configuration; SCC settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.2",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Environment-specific rules exist and target the responder",
+    "source": "EventBridge rules and targets; Pub/Sub subscriptions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.3",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Severity routing maps each tier to its declared action",
+    "source": "Responder configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.4",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Responder identity holds containment capability only",
+    "source": "IAM policy simulation; GCP Policy Analyzer",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.5",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Response record store denies write and modify to the responder identity",
+    "source": "Bucket policy and object lock configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.6",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Root and break-glass present in the exclusion list",
+    "source": "Responder configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.verify.7",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Privileged enumeration reconciles against effective-permission analysis, zero unaccounted",
+    "source": "Access Analyzer and Policy Analyzer versus enumeration output",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.1",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A sample finding at each severity produces the declared action for that tier",
+    "source": "GuardDuty sample findings; responder execution logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.2",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Access is confirmed stopped after a containment action",
+    "source": "Post-action permission evaluation",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.3",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A critical action against a federated identity propagates to AWS through SCIM",
+    "source": "Cloud Identity state correlated with Identity Store state",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.4",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero qualifying findings on privileged accounts with no response record, standing query, zero results expected",
+    "source": "Findings correlated against response records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.5",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero responder actions against excluded identities, standing query, zero results expected",
+    "source": "Responder execution logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-IAM-SUS.validate.6",
+    "indicator": "KSI-IAM-SUS",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every privileged account resolved at run time appears in response scope, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-GIV.verify.1",
+    "indicator": "KSI-PIY-GIV",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Config recorder enabled, recording all supported types, in every in-scope region",
+    "source": "AWS Config describe-configuration-recorders and recorder status",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-GIV.verify.2",
+    "indicator": "KSI-PIY-GIV",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Asset feed enabled at organization scope",
+    "source": "GCP Cloud Asset Inventory",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-GIV.validate.1",
+    "indicator": "KSI-PIY-GIV",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Generated inventory reconciled against live independent enumeration per cloud, zero resources present in one and absent from the other",
+    "source": "AWS Config and Cloud Asset Inventory versus direct service-level list calls",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-GIV.validate.2",
+    "indicator": "KSI-PIY-GIV",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Inventory generated at query time returns a resource created after the previous generation",
+    "source": "Timestamp comparison against a freshly created resource",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-GIV.validate.3",
+    "indicator": "KSI-PIY-GIV",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every in-scope region and project appears in the output, zero in-scope locations missing",
+    "source": "Region and project enumeration versus inventory coverage",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.verify.1",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Disclosure policy is published and versioned",
+    "source": "Repository and published location",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.verify.2",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "security.txt is present at the well-known path and well-formed",
+    "source": "Fetch and parse the published file",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.verify.3",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Published contact resolves to a monitored destination",
+    "source": "Intake configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.verify.4",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Triage flow is configured into the vulnerability response pipeline",
+    "source": "Workflow configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.validate.1",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A test submission to the published contact arrives at the monitored destination",
+    "source": "Automated liveness test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.validate.2",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "security.txt expiry is in the future, standing query, zero expired results expected",
+    "source": "Fetch and parse the published file",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.validate.3",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A test report entering the intake reaches the response pipeline with a severity assigned",
+    "source": "End-to-end test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-PIY-RVD.validate.4",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every received report has an acknowledgement and a triage outcome recorded",
+    "source": "Report records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RVD.validate.5",
+    "indicator": "KSI-PIY-RVD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.verify.1",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every lifecycle stage has a mapped security control",
+    "source": "Stage map versus pipeline definition",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.verify.2",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Each principle carries a position with evidence or a reason",
+    "source": "Repository file, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.verify.3",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Static analysis is configured in the pipeline",
+    "source": "Workflow definition",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.verify.4",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Design reasoning check is configured at merge",
+    "source": "Branch protection and workflow configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.validate.1",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero lifecycle stages without a security control, standing query, zero results expected",
+    "source": "Stage map versus pipeline definition",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.validate.2",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero posture-changing changes without recorded reasoning, standing query, zero results expected",
+    "source": "Change records versus decision entries",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.validate.3",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Static analysis has run on every merge",
+    "source": "Pipeline execution history",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.validate.4",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Secure defaults hold in declared baselines",
+    "source": "Policy evaluation results from KSI-MLA-EVC",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-PIY-RSD.validate.5",
+    "indicator": "KSI-PIY-RSD",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-SVC-ACM.verify.1",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Remote state backend has versioning, encryption and locking enabled",
+    "source": "Backend bucket and lock configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.verify.2",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Drift detection schedule exists and is enabled",
+    "source": "Scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.verify.3",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every resource in declared state exists in the environment",
+    "source": "Terraform state versus provider APIs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.verify.4",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every machine-based resource in the inventory appears in declared state",
+    "source": "Inventory from KSI-PIY-GIV versus Terraform state",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.validate.1",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero drift between declared and live configuration, standing query, zero results expected",
+    "source": "Terraform plan in check mode, exit status and diff",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.validate.2",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero configuration mutations by any principal other than the pipeline, standing query, zero results expected",
+    "source": "CloudTrail write events; GCP Admin Activity logs, filtered by principal",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.validate.3",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deliberately introduced out-of-band change is detected within one cycle",
+    "source": "Console change followed by a scheduled detection run",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ACM.validate.4",
+    "indicator": "KSI-SVC-ACM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Privilege drift surfaced through the ELP conformance check rather than re-derived here",
+    "source": "ELP collector output",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.1",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every store reports encryption with the expected key, including registries, log groups and ancillary services",
+    "source": "RDS, S3, Secrets Manager, ECR, CloudWatch Logs, GCS, BigQuery, Artifact Registry APIs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.2",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No storage resource permits public access",
+    "source": "S3 public access block; GCS public access prevention",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.3",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "rds.force_ssl enabled in the parameter group",
+    "source": "RDS parameter group",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.4",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "ALB listener uses a modern TLS policy, HTTP redirects, target group uses TLS",
+    "source": "ELB listener and target group configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.5",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Central log store has object lock and CloudTrail log file validation enabled",
+    "source": "S3 object lock configuration; CloudTrail trail settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.6",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Key policies grant decrypt only to declared roles, resolved rather than read as a flag",
+    "source": "KMS key policies and grants; Cloud KMS IAM",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.7",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "BigQuery dataset bindings match the declared role model from KSI-IAM-ELP",
+    "source": "BigQuery dataset IAM",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.verify.8",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Snapshots report encryption with the expected key",
+    "source": "RDS snapshot attributes",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.1",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero decrypt calls by principals outside the declared role model from KSI-IAM-ELP, standing query, zero results expected",
+    "source": "CloudTrail KMS events; Cloud KMS audit logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.2",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero connections to RDS without TLS, standing query, zero results expected",
+    "source": "RDS connection logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.3",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero requests to any bucket over plain HTTP, standing query, zero results expected",
+    "source": "S3 server access logs; GCS audit logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.4",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A write attempt against an object-locked log object is rejected",
+    "source": "Deliberate test write",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.5",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "CloudTrail digest validation succeeds against a sample of delivered logs",
+    "source": "CloudTrail validate-logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-SIN.validate.6",
+    "indicator": "KSI-SVC-SIN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every data store in the inventory appears in the encryption check, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.verify.1",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every secret has rotation configured with an interval matching the plan",
+    "source": "Secrets Manager describe-secret; Secret Manager rotation config",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.verify.2",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every customer-managed key has automatic rotation enabled",
+    "source": "KMS key rotation status; Cloud KMS rotation period",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.verify.3",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Certificates are managed-issue with renewal eligibility, not imported",
+    "source": "ACM certificate status",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.verify.4",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No task definition or service configuration contains a literal secret value",
+    "source": "ECS task definitions; Cloud Run service configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.verify.5",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "The rotation interval plan exists and covers every secret class",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.1",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every secret's last-rotated timestamp is within its declared interval",
+    "source": "Secrets Manager metadata; key rotation history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.2",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A rotation is observed completing end to end, with the new version in use",
+    "source": "Rotation event correlated with subsequent successful authentication",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.3",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "SCIM provisioning verified working after token rotation, not merely rotated",
+    "source": "Post-rotation provisioning test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.4",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero secret material found in the repository or in state, standing query, zero results expected",
+    "source": "Secret scanning across repository and state",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.5",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero authentication events using a superseded secret version, standing query, zero results expected",
+    "source": "CloudTrail credential usage",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-ASM.validate.6",
+    "indicator": "KSI-SVC-ASM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every secret in the inventory has an owning class in the documented plan, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.verify.1",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every task and service definition references an image digest, not a tag",
+    "source": "ECS task definitions; Cloud Run service configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.verify.2",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Registry tag immutability enabled",
+    "source": "ECR and Artifact Registry configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.verify.3",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Branch protection requires signed commits",
+    "source": "Repository settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.verify.4",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Deploy pipeline blocks on signature verification failure rather than warning",
+    "source": "Pipeline definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.verify.5",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every resource class in the inventory has a recorded integrity position",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.validate.1",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every running image digest matches a signed, verified image in the registry",
+    "source": "Running task digests versus registry signature status",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.validate.2",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately unsigned image is rejected at deploy",
+    "source": "Test deployment",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.validate.3",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Log digest validation succeeds across the period",
+    "source": "CloudTrail validate-logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.validate.4",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero deployments proceeded with a failed integrity check, standing query, zero results expected",
+    "source": "Pipeline execution history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VRI.validate.5",
+    "indicator": "KSI-SVC-VRI",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero unsigned commits on the protected branch, standing query, zero results expected",
+    "source": "Repository commit history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.verify.1",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Federation trust names a specific subject and audience, no wildcards",
+    "source": "AWS OIDC provider and role trust policy; GCP workload identity pool",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.verify.2",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "RDS IAM authentication enabled and password authentication disabled for the application user",
+    "source": "RDS configuration; database role attributes",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.verify.3",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Target group uses TLS and the task certificate is present and valid",
+    "source": "ELB target group; task definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.verify.4",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Interface endpoint policies restrict principals",
+    "source": "VPC endpoint policy documents",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.verify.5",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every path in the register has a recorded authenticity mechanism",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.validate.1",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Cross-cloud access observed using a federated token, not a static credential",
+    "source": "CloudTrail AssumeRoleWithWebIdentity events",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.validate.2",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Database connections observed authenticating by IAM token, zero password authentications",
+    "source": "RDS connection logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.validate.3",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero non-TLS connections on any internal path, standing query, zero results expected",
+    "source": "Connection and access logs across paths",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.validate.4",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deliberately mis-scoped token is rejected",
+    "source": "Test with an unexpected subject",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-VCM.validate.5",
+    "indicator": "KSI-SVC-VCM",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Authentication failures appear in the detection path, not only in logs",
+    "source": "Failed authentication event correlated with detection ingestion",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-PRR.verify.1",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Lifecycle policies exist on snapshots, images and secret versions",
+    "source": "Snapshot and image lifecycle configuration; Secrets Manager settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-PRR.verify.2",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Retention register exists and every entry has a reason and an expiry",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-PRR.verify.3",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Change-boundary hook is wired to apply completion",
+    "source": "Pipeline definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SVC-PRR.validate.1",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero snapshots without a live source resource or a register entry, standing query, zero results expected",
+    "source": "Inventory diff against the inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-SVC-PRR.validate.2",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero security group rules referencing deleted resources, standing query, zero results expected",
+    "source": "Rule target resolution",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-SVC-PRR.validate.3",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero retrievable superseded secret versions beyond their window",
+    "source": "Secrets Manager version listing",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-SVC-PRR.validate.4",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately orphaned resource is detected after the change that orphaned it",
+    "source": "Test: create, deploy, delete source, confirm detection",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-SVC-PRR.validate.5",
+    "indicator": "KSI-SVC-PRR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every change event has a corresponding residue review",
+    "source": "Apply history correlated with review runs",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-SVC-EIS.verify.1",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Scanning enabled on registries and in CI",
+    "source": "Security Hub and Inspector configuration; pipeline definition",
+    "required": "14 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.verify.2",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Posture findings ingested from both clouds",
+    "source": "Security Hub; Security Command Center",
+    "required": "14 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.verify.3",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Declared evaluation plan exists and covers every resource class",
+    "source": "Repository file, checked in CI",
+    "required": "14 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.verify.4",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Rebuild pipeline has both a schedule and a finding trigger",
+    "source": "Pipeline definition",
+    "required": "14 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.1",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every deployed image digest has a scan result within its declared interval",
+    "source": "Scan results versus running digests",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.2",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero findings open beyond their impact-derived timeframe, standing query, zero results expected",
+    "source": "Finding age against severity",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.3",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero findings closed without a linked commit, digest or apply, standing query, zero results expected",
+    "source": "Finding closure records",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.4",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A rebuild is observed occurring in response to a finding, not only on schedule",
+    "source": "Finding timestamp correlated with image build",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.5",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Base image age is within the declared currency window",
+    "source": "Running image base layer dates",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-SVC-EIS.validate.6",
+    "indicator": "KSI-SVC-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every machine-based resource in the inventory has evaluation coverage, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per plan"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.1",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every network-interface resource has an attached rule set",
+    "source": "Inventory versus security group and firewall associations",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.2",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No outbound rule permits all destinations without a recorded exception",
+    "source": "Security group egress rules; GCP egress firewall rules",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.3",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No inbound 0.0.0.0/0 outside the declared public-facing list",
+    "source": "Security group ingress rules versus the declared list",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.4",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Private subnet route tables contain no internet or NAT route",
+    "source": "Route table entries",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.5",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Cloud Run ingress is internal",
+    "source": "Cloud Run service configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.verify.6",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Endpoint policies restrict principals and actions",
+    "source": "VPC endpoint policy documents",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.validate.1",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero accepted flows not matching a declared allow, standing query, zero results expected",
+    "source": "VPC Flow Logs; GCP Firewall Rules Logging",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.validate.2",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero outbound connections to internet destinations from private subnets, standing query, zero results expected",
+    "source": "VPC Flow Logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.validate.3",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "An outbound connection attempt to an internet destination fails",
+    "source": "Deliberate test from a running task",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.validate.4",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Rejected flows are logged and reviewable rather than silently dropped",
+    "source": "Flow log rejected entries",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RNT.validate.5",
+    "indicator": "KSI-CNA-RNT",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every resource in the inventory has a recorded network position, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.1",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No workload resource sits in a public subnet",
+    "source": "Subnet associations versus resource inventory",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.2",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Private route tables contain only local and endpoint routes",
+    "source": "Route table entries",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.3",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every interface endpoint carries a restrictive policy",
+    "source": "VPC endpoint policy documents",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.4",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Cloud Run ingress is internal on every service",
+    "source": "Cloud Run configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.5",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Idle timeouts and connection lifetimes are set and within declared bounds",
+    "source": "ELB attributes; database parameter group",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.verify.6",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Federated trusts issue bounded-lifetime tokens",
+    "source": "Role maximum session duration; workload identity pool settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.1",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero flows between tiers not traversing a declared path, standing query, zero results expected",
+    "source": "VPC Flow Logs by subnet pair",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.2",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A connection held open past the idle timeout is terminated",
+    "source": "Deliberate long-lived connection test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.3",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero sessions exceeding their declared maximum lifetime, standing query, zero results expected",
+    "source": "Session and token issuance records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.4",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "With security groups permitting all traffic on a disposable resource, topology still prevents internet egress",
+    "source": "Deliberate test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.5",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every flow path in the register is exercised or explicitly recorded as unused",
+    "source": "Flow logs versus register",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-ULN.validate.6",
+    "indicator": "KSI-CNA-ULN",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every resource in the inventory appears in the flow control register with a recorded enforcing layer, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.verify.1",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No open port lacks a corresponding declared flow",
+    "source": "Security group rules versus the flow register from KSI-CNA-ULN",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.verify.2",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Task definitions specify read-only root filesystem, non-root user, dropped capabilities and no privileged mode",
+    "source": "ECS task definitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.verify.3",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Each service has a distinct security group and task role",
+    "source": "Task definitions and group associations",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.verify.4",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No task role permission lacks a declared operation",
+    "source": "Task role policies versus the role model from KSI-IAM-ELP",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.verify.5",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Static analysis and dependency scanning enabled in the pipeline",
+    "source": "Pipeline definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.validate.1",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A connection attempt from one service to the other fails",
+    "source": "Deliberate test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.validate.2",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero computed reachability paths outside declared blast radius, standing query, zero results expected",
+    "source": "Combined network and identity reachability analysis",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.validate.3",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero accepted flows on ports with no declared use, standing query, zero results expected",
+    "source": "VPC Flow Logs by port",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.validate.4",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "No external access paths beyond the declared public-facing list",
+    "source": "IAM Access Analyzer external findings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-MAT.validate.5",
+    "indicator": "KSI-CNA-MAT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every resource in the inventory has a surface position recorded, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.verify.1",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every task definition states command, ports, capabilities and user explicitly",
+    "source": "ECS task definitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.verify.2",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No workload identity holds a managed or predefined policy",
+    "source": "IAM attached policies; GCP role bindings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.verify.3",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Configurable managed services carry explicit feature configuration",
+    "source": "Service configuration APIs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.verify.4",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every pipeline action is pinned to a commit SHA",
+    "source": "Workflow definitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.verify.5",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every component in the inventory has a definition register entry",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.validate.1",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Running container configuration matches the declared task definition",
+    "source": "Running task inspection versus declaration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.validate.2",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero API calls by a workload identity outside its enumerated policy, standing query, zero results expected",
+    "source": "CloudTrail by principal versus policy enumeration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.validate.3",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero processes executing outside the declared container command, subject to platform visibility",
+    "source": "Container runtime observation where available",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-DFP.validate.4",
+    "indicator": "KSI-CNA-DFP",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every component in the inventory has a definition entry, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.verify.1",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Assessment services enabled with the expected scope",
+    "source": "Config recorder and rules; Security Hub; Security Command Center",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.verify.2",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Remediation actions attached only to rules on the declared safe list",
+    "source": "Config remediation configuration versus the safe list",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.verify.3",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Health checks, desired counts and alarms configured",
+    "source": "ECS service configuration; ELB target groups; CloudWatch alarms",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.verify.4",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Safe remediation list exists with a reason per entry, and every drift type has a recorded position",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.validate.1",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately introduced safe-list drift is corrected without human action",
+    "source": "Test: introduce drift, observe remediation",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.validate.2",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately introduced non-safe-list drift is detected and not auto-corrected",
+    "source": "Test: confirms the boundary holds in both directions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.validate.3",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A stopped task is replaced automatically and desired count restored",
+    "source": "Test: stop a task, observe replacement",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.validate.4",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resources in the inventory outside assessment coverage, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-EIS.validate.5",
+    "indicator": "KSI-CNA-EIS",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero failed remediation actions left unsurfaced, standing query, zero results expected",
+    "source": "Remediation execution records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.verify.1",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Standards checks enabled with the expected benchmark",
+    "source": "Security Hub standards configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.verify.2",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Security Health Analytics enabled at organization level",
+    "source": "Security Command Center settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.verify.3",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Third-party register covers every third-party resource in the inventory",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.verify.4",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every exception carries a reason and a review date",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.validate.1",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Benchmark pass rate recorded, with every failing control either remediated or in the exception record",
+    "source": "Security Hub standards findings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.validate.2",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Detector findings reviewed within the interval, zero unreviewed beyond it",
+    "source": "Security Command Center findings with review state",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.validate.3",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero third-party resources in the inventory absent from the register, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-IBP.validate.4",
+    "indicator": "KSI-CNA-IBP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Base images current against maintainer advisories",
+    "source": "Scan results versus running image digests",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.verify.1",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Compute services configured for multiple tasks across zones",
+    "source": "ECS service configuration and subnet spread",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.verify.2",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Automated backups enabled with retention matching the declared objective",
+    "source": "RDS backup configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.verify.3",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every resource holds an availability position, with a reason where reduced",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.verify.4",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Restore measurement schedule exists and is enabled",
+    "source": "Scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.validate.1",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A stopped task is replaced and desired count restored automatically",
+    "source": "Test, shared with KSI-CNA-EIS",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.validate.2",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Tasks observed distributed across more than one availability zone",
+    "source": "Running task placement",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-OFA.validate.3",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A restore completes into a disposable instance and the elapsed time is recorded",
+    "source": "Timed restore test",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-CNA-OFA.validate.4",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Measured restore time is within the declared recovery time objective",
+    "source": "Restore records versus the objective from KSI-RPL-RRO",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-CNA-OFA.validate.5",
+    "indicator": "KSI-CNA-OFA",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resources in the inventory without an availability position, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.verify.1",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "WAF associated with the load balancer",
+    "source": "WAF web ACL association",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.verify.2",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Managed rule groups present and at current version",
+    "source": "Web ACL rule group configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.verify.3",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Rate-based rule present with the declared threshold",
+    "source": "Web ACL rules versus the declared threshold",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.verify.4",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "WAF logging enabled to the central store",
+    "source": "WAF logging configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.verify.5",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every protection mechanism holds a register entry naming its evidence level",
+    "source": "Register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.1",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A request matching a managed rule pattern is blocked during the exercise test",
+    "source": "Deliberate test; WAF logs",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.2",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Requests exceeding the rate threshold are blocked during the exercise test",
+    "source": "Deliberate test; WAF logs",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.3",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A legitimate request is allowed during the same test",
+    "source": "Deliberate test; WAF logs",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.4",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Blocked and allowed request counts reviewed within the interval",
+    "source": "WAF logs in the central store",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.5",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Managed rule group versions observed updating without our intervention",
+    "source": "Rule group version history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CNA-RVP.validate.6",
+    "indicator": "KSI-CNA-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Load balancer request and error metrics reviewed within the interval",
+    "source": "CloudWatch metrics",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.verify.1",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every source in the list is enabled and its destination is the central store",
+    "source": "Source configuration across both clouds",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.verify.2",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "The list covers every event category named in the mappings",
+    "source": "List versus mapped control categories",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.verify.3",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every source carries a logged, monitored and audited position",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.verify.4",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Data event scoping matches the declared customer-data stores",
+    "source": "CloudTrail data event selectors versus the declared list",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.validate.1",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every listed source has delivered events within its expected interval, zero silent sources",
+    "source": "Central store partition timestamps per source",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.validate.2",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately generated event of each mapped category appears in the store",
+    "source": "Test event per category",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.validate.3",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resources in the inventory producing no logs without a recorded reason, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-LET.validate.4",
+    "indicator": "KSI-MLA-LET",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero listed sources configured but not delivering, standing query, zero results expected",
+    "source": "Configuration compared against arrival",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.verify.1",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Object lock enabled with retention matching the declaration, and digest validation enabled",
+    "source": "S3 object lock configuration; CloudTrail settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.verify.2",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every source listed under KSI-MLA-LET delivers to the central store",
+    "source": "Source destinations versus the event type list from KSI-MLA-LET",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.verify.3",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Partition projection configured and workgroup scan limits set",
+    "source": "Glue table properties; Athena workgroup configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.verify.4",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Delivery failure and store growth alarms exist and target the detection path",
+    "source": "CloudWatch alarm configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.verify.5",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every detection query is versioned and scheduled",
+    "source": "Repository and scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.1",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A write against a locked object is rejected",
+    "source": "Deliberate test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.2",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Digest validation succeeds across the period",
+    "source": "CloudTrail validate-logs",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.3",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A query returns events from both clouds in one result set",
+    "source": "Cross-cloud Athena query against normalized records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.4",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every scheduled detection query has run within its cadence",
+    "source": "Query execution history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.5",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately induced delivery failure produces an alert",
+    "source": "Test: disable a delivery path",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.6",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Normalized events carry consistent timestamps across sources",
+    "source": "Schema validation on sampled records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-OSM.validate.7",
+    "indicator": "KSI-MLA-OSM",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every listed source is queryable, zero sources in the store and absent from the catalog",
+    "source": "Catalog compared against store partitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.verify.1",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every mapped category has a versioned review query",
+    "source": "Repository versus mapped control categories",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.verify.2",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every audited source under LET maps to a review query",
+    "source": "Event type list versus query coverage",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.verify.3",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Review schedules exist with windows that overlap their intervals",
+    "source": "Scheduler configuration versus declared windows",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.verify.4",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Review record destination configured",
+    "source": "Results table configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.validate.1",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every review query has run within its interval with a record produced, including nil results",
+    "source": "Review record store",
+    "required": "3 days",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-MLA-RVL.validate.2",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Consecutive review windows overlap, zero gaps, standing query, zero results expected",
+    "source": "Window continuity check",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.validate.3",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every finding has a recorded disposition, zero undisposed, standing query, zero results expected",
+    "source": "Finding records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.validate.4",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A deliberately generated inappropriate action is surfaced by the relevant review query",
+    "source": "Test per category: out-of-pipeline account change, privileged action with no active grant, denied access attempt",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-RVL.validate.5",
+    "indicator": "KSI-MLA-RVL",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every source marked audited under KSI-MLA-LET appears in review coverage, zero unaccounted",
+    "source": "Reconciliation against the event type list",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.verify.1",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every source in the event type list carries a tier with a reason",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.verify.2",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Catalog is partitioned by tier and permissions are granted per tier",
+    "source": "Glue database and permission configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.verify.3",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "No identity holds a standing grant to the sensitive tier",
+    "source": "Catalog permissions versus the lane model",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.verify.4",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Elevation entitlements exist for sensitive log access with justification required",
+    "source": "Entitlement configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.verify.5",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Bucket policy denies object reads to all principals except the query engine role",
+    "source": "S3 bucket policy",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.validate.1",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero accesses to sensitive-tier data without an active grant, standing query, zero results expected",
+    "source": "Query history correlated with grant windows",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.validate.2",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A query joining sensitive and operational tiers fails without elevation",
+    "source": "Deliberate test, run separately from single-table tests",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.validate.3",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A direct object read by a non-query principal is denied",
+    "source": "Deliberate test",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.validate.4",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every elevation for log access carries a justification",
+    "source": "Grant records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-ALA.validate.5",
+    "indicator": "KSI-MLA-ALA",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero sources in the event type list from KSI-MLA-LET without a tier, standing query, zero results expected",
+    "source": "Reconciliation against the event type list",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.verify.1",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Policy set versioned with a coverage mapping for every authored rule",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.verify.2",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Merge gate configured to block rather than annotate",
+    "source": "Branch protection and workflow configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.verify.3",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Evaluation runs against plan JSON, not source",
+    "source": "Workflow definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.verify.4",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every exception carries a reason and an expiry",
+    "source": "Exception register, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.verify.5",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every scanning action is pinned to a commit SHA",
+    "source": "Workflow definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.validate.1",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deliberately non-compliant plan is blocked at the gate",
+    "source": "Test pull request",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-MLA-EVC.validate.2",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A compliant plan passes",
+    "source": "Same test, opposite direction",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-MLA-EVC.validate.3",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A misconfiguration introduced through a variable rather than a resource block is caught",
+    "source": "Test designed to distinguish plan evaluation from source scanning",
+    "required": "3 days",
+    "implemented": "Per change"
+  },
+  {
+    "id": "KSI-MLA-EVC.validate.4",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero merges to the protected branch without a policy evaluation, standing query, zero results expected",
+    "source": "Merge history versus evaluation records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-MLA-EVC.validate.5",
+    "indicator": "KSI-MLA-EVC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero policy failures above declared severity merged, standing query, zero results expected",
+    "source": "Evaluation results versus merge history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.verify.1",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Registry push and declared-state apply are restricted to the pipeline principal",
+    "source": "IAM policy simulation on both clouds",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.verify.2",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Exception register contains only the two declared categories and every entry carries a reason",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.verify.3",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every running image digest has a provenance record",
+    "source": "Provenance store versus running digests",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.1",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero applies by a principal other than the pipeline, standing query, zero results expected",
+    "source": "CloudTrail and GCP audit logs filtered by principal",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.2",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero registry pushes outside the pipeline, standing query, zero results expected",
+    "source": "Registry push events",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.3",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every running image digest traces to a commit, zero unattributable",
+    "source": "Running digests versus provenance records",
+    "required": "3 days",
+    "implemented": "Per deployment"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.4",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero direct modifications outside the exception register, standing query, zero results expected",
+    "source": "Mutation query from KSI-SVC-ACM cross-referenced against the register",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.5",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every emergency modification has a reconciliation record",
+    "source": "Responder actions versus reconciliation entries",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RMV.validate.6",
+    "indicator": "KSI-CMT-RMV",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every deployed artifact in the inventory has a provenance record, zero unattributable",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.verify.1",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Repository events deliver to the central store",
+    "source": "Delivery configuration versus store partitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.verify.2",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Control-content changes have alert rules targeting the detection path",
+    "source": "Alert rule configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.verify.3",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Maintenance actions log to the central store",
+    "source": "Workflow and scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.verify.4",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every change surface carries a register entry naming its position",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.1",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deliberate change to a policy rule produces an alert",
+    "source": "Test commit",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.2",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deliberate change to an unmonitored surface logs without alerting",
+    "source": "Test commit, opposite direction",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.3",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero changes without attribution to a principal, standing query, zero results expected",
+    "source": "Change records across surfaces",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.4",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every surface in the register has produced a record within its expected interval",
+    "source": "Store partitions per surface",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.5",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A maintenance action appears as a logged modification",
+    "source": "Restore test correlated with change records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-LMC.validate.6",
+    "indicator": "KSI-CMT-LMC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every machine-based resource in the inventory has an identified change surface, zero unaccounted",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.verify.1",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Stages are ordered with failure gating progression",
+    "source": "Workflow definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.verify.2",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Deployment circuit breaker enabled on every service",
+    "source": "ECS service deployment configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.verify.3",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Post-apply health checks configured with declared thresholds",
+    "source": "Health check and alarm configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.verify.4",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every stage carries a validation criterion in the register",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.validate.1",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deployment with a failing stage does not progress",
+    "source": "Deliberate test per stage",
+    "required": "3 days",
+    "implemented": "Per deployment"
+  },
+  {
+    "id": "KSI-CMT-VTD.validate.2",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A deployment that applies but fails health checks rolls back",
+    "source": "Deliberate test: deploy a task that fails its health check",
+    "required": "3 days",
+    "implemented": "Per deployment"
+  },
+  {
+    "id": "KSI-CMT-VTD.validate.3",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "After a remediation deployment, the relevant determination re-runs and its record supersedes",
+    "source": "Remediation test correlated with determination records",
+    "required": "3 days",
+    "implemented": "Per deployment"
+  },
+  {
+    "id": "KSI-CMT-VTD.validate.4",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero deployments completed with a skipped stage, standing query, zero results expected",
+    "source": "Pipeline execution history",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-VTD.validate.5",
+    "indicator": "KSI-CMT-VTD",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every deployment has a post-apply validation record",
+    "source": "Deployment records versus validation records",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-CMT-RVP.verify.1",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Procedure is encoded and versioned, and changes to it are recorded",
+    "source": "Repository history; change alerting from KSI-CMT-LMC",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.verify.2",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Signal collection is configured and the review is scheduled",
+    "source": "Query and scheduler configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.verify.3",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every gate has an efficacy record",
+    "source": "Gate efficacy store",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.verify.4",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every override carries a reason",
+    "source": "Override register, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.validate.1",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.validate.2",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero gates with invocations and no failures lacking a recorded position, standing query, zero results expected",
+    "source": "Gate efficacy records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.validate.3",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero overrides without a reason, standing query, zero results expected",
+    "source": "Override records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.validate.4",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every rollback following a fully passed pipeline has a recorded gate review",
+    "source": "Rollback records versus review records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-CMT-RVP.validate.5",
+    "indicator": "KSI-CMT-RVP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-SCR-MON.verify.1",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every dependency is covered by scanning",
+    "source": "Scanner configuration versus dependency manifest",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.verify.2",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Advisory feeds configured for every provider in use",
+    "source": "Feed configuration versus the third-party register from KSI-CNA-IBP",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.verify.3",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Correlation configured against the dependency inventory",
+    "source": "Correlation query configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.verify.4",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every third party resource class carries a monitoring position",
+    "source": "Repository file, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.validate.1",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every monitoring mechanism has produced output within its expected interval",
+    "source": "Store partitions per feed, using the source-silence check from KSI-MLA-LET",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.validate.2",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A known advisory affecting a resource in use is correlated and surfaced",
+    "source": "Test with a historical advisory for a package in the manifest",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.validate.3",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero dependencies in the inventory without scan coverage, standing query, zero results expected",
+    "source": "Dependency inventory versus scan results",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.validate.4",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero third party resources without a recorded monitoring position, standing query, zero results expected",
+    "source": "Reconciliation against the third-party register from KSI-CNA-IBP",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MON.validate.5",
+    "indicator": "KSI-SCR-MON",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A provider deprecation notice is ingested and surfaced",
+    "source": "Observed against real notices",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.verify.1",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every component carries a support-window position",
+    "source": "Component inventory versus published support data",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.verify.2",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every direct dependency has a maintenance signal and a criticality rating",
+    "source": "Repository files, checked in CI",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.verify.3",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "No build or task definition fetches code at run time",
+    "source": "Build definitions and task definitions",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.verify.4",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Risk register entries carry a reason and a review date",
+    "source": "Repository file, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-SCR-MIT.validate.1",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero components past end of support with no recorded position, standing query, zero results expected",
+    "source": "Component versions versus published support windows",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.validate.2",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero dependencies exceeding the staleness threshold with no recorded position, standing query, zero results expected",
+    "source": "Release date signals",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.validate.3",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero identified risks without a mitigation or accepted-risk entry, standing query, zero results expected",
+    "source": "Risk register",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-SCR-MIT.validate.4",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero runtime fetches observed, standing query, zero results expected",
+    "source": "Egress records, already absent by the architecture established under KSI-CNA-RNT",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-SCR-MIT.validate.5",
+    "indicator": "KSI-SCR-MIT",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.verify.1",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every resource class has an objective pair or a recorded not-applicable reason",
+    "source": "Objective register versus inventory from KSI-PIY-GIV",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.verify.2",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Declared objectives are within mechanism capability",
+    "source": "Register versus backup interval and restore measurement",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.verify.3",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Review schedule and change trigger are configured",
+    "source": "Scheduler and event rule configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.verify.4",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every objective revision carries a reason",
+    "source": "Repository history, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.validate.1",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resource classes in the inventory without an objective or a reason, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.validate.2",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero declared objectives exceeding mechanism capability, standing query, zero results expected",
+    "source": "Objectives versus backup interval and measured restore time",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.validate.3",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every architecture change affecting recovery capability has a corresponding review record",
+    "source": "Change records from KSI-CMT-LMC versus review records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.validate.4",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-RRO.validate.5",
+    "indicator": "KSI-RPL-RRO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Measured restore time is within the declared objective, or an action is recorded",
+    "source": "Measurements from KSI-RPL-TRC versus the register",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ABO.verify.1",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Backups configured with retention matching declared windows",
+    "source": "RDS backup configuration; object versioning settings",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.verify.2",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Configuration baseline retention is sufficient for the declared recovery depth",
+    "source": "State backend versioning; registry and task definition retention",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.verify.3",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every resource has backup coverage or a recorded decision that one is unnecessary",
+    "source": "Coverage register versus inventory from KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.verify.4",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Backup locations compared against source locations",
+    "source": "Snapshot and object storage location metadata",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.validate.1",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resources with backup intervals exceeding their declared objective, standing query, zero results expected",
+    "source": "Backup configuration versus the register from KSI-RPL-RRO",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.validate.2",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero resources in the inventory without backup coverage or a recorded decision, standing query, zero results expected",
+    "source": "Reconciliation against the inventory generated for KSI-PIY-GIV",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.validate.3",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "A prior configuration baseline is recoverable to the declared depth",
+    "source": "Deliberate test: restore a prior state version and a prior task definition",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.validate.4",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Backups exist at the expected recovery point when checked",
+    "source": "Snapshot timestamps against the declared window",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ABO.validate.5",
+    "indicator": "KSI-RPL-ABO",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero unencrypted backups, standing query, zero results expected",
+    "source": "Snapshot and object encryption status, per KSI-SVC-SIN criteria",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-TRC.verify.1",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Every declared objective maps to a demonstrating test",
+    "source": "Mapping versus the register from KSI-RPL-RRO",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-TRC.verify.2",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Test schedules exist and are enabled",
+    "source": "Scheduler configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-TRC.verify.3",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "CFG",
+    "artifact": "Test record destination is configured",
+    "source": "Record store configuration",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.1",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Every test has run within its cadence with a record, including successful runs",
+    "source": "Test record store",
+    "required": "3 days",
+    "implemented": "Per declared cadence"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.2",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Measured restore time is within the declared objective",
+    "source": "Test records versus the register from KSI-RPL-RRO",
+    "required": "3 days",
+    "implemented": "Per declared cadence (monthly)"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.3",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "A point-in-time restore to a chosen moment succeeds",
+    "source": "Test result",
+    "required": "3 days",
+    "implemented": "Per declared cadence (quarterly)"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.4",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Restored data passes consistency verification",
+    "source": "Integrity check output",
+    "required": "3 days",
+    "implemented": "Per declared cadence (monthly)"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.5",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "The pipeline rebuilds analytics from source successfully",
+    "source": "Reconstruction test result",
+    "required": "3 days",
+    "implemented": "Per declared cadence (quarterly)"
+  },
+  {
+    "id": "KSI-RPL-TRC.validate.6",
+    "indicator": "KSI-RPL-TRC",
+    "determination": "IN SCOPE",
+    "type": "OPS",
+    "artifact": "Zero declared objectives without a demonstrating test, standing query, zero results expected",
+    "source": "Objective register versus test mapping",
+    "required": "3 days",
+    "implemented": "Per run"
+  },
+  {
+    "id": "KSI-RPL-ARP.verify.1",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every objective maps to a path and every path to an objective",
+    "source": "Mapping versus the register from KSI-RPL-RRO",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.verify.2",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every mapped control carries a recorded position with a reason",
+    "source": "Control position register, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.verify.3",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Recovery paths are encoded rather than described, with dependency order stated",
+    "source": "Repository files",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.verify.4",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Review schedule configured",
+    "source": "Scheduler configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.validate.1",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero objectives without a recovery path, standing query, zero results expected",
+    "source": "Register from KSI-RPL-RRO versus path mapping",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.validate.2",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero paths without an objective, standing query, zero results expected",
+    "source": "Path mapping versus the register from KSI-RPL-RRO",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.validate.3",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every path has been exercised within its cadence",
+    "source": "Test records from KSI-RPL-TRC",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.validate.4",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero mapped controls without a recorded position, standing query, zero results expected",
+    "source": "Control position register",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-RPL-ARP.validate.5",
+    "indicator": "KSI-RPL-ARP",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.verify.1",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Procedure is encoded and versioned, and changes to it are recorded",
+    "source": "Repository history; change alerting from KSI-CMT-LMC",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.verify.2",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every severity tier has a defined response",
+    "source": "Responder configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.verify.3",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Every mapped control carries a recorded position with a reason",
+    "source": "Position register, checked in CI",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.verify.4",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "CFG",
+    "artifact": "Escalation disposition recording is configured",
+    "source": "Workflow configuration",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.validate.1",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Every exercised response produced a record",
+    "source": "Response records from KSI-IAM-SUS",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.validate.2",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero escalations without a recorded disposition, standing query, zero results expected",
+    "source": "Escalation records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.validate.3",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Zero mapped controls without a position, standing query, zero results expected",
+    "source": "Position register",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.validate.4",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Time from finding to containment is within the declared expectation",
+    "source": "Response records",
+    "required": "3 months",
+    "implemented": "Per review"
+  },
+  {
+    "id": "KSI-INR-RIR.validate.5",
+    "indicator": "KSI-INR-RIR",
+    "determination": "IN SCOPE, PARTIALLY SATISFIED",
+    "type": "OPS",
+    "artifact": "Signal report section generated for the period, with signals computed including nil results",
+    "source": "Signal report output",
+    "required": "3 months",
+    "implemented": "Per review"
+  }
+]

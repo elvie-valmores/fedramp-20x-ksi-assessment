@@ -85,12 +85,15 @@ jobs:
           done
 
       # The negative controls run every day, not only when someone remembers,
-      # and so do the normalizer's and the metrics' tests.
+      # and so do the normalizer's and the metrics' tests. matrix_rows.py
+      # --check fails if a check links a row the matrix lacks, or if the
+      # matrix moved under the links (DECISIONS.md, 2026-10-02).
       - name: self-test the judgements
         run: |
           (cd collector && python self_test.py)
           (cd lambda/normalize_events && python -m unittest test_handler.py)
-          (cd sdr && python -m unittest test_metrics.py)
+          (cd sdr && python -m unittest test_metrics.py test_matrix_rows.py)
+          python sdr/matrix_rows.py --check
 
       - name: run the checks
         id: checks

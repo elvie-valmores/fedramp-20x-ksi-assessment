@@ -11,5 +11,12 @@
     "branches": [
       "main"
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-RMV.verify.1",
+      "covers": "partial",
+      "gap": "Reads the publishing workflow's triggers against the branch the OIDC trust pins. It does not simulate IAM, so it does not show that no other principal can push, and it does not cover declared-state apply."
+    }
+  ]
 }

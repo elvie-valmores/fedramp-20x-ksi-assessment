@@ -167,9 +167,23 @@ def build_statement(row: list[str]) -> str:
     return f"**{number}. {what}** — {configuration} *({cloud}; provisioned by {provisioned})*"
 
 
-def evidence_row_statement(row: list[str]) -> str:
+def evidence_row_statement(row: list[str], row_id: str | None = None, coverage: dict | None = None) -> str:
     kind, artifact, source, required, implemented = row
-    return f"**{kind}** — {artifact}. Source: {source}. Required every {required}; implemented: {implemented}."
+    statement = f"**{kind}** — {artifact}. Source: {source}. Required every {required}; implemented: {implemented}."
+    if row_id is None or coverage is None:
+        return statement
+    # Which checks prove this row, from the links on the checks themselves
+    # (sdr/matrix_rows.py). A row with no check says so rather than leaving
+    # the reader to infer it from the evidence list.
+    entry = coverage[row_id]
+    checks = ", ".join(f"`{c}`" for c in entry["checks"])
+    if entry["status"] == "full":
+        return f"{statement} *Row `{row_id}`: automated by {checks}.*"
+    if entry["status"] == "partial":
+        # Two checks with the same gap state it once.
+        gaps = " ".join(dict.fromkeys(g.split(": ", 1)[1] for g in entry["gaps"]))
+        return f"{statement} *Row `{row_id}`: partly automated by {checks}. Not covered: {gaps}*"
+    return f"{statement} *Row `{row_id}`: no automated check yet.*"
 
 
 def indicator(det: Determination, outcomes: list[dict], context: dict, controls: dict) -> dict:
@@ -187,7 +201,9 @@ def indicator(det: Determination, outcomes: list[dict], context: dict, controls:
     cadences = sorted({r[3] for t in ("VERIFY", "VALIDATE", "PROVE") for r in det.tables.get(t, []) if r[3]})
     validation = [
         f"**Cycle.** Required: {', '.join(cadences) or 'not stated'}. {CYCLE_PRACTICE[context['runtime']]}",
-        *[evidence_row_statement(r) for t in ("VERIFY", "VALIDATE", "PROVE") for r in det.tables.get(t, [])],
+        *[evidence_row_statement(r, f"{det.ksi_id}.{t.lower()}.{n}", context["coverage"])
+          for t in ("VERIFY", "VALIDATE") for n, r in enumerate(det.tables.get(t, []), start=1)],
+        *[evidence_row_statement(r) for r in det.tables.get("PROVE", [])],
         collection_statement(mine, context),
     ]
 
@@ -450,6 +466,10 @@ def render(sdr: dict, context: dict) -> str:
         f"- **{len(ksis)} indicators**: " + ", ".join(f"{n} {s}" for s, n in sorted(counts.items())) + ".",
         f"- **Automated evidence** for {covered} of {len(ksis)} indicators, {evidence_total} evidence objects, "
         f"from one collector run started {context['started_at']}.",
+        "- **Evidence rows:** " + ", ".join(
+            f"{sum(1 for v in context['coverage'].values() if v['status'] == s)} {label}"
+            for s, label in (("full", "automated"), ("partial", "partly automated"), ("none", "not yet automated"))
+        ) + f", of {len(context['coverage'])}. Each row in Validation names the checks behind it.",
         "- **No independent assessor is engaged.** Assessment statements are the provider's own reasoning.",
         "- **`fedRampRequirements` is empty.** The project determined the 46 indicators, not the FRR rules.",
         (f"- **Historical metrics (SDR-CSX-KMT)** from {len(context['history'])} day(s) of CI runs "
@@ -528,6 +548,9 @@ def main() -> int:
         # Evidence for an indicator the SDR does not contain would vanish.
         sys.exit(f"collector results name indicators the matrix does not: {', '.join(unknown)}")
 
+    from matrix_rows import coverage, rows_from
+
+    context["coverage"] = coverage([o["check"] for o in run["outcomes"]], rows_from(dets))
     sdr = record(dets, run["outcomes"], context, self_test.negative_controls(), args.frr)
     problems = validate(sdr, schema, common)
     if problems:

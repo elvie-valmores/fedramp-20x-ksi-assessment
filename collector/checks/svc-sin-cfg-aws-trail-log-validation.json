@@ -10,5 +10,21 @@
     "resource": "cloudtrail_log_file_validation",
     "region": "us-east-1",
     "trail": "fedramp-20x-ksi-trail"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.5",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-log-store-object-lock"
+      ]
+    },
+    {
+      "row": "KSI-MLA-OSM.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-log-store-object-lock"
+      ]
+    }
+  ]
 }

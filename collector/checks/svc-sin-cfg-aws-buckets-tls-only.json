@@ -9,5 +9,6 @@
     "provider": "aws",
     "resource": "s3_buckets_deny_insecure_transport",
     "region": "us-east-1"
-  }
+  },
+  "unlinked_reason": "Proves build row 2's configuration: every bucket denies non-TLS requests. The matching evidence row (validate.3) asks for observed requests over plain HTTP, which this does not observe."
 }

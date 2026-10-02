@@ -7487,3 +7487,84 @@ three rules.
 they are a few kilobytes each, and removing them would need a scheduled deletion job, which is more
 machinery than the cost justifies. GCP's Artifact Registry has no cleanup policy, so nothing there
 expires and the pipeline's pinned digest is not at risk.
+
+## 2026-10-02 — Checks link the matrix rows they prove; coverage is counted by row
+
+**The problem.** A check named only its indicator, so "12 of 46 indicators have automated evidence"
+was the finest statement the project could make. It also overstated. One check counted an indicator
+as covered, whether it proved one of the indicator's rows or all of them, and whether it proved any
+row at all.
+
+**Row identity.** The matrix's 380 evidence rows are the VERIFY and VALIDATE tables under 40
+determinations. The six deferred determinations have only N/A PROVE rows. None of the rows has an
+identifier, so each is given a positional one: `KSI-SVC-SIN.verify.1` is the first VERIFY row under
+KSI-SVC-SIN.
+
+A positional id moves if a row is inserted above it, which would silently move every later link onto
+the wrong row. The guard is `docs/matrix-rows.json`, a generated snapshot of every id with its
+row's text. `sdr/matrix_rows.py --check` fails when the workbook no longer produces the same file,
+so a shifted row shows up as a reviewable diff.
+
+Rows are read through the emitter's own strict parser, not a second one.
+
+**Links** (a `matrix_rows` list on each check):
+
+- **full:** the check proves the row as written.
+- **full, with named checks:** used where a row spans both clouds. Each named check must link the
+  same row back, naming this one. The validator refuses a one-sided group, which would let one cloud
+  claim a two-cloud row.
+- **partial:** must state what is missing.
+- **No row:** a check that proves no evidence row carries an `unlinked_reason` instead, so no check
+  sits outside the matrix silently.
+
+**The mapping, judged row by row** against what each handler actually asserts, not its name:
+
+- **8 checks prove no evidence row.** Examples are the workflow-level credential checks under
+  IAM-SNU, the TLS-only bucket policy, and image signing. The matrix's rows ask for something else.
+  For example, SVC-SIN validate.3 asks for *observed* plain-HTTP requests, not the policy that denies
+  them.
+- **Partial, with stated gaps.** Examples:
+  - Config recorder: it doesn't check that all types are recorded.
+  - Asset feed: it's at project scope, and there is no organization.
+  - Inventory: one direction only.
+  - Decrypt principals: AWS only.
+  - Public access: AWS only.
+  - Signature verification: at build, not at deploy.
+  - Basic roles: two named allowances, where the row allows none.
+- **Full**, each confirmed against its handler:
+  - **SVC-SIN verify.1:** both clouds' store-key checks.
+  - **SVC-SIN verify.5 and MLA-OSM verify.1:** the object lock and trail validation checks. The
+    lock's 7-day floor is the declared retention.
+  - **SVC-ACM verify.3, verify.4 and validate.1:** each by its AWS and GCP pair.
+  - **CNA-DFP verify.4:** every action pinned to a SHA. This needed a new check,
+    `cna-dfp-cfg-actions-pinned-collect`, because `collect.yml` had been unchecked; its 6 actions are
+    pinned. The handler exempts only local `./` actions.
+
+**Result:**
+
+- **Rows:** of 380, 7 are fully automated, 11 partly, and 362 not at all.
+- **Determinations:** 9 of 40 have any row with automated evidence.
+- **Indicators with checks but no row:** IAM-SNU and SVC-VCM have checks, but none proves a matrix
+  row.
+
+This is the honest baseline the "12 of 46" figure stood in for.
+
+**Where it shows:**
+
+- **`docs/MATRIX-COVERAGE.md`:** a generated per-row report, including the unlinked checks and their
+  reasons.
+- **The SDR:** each VERIFY and VALIDATE statement in `ksiValidation` names its row id and the checks
+  behind it, states any gap, or says "no automated check yet". The rendering's summary gives the row
+  counts.
+
+The coverage comes from the checks in the run being emitted, so an older results file reports every
+row as not automated. That understates rather than overstates.
+
+**Tests:**
+
+- `sdr/test_matrix_rows.py` has negative controls for the validator: a dangling row, a partial link
+  with no gap, an unknown `covers` value, neither or both of links and reason, a one-sided group, and
+  a missing group member.
+- `collect.yml` runs those tests and `matrix_rows.py --check` daily.
+- An SDR emitted locally from the existing results, with the current definitions, validated against
+  the pinned schema.

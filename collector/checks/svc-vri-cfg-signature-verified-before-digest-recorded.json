@@ -11,5 +11,12 @@
     "job": "build",
     "before": "verify the signature",
     "after": "record the digest"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.verify.4",
+      "covers": "partial",
+      "gap": "Verification is in the build, before the digest is recorded, so an unverifiable image never becomes a deployable reference. Nothing re-verifies at deploy."
+    }
+  ]
 }

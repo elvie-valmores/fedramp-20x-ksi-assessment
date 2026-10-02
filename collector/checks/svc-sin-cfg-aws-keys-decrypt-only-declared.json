@@ -44,5 +44,12 @@
         "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
       ]
     }
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.6",
+      "covers": "partial",
+      "gap": "AWS keys only. Cloud KMS IAM on the GCP keys is not resolved."
+    }
+  ]
 }

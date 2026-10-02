@@ -10,5 +10,6 @@
     "assertion": "step_present",
     "job": "build-analytics",
     "step": "sign the image"
-  }
+  },
+  "unlinked_reason": "Proves build-time signing of the analytics image, which every VERIFY and VALIDATE row presupposes but none asks for directly. validate.1 asks for running digests matched to verified signatures."
 }

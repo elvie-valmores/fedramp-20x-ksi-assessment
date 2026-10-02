@@ -10,5 +10,12 @@
     "resource": "cloud_asset_feed",
     "project_id": "fedramp-20x-ksi-assessment",
     "feed_id": "fedramp-20x-ksi-inventory-feed"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-GIV.verify.2",
+      "covers": "partial",
+      "gap": "The feed is at project scope. The project sits outside any organization, so organization scope does not exist here; the row's wording assumes one."
+    }
+  ]
 }

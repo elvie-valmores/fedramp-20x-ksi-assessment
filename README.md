@@ -113,8 +113,8 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented. 35 check definitions, 34 passing (2026-10-02); the one failure is a real finding. **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
-| SDR emitter | Emits a schema-valid record for all 46 indicators; automated evidence for 11 |
+| Collector framework | 5 of 9 mechanisms implemented. 36 check definitions, each linked to the matrix rows it proves (2026-10-02). **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
+| SDR emitter | Emits a schema-valid record for all 46 indicators. Each evidence row names the checks behind it: of 380 rows, 7 fully automated, 11 partly ([coverage report](docs/MATRIX-COVERAGE.md)) |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only. Sign-in classification fixed and tested 2026-10-01; the detection Lambda's alert path to the encrypted topic is not yet proven |
 | Application environment, AWS | Phase 1 and 2 last run 2026-10-02: served requests with IAM auth to the database, and the worker's extracts landed through the S3 gateway endpoint after its policy was fixed (it had never allowed a write). Torn down after |

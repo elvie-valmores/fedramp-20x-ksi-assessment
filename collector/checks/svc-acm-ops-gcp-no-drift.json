@@ -18,5 +18,14 @@
         "reason": "The GCP budget lives on the billing account, which without an organization accepts only predefined roles, and CNA-DFP bars predefined roles on workload identities. The read-only collector cannot read it, so CI's plan leaves it out; local runs as terraform-admin cover it (DECISIONS.md, 2026-10-01)."
       }
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.validate.1",
+      "covers": "full",
+      "with": [
+        "svc-acm-ops-aws-no-drift"
+      ]
+    }
+  ]
 }

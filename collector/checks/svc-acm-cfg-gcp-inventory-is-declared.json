@@ -35,5 +35,14 @@
         "reason": "Created by Google on first use of Compute Engine, in a domain Google owns. Excused from this check only: its project-level roles/editor with nothing using it is an open finding (DECISIONS.md, 2026-09-23)."
       }
     ]
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.verify.4",
+      "covers": "full",
+      "with": [
+        "svc-acm-cfg-aws-inventory-is-declared"
+      ]
+    }
+  ]
 }

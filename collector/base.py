@@ -29,6 +29,12 @@ class CheckDefinition:
     description: str
     required_cadence: str  # how often the framework requires this be re-checked
     params: dict[str, Any] = field(default_factory=dict)  # mechanism-specific inputs
+    # The design matrix's evidence rows this check proves, fully or in part,
+    # e.g. {"row": "KSI-SVC-SIN.verify.2", "covers": "partial", "gap": "..."}.
+    # A check that proves no row says why in unlinked_reason instead. Both
+    # are validated by sdr/matrix_rows.py (DECISIONS.md, 2026-10-02).
+    matrix_rows: list[dict[str, Any]] = field(default_factory=list)
+    unlinked_reason: str = ""
 
 
 @dataclass

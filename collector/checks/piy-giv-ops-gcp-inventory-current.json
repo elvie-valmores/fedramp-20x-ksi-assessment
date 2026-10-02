@@ -13,5 +13,12 @@
       "gcp"
     ],
     "exclusions_from": "svc-acm-cfg-gcp-inventory-is-declared"
-  }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-GIV.validate.1",
+      "covers": "partial",
+      "gap": "One direction only: everything the GCP inventory lists exists in its service. The other direction, live resources absent from the inventory, is not enumerated."
+    }
+  ]
 }

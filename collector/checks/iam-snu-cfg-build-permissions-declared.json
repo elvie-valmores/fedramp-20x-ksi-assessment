@@ -8,5 +8,6 @@
   "params": {
     "workflow": "build-and-push.yml",
     "assertion": "permissions_declared"
-  }
+  },
+  "unlinked_reason": "Supports the design behind KSI-IAM-SNU, a pipeline whose token is scoped by declaration. The matrix's rows read cloud identities (IAM users, service account keys, trust policies), not workflow files."
 }
