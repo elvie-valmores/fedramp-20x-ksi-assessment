@@ -55,7 +55,7 @@ The build is in progress, and `README.md` carries the current status table. As o
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  38 are fully automated, 16 partly, and 342 not yet, across 20 of 40 determinations (2026-10-02).
+  38 are fully automated, 16 partly, and 326 not yet, across 20 of 40 determinations (2026-10-02).
   14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
