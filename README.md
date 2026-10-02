@@ -120,7 +120,7 @@ set. A missing variable is reported as an error, never as a pass.
 | Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
 | Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end. Operator permission set assigned to `alex@` (2026-09-29); `aws sso login` not yet proven |
 | Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
-| GCP analytics pipeline | Phase 1 applied (30 resources). Phase 2 needs an image |
+| GCP analytics pipeline | Phase 2 deployed 2026-10-02: the Cloud Run job runs the signed analytics image by digest every six hours, and the cross-cloud handshake into AWS is proven in both clouds' logs. No data has crossed yet: the extract bucket fills only when AWS phase 2 runs the worker |
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 | Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
