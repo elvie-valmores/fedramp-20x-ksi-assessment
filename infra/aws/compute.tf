@@ -548,9 +548,17 @@ locals {
         # Everything dropped, nothing added. Enumerated rather than
         # minimised, per DFP.
         drop = ["ALL"]
+        add  = []
       }
       initProcessEnabled = true # reaps zombies; PID 1 is python, not an init
     }
+    # ECS stores these defaults whether or not they are sent. Stated here so
+    # the declaration matches what is live: left out, every plan with the
+    # services up showed the task definitions as needing replacement, which
+    # would make the drift check report drift that is not there
+    # (DECISIONS.md, 2026-10-02).
+    systemControls = []
+    volumesFrom    = []
   }
 }
 
@@ -613,7 +621,9 @@ resource "aws_ecs_task_definition" "api" {
 
       portMappings = [{
         containerPort = local.api_port
-        protocol      = "tcp"
+        # awsvpc requires the two to match, and ECS records it either way.
+        hostPort = local.api_port
+        protocol = "tcp"
       }]
 
       mountPoints = [{

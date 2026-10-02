@@ -264,13 +264,27 @@ data "aws_iam_policy_document" "s3_endpoint" {
 
   # The buckets this project owns and the tasks legitimately use: the
   # extract landing prefix the worker writes to, and the log store.
+  #
+  # Principal "*" with an aws:PrincipalArn condition, because a gateway
+  # endpoint does not honour named principals: "With gateway endpoints, the
+  # Principal element must be set to *. To specify a principal, use the
+  # aws:PrincipalArn condition key" (AWS PrivateLink docs). Until 2026-10-02
+  # this statement named the two roles as principals and so allowed nothing;
+  # no extract had ever landed, which the first phase 2 to try found
+  # (DECISIONS.md, 2026-10-02). Same two roles, in the form that works.
   statement {
     sid    = "AllowProjectBuckets"
     effect = "Allow"
 
     principals {
-      type = "AWS"
-      identifiers = [
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values = [
         aws_iam_role.api_task.arn,
         aws_iam_role.worker_task.arn,
       ]
