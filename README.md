@@ -117,10 +117,10 @@ set. A missing variable is reported as an error, never as a pass.
 | SDR emitter | Emits a schema-valid record for all 46 indicators; automated evidence for 11 |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only. Sign-in classification fixed and tested 2026-10-01; the detection Lambda's alert path to the encrypted topic is not yet proven |
-| Application environment, AWS | Phase 1 verified 2026-09-22. Phase 2 served a request 2026-09-23, IAM auth to the database. Torn down after |
+| Application environment, AWS | Phase 1 and 2 last run 2026-10-02: served requests with IAM auth to the database, and the worker's extracts landed through the S3 gateway endpoint after its policy was fixed (it had never allowed a write). Torn down after |
 | Workforce identity | Google Cloud Identity federated to IAM Identity Center, authenticated end to end. Operator permission set assigned to `alex@` (2026-09-29); `aws sso login` not yet proven |
 | Cross-cloud federation (GCP → AWS) | Role applied and persistent; trust pinned to the GCP service account numeric ID |
-| GCP analytics pipeline | Phase 2 deployed 2026-10-02: the Cloud Run job runs the signed analytics image by digest every six hours, and the cross-cloud handshake into AWS is proven in both clouds' logs. No data has crossed yet: the extract bucket fills only when AWS phase 2 runs the worker |
+| GCP analytics pipeline | Phase 2 deployed 2026-10-02. **Data crossed end to end the same day**: four measurements written through the api reached BigQuery by way of the worker, S3, the cross-cloud federation and the Cloud Run job pinned to the signed digest. Runs every six hours |
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 | Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
