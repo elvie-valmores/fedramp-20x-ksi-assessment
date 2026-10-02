@@ -80,6 +80,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_registries_immutable(check)
         if provider == "gcp" and resource == "registries_immutable":
             return self._gcp_registries_immutable(check)
+        if provider == "gcp" and resource == "service_account_user_keys":
+            return self._gcp_service_account_user_keys(check)
         if provider == "aws" and resource == "iam_user_access_keys":
             return self._aws_iam_user_access_keys(check)
         if provider == "aws" and resource == "log_corpus_query_limits":
@@ -362,6 +364,40 @@ class CloudAPIConfigRead(Mechanism):
                               "keys": [{"id": k["AccessKeyId"], "status": k["Status"]} for k in keys]})
         ok, detail, evidence = evaluate_no_user_access_keys(users)
         return CheckResult(check.id, ok, evidence, detail)
+
+    def _gcp_service_account_user_keys(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU verify row 2: no service account holds a user-managed key.
+
+        Requires param: project_id. The accounts come from Cloud Asset, and
+        each one's keys from IAM filtered to USER_MANAGED. Cloud Asset also
+        indexes keys, but its search does not say which are Google's own
+        rotating keys, so it cannot answer this (2026-10-02). Every account
+        has system-managed keys; those are not credentials anyone holds.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        session = AuthorizedSession(impersonated_token(project_id))
+        accounts = []
+        for res in asset_client(project_id).search_all_resources(request={
+            "scope": f"projects/{project_id}", "asset_types": ["iam.googleapis.com/ServiceAccount"],
+        }):
+            email = (res.additional_attributes or {}).get("email") or res.display_name
+            response = session.get(
+                f"https://iam.googleapis.com/v1/projects/{project_id}/serviceAccounts/{email}/keys",
+                params={"keyTypes": "USER_MANAGED"}, timeout=30,
+            )
+            response.raise_for_status()
+            keys = response.json().get("keys", [])
+            accounts.append({"user": email, "keys": [
+                {"id": k["name"].split("/")[-1], "status": "disabled" if k.get("disabled") else "enabled"}
+                for k in keys]})
+        if not accounts:
+            return CheckResult(check.id, False, {"accounts": {}}, "no service accounts found -- nothing to judge")
+        ok, detail, evidence = evaluate_no_user_access_keys(accounts)
+        return CheckResult(check.id, ok, evidence, detail.replace("users", "service accounts"))
 
     def _aws_log_corpus_query_limits(self, check: CheckDefinition) -> CheckResult:
         """KSI-MLA-OSM verify row 3: projection on every corpus table, limits on every workgroup.

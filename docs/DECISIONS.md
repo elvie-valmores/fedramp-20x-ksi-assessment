@@ -7568,3 +7568,50 @@ row as not automated. That understates rather than overstates.
 - `collect.yml` runs those tests and `matrix_rows.py --check` daily.
 - An SDR emitted locally from the existing results, with the current definitions, validated against
   the pinned schema.
+
+## 2026-10-02 — Ten checks close two partial rows and cover six more
+
+Taken row by row from `docs/MATRIX-COVERAGE.md`. Each judgement is a pure function with negative
+controls, and each check was run live before it was linked.
+
+**Two partial rows made full**, both by adding the GCP half of a row whose AWS half existed:
+
+- **SVC-SIN verify 2 (public access): GCS public access prevention.**
+  - Requires prevention `enforced` and uniform bucket-level access on.
+  - `inherited` fails, because there is no organization to inherit from.
+  - The bucket population comes from Cloud Asset; the collector role can read buckets but not list
+    them.
+  - One bucket, confirmed as the only one by a direct listing.
+- **SVC-SIN verify 6 (decrypt principals): Cloud KMS decrypt principals.**
+  - Resolved across key, key ring and project bindings. With no folder or organization, that is the
+    whole inheritance chain.
+  - Each role is judged by its expanded permissions, so `roles/owner`, which carries
+    `useToDecrypt`, is found.
+  - A role whose permissions can't be read counts as able to decrypt.
+  - Policies come from Cloud Asset's IAM search, which matched direct reads. The collector role
+    cannot read key ring policies directly.
+  - Live: each key decrypts only for its service agents, the pipeline account on `analytics`, and
+    the owner, the recorded break-glass human.
+
+**Six rows newly covered:**
+
+| Row | What the checks require |
+|---|---|
+| SVC-ASM verify 2 | Every enabled customer key rotates at least yearly. On AWS, keys pending deletion are not judged; on GCP, symmetric keys' `rotationPeriod` |
+| SVC-VRI verify 2 | Tag immutability. ECR `IMMUTABLE`, where an exclusion fails; Artifact Registry Docker `immutableTags` |
+| IAM-SNU verify 1 | No IAM user holds an access key, active or inactive. No users passes, since absence is the claim |
+| IAM-SNU verify 2 | No service account holds a user-managed key. Keys are listed per account from IAM, filtered to `USER_MANAGED` |
+| MLA-OSM verify 3 | Partition projection on every corpus table, and every enabled workgroup enforcing a scan limit of at most 1 GiB, not only the corpus's own |
+
+**IAM-SNU verify 2 needed a permission.** Cloud Asset indexes service account keys, but its search
+doesn't say which are Google's own rotating keys. It reported one key where IAM shows no
+user-managed ones. So the check lists keys through IAM, which needs `iam.serviceAccountKeys.list`
+on the collector's custom role. That returns metadata only; IAM never returns key material after
+creation.
+
+**One partial row restated, not closed.** PIY-GIV verify 1 asks the recorder to record all
+supported types. It records a declared list, by the 2026-09-05 cost decision, and the gap now says
+so.
+
+**Coverage:** 14 of 380 rows are full and 9 partial, up from 7 and 11. The collector has 45 checks
+and 30 self-test assertions.

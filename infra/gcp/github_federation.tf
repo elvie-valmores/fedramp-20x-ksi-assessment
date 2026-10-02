@@ -91,6 +91,9 @@ resource "google_project_iam_custom_role" "collector" {
     "cloudkms.keyRings.get",
     "iam.roles.get",
     "iam.serviceAccounts.get",
+    # iam-snu-cfg-gcp-no-user-managed-sa-keys: key metadata only, never
+    # key material, which IAM does not return after creation (2026-10-02).
+    "iam.serviceAccountKeys.list",
     "iam.workloadIdentityPoolProviders.get",
     "iam.workloadIdentityPools.get",
     "logging.buckets.get",

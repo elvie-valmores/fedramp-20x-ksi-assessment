@@ -1,0 +1,19 @@
+{
+  "id": "iam-snu-cfg-gcp-no-user-managed-sa-keys",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No service account in the project holds a user-managed key, enabled or disabled",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "service_account_user_keys",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.verify.2",
+      "covers": "full"
+    }
+  ]
+}

@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 36 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 45 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  7 are fully automated, 11 partly, and 362 not yet.
+  14 are fully automated, 9 partly, and 357 not yet (2026-10-02).
 - **Not started**: the three workflows and policy-as-code.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
@@ -234,15 +234,16 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 7 are fully automated, 11 partly, and 362 not
-yet. 9 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 14 are fully automated, 9 partly, and 357 not
+yet. 11 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
-1. **Close the partial rows cheaply.** Each gap is stated in the coverage report. Several are the
-   other cloud of a row that is already done on one: GCS public access prevention, and Cloud KMS
-   decrypt principals.
-2. **More check definitions,** taken row by row from the report. Rows the existing mechanisms can
-   already read come first: `cloud_api_config_read` and `pipeline_config_read` CFG rows.
+1. **More check definitions,** taken row by row from the report. CFG rows on persistent resources
+   come first, because they can be proven live without standing anything up. Rows on the ephemeral
+   network (route tables, security groups, the ALB, task definitions) wait for a phase 1.
+2. **The remaining partial rows mostly need design work, not a check.** Examples are deploy-time
+   signature verification, GCP events in the corpus, and the second direction of inventory
+   reconciliation. Each gap is stated in the report.
 3. **Negative controls for the older handlers.**
 
 **At the next phase 1:**
