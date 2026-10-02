@@ -29,9 +29,10 @@
 # no existence to validate, so it carries no dependency on the environment --
 # and ECR needs key access in the key policy to encrypt image layers at all.
 #
-# The other three keys -- database, secrets, logs -- stay in kms.tf and stay
-# ephemeral. They encrypt things that are themselves destroyed, so there is
-# nothing for them to outlive.
+# The secrets and logs keys stay in kms.tf and stay ephemeral: they encrypt
+# things that are themselves destroyed. The database key was here too until
+# 2026-10-02, on the same reasoning, which missed that the database's backups
+# are kept between sessions; it is in database_key.tf now.
 
 data "aws_iam_policy_document" "key_artifacts" {
   source_policy_documents = [data.aws_iam_policy_document.key_base.json]

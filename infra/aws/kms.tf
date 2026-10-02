@@ -9,7 +9,8 @@
 #
 # Four classes here:
 #
-#   database  -- customer data at rest, and its backups
+#   database  -- customer data at rest, and its backups (database_key.tf,
+#                persistent since 2026-10-02)
 #   secrets   -- the task certificate and the database master password
 #   logs      -- audit and container logs
 #   artifacts -- container images and the worker's extracts
@@ -41,55 +42,6 @@ data "aws_iam_policy_document" "key_base" {
     actions   = ["kms:*"]
     resources = ["*"]
   }
-}
-
-# --- database ---
-
-data "aws_iam_policy_document" "key_database" {
-  source_policy_documents = [data.aws_iam_policy_document.key_base.json]
-
-  statement {
-    sid    = "AllowRDSService"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["rds.amazonaws.com"]
-    }
-
-    actions = [
-      "kms:Decrypt",
-      "kms:Encrypt",
-      "kms:GenerateDataKey*",
-      "kms:CreateGrant",
-      "kms:DescribeKey",
-    ]
-
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "kms:CallerAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-  }
-}
-
-resource "aws_kms_key" "database" {
-  description             = "fedramp-20x-ksi: customer data at rest and its backups"
-  enable_key_rotation     = true
-  rotation_period_in_days = 365
-  deletion_window_in_days = 7
-  policy                  = data.aws_iam_policy_document.key_database.json
-
-  tags = {
-    DataClass = "database"
-  }
-}
-
-resource "aws_kms_alias" "database" {
-  name          = "alias/fedramp-20x-ksi-database"
-  target_key_id = aws_kms_key.database.key_id
 }
 
 # --- secrets ---

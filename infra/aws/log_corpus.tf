@@ -140,6 +140,48 @@ data "aws_iam_policy_document" "log_store_bucket" {
       values   = ["false"]
     }
   }
+
+  # Only the declared readers read log objects (KSI-MLA-ALA verify row 5,
+  # 2026-10-02). The list is the evidence key's decrypt model
+  # (evidence_key.tf, DeclaredRolesUseThroughS3 and OperatorUsesThroughS3),
+  # so the two layers name the same readers:
+  #
+  #   normalize_events     reads raw CloudTrail files to normalize them
+  #   run_detection_query  its Athena query reads the corpus as this role
+  #   github_collector     its Athena query, and the run history it fetches
+  #   the operator         investigation and break-glass
+  #
+  # The key alone did not close this. Objects written before the evidence key
+  # (2026-09-19 to 2026-09-30) are SSE-S3, which anyone holding s3:GetObject
+  # on the bucket reads -- the drift role's s3:Get* on "*" included.
+  #
+  # Athena reads with the caller's credentials, so aws:PrincipalArn is the
+  # querying role, not a service. Writers are untouched: only reads are denied.
+  # The account root can always rewrite a bucket policy, so this cannot lock
+  # the account out of its own logs.
+  statement {
+    sid    = "DenyObjectReadsOutsideDeclaredReaders"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.log_store.arn}/*"]
+
+    condition {
+      test     = "ArnNotLike"
+      variable = "aws:PrincipalArn"
+      values = [
+        aws_iam_role.normalize_events.arn,
+        aws_iam_role.run_detection_query.arn,
+        aws_iam_role.github_collector.arn,
+        local.operator_role_pattern,
+      ]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "log_store" {

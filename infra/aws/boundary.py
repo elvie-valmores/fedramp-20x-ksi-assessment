@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Sixteen files hold everything that survives a teardown. Everything else is the
+Seventeen files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -19,6 +19,7 @@ application environment, rebuilt on the next apply:
     identity_center.tf    the operator's permission set and assignment
     securityhub_controls.tf  the Security Hub controls disabled, and why
     evidence_key.tf       the key the evidence stores encrypt with
+    database_key.tf       the key the database and its retained backups use
     collector_identity.tf the collector's CI role
 
 pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
@@ -93,6 +94,7 @@ PERSISTENT_FILES = {
     "identity_center.tf",
     "securityhub_controls.tf",
     "evidence_key.tf",
+    "database_key.tf",
     "collector_identity.tf",
     "log_corpus.tf",
     "log_normalization.tf",
