@@ -1,0 +1,28 @@
+{
+  "id": "iam-sus-cfg-aws-guardduty-declared-plans",
+  "indicator": "KSI-IAM-SUS",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "GuardDuty is enabled, publishes findings every fifteen minutes, and has exactly the declared plans on: the foundational sources, S3 Protection and RDS Protection",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "guardduty",
+    "region": "us-east-1",
+    "frequency": "FIFTEEN_MINUTES",
+    "declared_on": [
+      "CLOUD_TRAIL",
+      "DNS_LOGS",
+      "FLOW_LOGS",
+      "S3_DATA_EVENTS",
+      "RDS_LOGIN_EVENTS"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SUS.verify.1",
+      "covers": "partial",
+      "gap": "Two optional plans are on by recorded decision (S3 and RDS Protection, DECISIONS.md 2026-09-30), where the row says optional plans off; the check holds them to the declared set instead. GCP's Security Command Center settings are not read: the project has no organization."
+    }
+  ]
+}

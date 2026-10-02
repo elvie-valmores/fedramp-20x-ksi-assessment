@@ -1,0 +1,22 @@
+{
+  "id": "svc-acm-cfg-drift-init-locks-state",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "Every terraform init in the drift workflow locks and encrypts state",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "drift.yml",
+    "assertion": "terraform_init_locks"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-acm-cfg-aws-state-bucket",
+        "svc-acm-cfg-collect-init-locks-state"
+      ]
+    }
+  ]
+}

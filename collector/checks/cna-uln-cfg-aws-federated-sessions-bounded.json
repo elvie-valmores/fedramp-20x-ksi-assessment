@@ -1,0 +1,24 @@
+{
+  "id": "cna-uln-cfg-aws-federated-sessions-bounded",
+  "indicator": "KSI-CNA-ULN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every federated AWS session is short: web-identity roles at most one hour, Identity Center sessions at most four, read from each permission set rather than the reserved role",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "federated_session_bounds",
+    "region": "us-east-1",
+    "max_seconds": {
+      "web_identity": 3600,
+      "identity_center": 14400
+    }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-ULN.verify.6",
+      "covers": "partial",
+      "gap": "AWS only. GCP's federated access tokens last one hour, fixed by Google; the pool has no lifetime setting to read, so that half rests on the platform, not on a check."
+    }
+  ]
+}

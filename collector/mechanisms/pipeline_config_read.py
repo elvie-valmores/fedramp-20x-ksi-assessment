@@ -254,6 +254,42 @@ class PipelineConfigRead(Mechanism):
             else f"push also allowed from {sorted(extra)}",
         )
 
+    def _terraform_init_locks(self, check: CheckDefinition, source: str) -> CheckResult:
+        """Every terraform init in the workflow locks and encrypts state.
+
+        KSI-SVC-ACM verify row 1's locking half. With the S3 backend,
+        locking is a client setting (use_lockfile), not a property of the
+        bucket, so it is evidenced where Terraform runs. A workflow with no
+        init fails: the claim is about the inits, and there are none.
+        """
+        inits = []
+        for job in (self._parse(source).get("jobs") or {}).values():
+            for step in job.get("steps") or []:
+                # Join continuation lines, so one command is one string.
+                script = re.sub(r"\\\n\s*", " ", step.get("run") or "")
+                inits += [" ".join(line.split()) for line in script.splitlines()
+                          if re.search(r"\bterraform\b.*\binit\b", line)]
+        missing = [i for i in inits if "use_lockfile=true" not in i or "encrypt=true" not in i]
+        if not inits:
+            return CheckResult(check.id, False, {"inits": []}, "no terraform init in the workflow")
+        return CheckResult(
+            check.id, not missing, {"inits": inits, "unlocked": missing},
+            f"all {len(inits)} init(s) lock and encrypt state" if not missing
+            else f"{len(missing)} init(s) without use_lockfile=true and encrypt=true",
+        )
+
+    def _scheduled(self, check: CheckDefinition, source: str) -> CheckResult:
+        """The workflow declares at least one cron schedule.
+
+        KSI-SVC-ACM verify row 2's "exists" half. Whether GitHub runs it is
+        the API's to say (cloud_api_config_read, provider github).
+        """
+        triggers = self._parse(source).get("on") or {}
+        crons = [s.get("cron") for s in (triggers.get("schedule") or [])] if isinstance(triggers, dict) else []
+        crons = [c for c in crons if c]
+        return CheckResult(check.id, bool(crons), {"crons": crons},
+                           f"scheduled: {', '.join(crons)}" if crons else "no schedule trigger")
+
     # --- helpers ---
 
     @staticmethod

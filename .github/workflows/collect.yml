@@ -26,9 +26,11 @@ on:
         default: ''
         type: string
 
-# `id-token: write` mints the OIDC token both clouds exchange; nothing else
-# is needed beyond reading the repository.
+# `id-token: write` mints the OIDC token both clouds exchange. `actions:
+# read` lets svc-acm-cfg-drift-workflow-active ask GitHub whether the drift
+# workflow is still enabled (2026-10-02); it reads workflow metadata only.
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -101,6 +103,7 @@ jobs:
         working-directory: collector
         env:
           GCP_IMPERSONATE: none
+          GITHUB_TOKEN: ${{ github.token }}
           SKIP: ${{ inputs.skip }}
           # Plan as the federated principal itself; never as terraform-admin.
           TF_VAR_impersonate_service_account: ''

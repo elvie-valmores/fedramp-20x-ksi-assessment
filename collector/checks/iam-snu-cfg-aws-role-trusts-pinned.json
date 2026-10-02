@@ -1,0 +1,31 @@
+{
+  "id": "iam-snu-cfg-aws-role-trusts-pinned",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every IAM role's trust names its principals exactly: no wildcard principal, every web-identity trust pins subject and audience with StringEquals and no wildcard, every SAML trust pins its audience",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "role_trusts",
+    "exempt_paths": [
+      {
+        "path": "/aws-service-role/",
+        "reason": "Service-linked roles: AWS writes and owns their trust policies, and the path is reserved to AWS"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.verify.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VCM.verify.1",
+      "covers": "full",
+      "with": [
+        "iam-snu-cfg-gcp-wif-provider-pinned"
+      ]
+    }
+  ]
+}

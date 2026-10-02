@@ -1,0 +1,23 @@
+{
+  "id": "cna-ibp-cfg-aws-securityhub-standards",
+  "indicator": "KSI-CNA-IBP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Security Hub has the CIS AWS Foundations Benchmark v3.0.0, the determination's benchmark, and AWS Foundational Security Best Practices subscribed and ready",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "securityhub_standards",
+    "region": "us-east-1",
+    "expected": [
+      "arn:aws:securityhub:us-east-1::standards/cis-aws-foundations-benchmark/v/3.0.0",
+      "arn:aws:securityhub:us-east-1::standards/aws-foundational-security-best-practices/v/1.0.0"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-IBP.verify.1",
+      "covers": "full"
+    }
+  ]
+}

@@ -86,6 +86,26 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_iam_user_access_keys(check)
         if provider == "aws" and resource == "log_corpus_query_limits":
             return self._aws_log_corpus_query_limits(check)
+        if provider == "aws" and resource == "role_trusts":
+            return self._aws_role_trusts(check)
+        if provider == "aws" and resource == "federated_session_bounds":
+            return self._aws_federated_session_bounds(check)
+        if provider == "aws" and resource == "oidc_providers":
+            return self._aws_oidc_providers(check)
+        if provider == "gcp" and resource == "workload_identity_provider":
+            return self._gcp_workload_identity_provider(check)
+        if provider == "aws" and resource == "iam_user_policies":
+            return self._aws_iam_user_policies(check)
+        if provider == "aws" and resource == "guardduty":
+            return self._aws_guardduty(check)
+        if provider == "aws" and resource == "securityhub_standards":
+            return self._aws_securityhub_standards(check)
+        if provider == "aws" and resource == "trail_data_events":
+            return self._aws_trail_data_events(check)
+        if provider == "aws" and resource == "state_bucket":
+            return self._aws_state_bucket(check)
+        if provider == "github" and resource == "workflow_active":
+            return self._github_workflow_active(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -430,6 +450,200 @@ class CloudAPIConfigRead(Mechanism):
                 break
         ok, detail, evidence = evaluate_log_corpus_limits(tables, workgroups, check.params["max_bytes"])
         return CheckResult(check.id, ok, evidence, detail)
+
+    @staticmethod
+    def _roles_with_trust() -> list[dict]:
+        iam = boto3.client("iam")
+        return [
+            {"role": r["RoleName"], "path": r["Path"], "document": r["AssumeRolePolicyDocument"],
+             "max_session": r["MaxSessionDuration"]}
+            for page in iam.get_paginator("list_roles").paginate()
+            for r in page["Roles"]
+        ]
+
+    def _aws_role_trusts(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU verify row 4: every role's trust names its principals exactly.
+
+        Requires param: exempt_paths ([{path, reason}]).
+        """
+        ok, detail, evidence = evaluate_role_trusts(self._roles_with_trust(), check.params["exempt_paths"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_federated_session_bounds(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-ULN verify row 6, AWS: federated sessions are short.
+
+        Requires params: region, max_seconds. Web-identity roles are judged
+        by MaxSessionDuration. Identity Center's reserved roles carry a
+        12-hour MaxSessionDuration of AWS's choosing; what bounds their
+        session is the permission set's duration, so that is what is read.
+        """
+        sso = boto3.client("sso-admin", region_name=check.params["region"])
+        instance = sso.list_instances()["Instances"][0]["InstanceArn"]
+        durations = {}
+        for page in sso.get_paginator("list_permission_sets").paginate(InstanceArn=instance):
+            for arn in page["PermissionSets"]:
+                ps = sso.describe_permission_set(InstanceArn=instance, PermissionSetArn=arn)["PermissionSet"]
+                durations[ps["Name"]] = _iso_duration_seconds(ps.get("SessionDuration", "PT1H"))
+        roles = []
+        for role in self._roles_with_trust():
+            statements = role["document"].get("Statement", [])
+            web = any("sts:AssumeRoleWithWebIdentity" in _as_list(s.get("Action", [])) for s in statements)
+            if role["path"] == "/aws-reserved/sso.amazonaws.com/":
+                # AWSReservedSSO_<permission set name>_<16 hex>
+                name = role["role"].removeprefix("AWSReservedSSO_").rsplit("_", 1)[0]
+                roles.append({"role": role["role"], "kind": "identity_center", "seconds": durations.get(name)})
+            elif web:
+                roles.append({"role": role["role"], "kind": "web_identity", "seconds": role["max_session"]})
+        ok, detail, evidence = evaluate_session_bounds(roles, check.params["max_seconds"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_oidc_providers(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU verify row 5, AWS: the OIDC providers are exactly the declared ones.
+
+        Requires param: expected ([{url, client_ids}]).
+        """
+        iam = boto3.client("iam")
+        providers = []
+        for entry in iam.list_open_id_connect_providers()["OpenIDConnectProviderList"]:
+            p = iam.get_open_id_connect_provider(OpenIDConnectProviderArn=entry["Arn"])
+            providers.append({"url": p["Url"], "client_ids": p["ClientIDList"]})
+        ok, detail, evidence = evaluate_oidc_providers(providers, check.params["expected"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _gcp_workload_identity_provider(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU verify row 5, GCP: the GitHub provider's issuer and condition.
+
+        Requires params: project_id, pool, wif_provider, issuer, required_clauses.
+        The clauses pin GitHub's immutable numeric owner and repository IDs
+        and the branch; a condition missing one admits tokens it should not.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        p = check.params
+        session = AuthorizedSession(impersonated_token(p["project_id"]))
+        response = session.get(
+            f"https://iam.googleapis.com/v1/projects/{p['project_id']}/locations/global/"
+            f"workloadIdentityPools/{p['pool']}/providers/{p['wif_provider']}", timeout=30)
+        provider = response.json() if response.ok else None
+        ok, detail = evaluate_wif_provider(provider, p["issuer"], p["required_clauses"])
+        return CheckResult(check.id, ok, {"provider": provider, "status": response.status_code}, detail)
+
+    def _aws_iam_user_policies(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-ELP verify row 4: access is by role, never attached to a user."""
+        iam = boto3.client("iam")
+        users = []
+        for page in iam.get_paginator("list_users").paginate():
+            for user in page["Users"]:
+                name = user["UserName"]
+                users.append({
+                    "user": name,
+                    "inline": iam.list_user_policies(UserName=name)["PolicyNames"],
+                    "attached": [a["PolicyArn"] for a in iam.list_attached_user_policies(UserName=name)["AttachedPolicies"]],
+                    "groups": [g["GroupName"] for g in iam.list_groups_for_user(UserName=name)["Groups"]],
+                })
+        ok, detail, evidence = evaluate_users_hold_no_policies(users)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_guardduty(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SUS verify row 1: threat detection on, with exactly the declared plans.
+
+        Requires params: region, declared_on, frequency.
+        """
+        gd = boto3.client("guardduty", region_name=check.params["region"])
+        ids = gd.list_detectors()["DetectorIds"]
+        detector = None
+        if ids:
+            d = gd.get_detector(DetectorId=ids[0])
+            detector = {"status": d["Status"], "frequency": d.get("FindingPublishingFrequency"),
+                        "features": {f["Name"]: f["Status"] for f in d.get("Features", [])}}
+        ok, detail, evidence = evaluate_guardduty(detector, check.params["declared_on"], check.params["frequency"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_securityhub_standards(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-IBP verify row 1: the expected standards subscribed and ready.
+
+        Requires params: region, expected (standards ARNs).
+        """
+        sh = boto3.client("securityhub", region_name=check.params["region"])
+        subs = {
+            s["StandardsArn"]: s["StandardsStatus"]
+            for page in sh.get_paginator("get_enabled_standards").paginate()
+            for s in page["StandardsSubscriptions"]
+        }
+        ok, detail, evidence = evaluate_standards(subs, check.params["expected"])
+        evidence["subscribed"] = subs
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_trail_data_events(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-LET verify row 4: data events scoped to the declared customer-data stores.
+
+        Requires params: region, trail, declared (S3 object ARN prefixes,
+        e.g. "arn:aws:s3:::bucket/"). Reads both selector styles: advanced
+        selectors with eventCategory Data on AWS::S3::Object and an ARN
+        StartsWith, and basic selectors' DataResources.
+        """
+        ct = boto3.client("cloudtrail", region_name=check.params["region"])
+        sel = ct.get_event_selectors(TrailName=check.params["trail"])
+        scoped = []
+        for adv in sel.get("AdvancedEventSelectors") or []:
+            fields = {f["Field"]: f for f in adv["FieldSelectors"]}
+            if (fields.get("eventCategory", {}).get("Equals") == ["Data"]
+                    and fields.get("resources.type", {}).get("Equals") == ["AWS::S3::Object"]
+                    and "readOnly" not in fields):
+                scoped += fields.get("resources.ARN", {}).get("StartsWith", [])
+        for basic in sel.get("EventSelectors") or []:
+            if basic.get("ReadWriteType") != "All":
+                continue
+            for res in basic.get("DataResources", []):
+                if res["Type"] == "AWS::S3::Object":
+                    scoped += res["Values"]
+        ok, detail, evidence = evaluate_trail_data_events(scoped, check.params["declared"])
+        evidence["selectors"] = sel.get("AdvancedEventSelectors") or sel.get("EventSelectors")
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_state_bucket(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-ACM verify row 1, the bucket half: versioned and encrypted.
+
+        Requires params: region, bucket. Which key encrypts it is the
+        store-key check's business (a recorded SSE-S3 exception); locking is
+        a client setting, checked on every init by pipeline_config_read.
+        """
+        s3 = boto3.client("s3", region_name=check.params["region"])
+        bucket = check.params["bucket"]
+        versioning = s3.get_bucket_versioning(Bucket=bucket).get("Status")
+        try:
+            rule = s3.get_bucket_encryption(Bucket=bucket)["ServerSideEncryptionConfiguration"]["Rules"][0]
+            encryption = rule["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"]
+        except s3.exceptions.ClientError:
+            encryption = None
+        ok, detail = evaluate_state_bucket(versioning, encryption)
+        return CheckResult(check.id, ok, {"versioning": versioning, "encryption": encryption}, detail)
+
+    def _github_workflow_active(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-ACM verify row 2, the enabled half: GitHub has not disabled the workflow.
+
+        Requires params: repository, workflow. GitHub disables a scheduled
+        workflow after 60 days without repository activity, and a person
+        can disable one in the UI. Either way the file still declares the
+        schedule, so the file alone cannot show it runs. Token: GITHUB_TOKEN
+        (CI, with actions: read), else the gh CLI's.
+        """
+        import os
+        import subprocess
+        import urllib.request
+
+        token = os.environ.get("GITHUB_TOKEN") or subprocess.run(
+            ["gh", "auth", "token"], capture_output=True, text=True, check=True).stdout.strip()
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{check.params['repository']}/actions/workflows/{check.params['workflow']}",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            workflow = json.load(response)
+        state = workflow.get("state")
+        return CheckResult(check.id, state == "active", {"state": state, "path": workflow.get("path")},
+                           f"workflow state {state!r}")
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
         """The GCP half of KSI-SVC-SIN verify row 2: no bucket permits public access.
@@ -1036,6 +1250,187 @@ def evaluate_log_corpus_limits(tables: list[dict], workgroups: list[dict],
     if not workgroups:
         results["workgroups"] = {"passed": False, "detail": "no enabled workgroups"}
     return _judged("settings", results)
+
+
+def _iso_duration_seconds(value: str) -> int | None:
+    """Seconds in an ISO 8601 duration of hours and minutes, e.g. PT4H or PT1H30M."""
+    import re
+
+    match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?", value or "")
+    if not match:
+        return None
+    return int(match.group(1) or 0) * 3600 + int(match.group(2) or 0) * 60
+
+
+def _web_identity_problems(statement: dict, provider: str) -> list[str]:
+    """What a web-identity trust statement fails to pin. Empty means sound."""
+    host = provider.split("oidc-provider/")[-1]
+    equals = (statement.get("Condition") or {}).get("StringEquals", {})
+    likes = {k for op, block in (statement.get("Condition") or {}).items() if op != "StringEquals" for k in block}
+    problems = []
+    for claim in ("sub", "aud"):
+        key = f"{host}:{claim}"
+        values = _as_list(equals.get(key, []))
+        if not values:
+            problems.append(f"{claim} not pinned with StringEquals")
+        elif any("*" in v or "?" in v for v in values):
+            problems.append(f"{claim} contains a wildcard")
+        if key in likes:
+            problems.append(f"{claim} also matched by a non-exact operator")
+    return problems
+
+
+def evaluate_role_trusts(roles: list[dict], exempt_paths: list[dict]) -> tuple[bool, str, dict]:
+    """Every role's trust names who may assume it exactly.
+
+    Wildcard principals fail anywhere. A web-identity trust must pin both
+    subject and audience with StringEquals and no wildcard: an unpinned
+    subject lets any repository or account behind the same issuer assume
+    the role. A SAML trust must pin its audience. Service-linked roles are
+    exempt by path prefix, with the reason recorded: AWS writes their trust,
+    and the /aws-service-role/ path is reserved to AWS, so no customer role
+    can sit under it.
+    """
+    results = {}
+    for role in roles:
+        exempt = next((e for e in exempt_paths if role["path"].startswith(e["path"])), None)
+        if exempt:
+            results[role["role"]] = {"passed": True, "detail": f"exempt: {exempt['reason']}"}
+            continue
+        problems = []
+        for st in role["document"].get("Statement", []):
+            if st.get("Effect") != "Allow":
+                continue
+            principal = st.get("Principal")
+            actions = _as_list(st.get("Action", []))
+            if principal == "*" or (isinstance(principal, dict) and "*" in _as_list(principal.get("AWS", []))):
+                problems.append("wildcard principal")
+                continue
+            for provider in _as_list((principal or {}).get("Federated", [])) if isinstance(principal, dict) else []:
+                if "sts:AssumeRoleWithWebIdentity" in actions:
+                    problems += [f"{provider}: {p}" for p in _web_identity_problems(st, provider)]
+                elif "sts:AssumeRoleWithSAML" in actions:
+                    aud = (st.get("Condition") or {}).get("StringEquals", {}).get("SAML:aud")
+                    if not aud:
+                        problems.append(f"{provider}: SAML audience not pinned")
+        results[role["role"]] = {"passed": not problems,
+                                 "detail": "; ".join(problems) or "trust names its principals exactly"}
+    return _judged("roles", results)
+
+
+def evaluate_session_bounds(roles: list[dict], max_seconds: dict[str, int]) -> tuple[bool, str, dict]:
+    """Every federated session ends within its kind's ceiling.
+
+    Each role is {role, kind, seconds}: kind "web_identity" uses the role's
+    MaxSessionDuration; "identity_center" uses its permission set's session
+    duration, which is what bounds that session, not the reserved role's own
+    12-hour setting.
+    """
+    return _judged("roles", {
+        r["role"]: {"passed": r["seconds"] is not None and r["seconds"] <= max_seconds[r["kind"]],
+                    "detail": f"{r['kind']}: {r['seconds']} seconds" if r["seconds"] is not None else
+                              f"{r['kind']}: session length unknown"}
+        for r in roles
+    })
+
+
+def evaluate_oidc_providers(providers: list[dict], expected: list[dict]) -> tuple[bool, str, dict]:
+    """The providers present are exactly the expected ones, each with exactly its audiences."""
+    want = {e["url"]: sorted(e["client_ids"]) for e in expected}
+    have = {p["url"]: sorted(p["client_ids"]) for p in providers}
+    results = {}
+    for url in sorted(set(want) | set(have)):
+        if url not in have:
+            results[url] = {"passed": False, "detail": "expected provider missing"}
+        elif url not in want:
+            results[url] = {"passed": False, "detail": "provider not in the declared list"}
+        elif have[url] != want[url]:
+            results[url] = {"passed": False, "detail": f"audiences {have[url]}, expected {want[url]}"}
+        else:
+            results[url] = {"passed": True, "detail": f"audiences {have[url]}"}
+    return _judged("providers", results)
+
+
+def evaluate_wif_provider(provider: dict | None, issuer: str, required_clauses: list[str]) -> tuple[bool, str]:
+    """A workload identity provider: active, the expected issuer, and every
+    required clause present in its attribute condition."""
+    if not provider:
+        return False, "provider not found"
+    if provider.get("disabled") or provider.get("state") != "ACTIVE":
+        return False, f"provider state {provider.get('state')!r}"
+    actual = (provider.get("oidc") or {}).get("issuerUri")
+    if actual != issuer:
+        return False, f"issuer {actual!r}, expected {issuer!r}"
+    condition = provider.get("attributeCondition") or ""
+    missing = [c for c in required_clauses if c not in condition]
+    if missing:
+        return False, "attribute condition lacks: " + "; ".join(missing)
+    return True, "active, expected issuer, condition pins " + str(len(required_clauses)) + " clauses"
+
+
+def evaluate_users_hold_no_policies(users: list[dict]) -> tuple[bool, str, dict]:
+    """No user carries an inline policy, an attached policy, or a group."""
+    if not users:
+        return True, "no IAM users exist, so none holds a policy", {"users": {}, "failing": []}
+    return _judged("users", {
+        u["user"]: {"passed": not (u["inline"] or u["attached"] or u["groups"]),
+                    "detail": f"inline {u['inline']}, attached {u['attached']}, groups {u['groups']}"}
+        for u in users
+    })
+
+
+def evaluate_guardduty(detector: dict | None, declared_on: list[str], frequency: str) -> tuple[bool, str, dict]:
+    """Enabled, publishing at the declared frequency, and every plan on exactly
+    when declared on: an undeclared plan bills and an absent one blinds."""
+    if not detector or detector.get("status") != "ENABLED":
+        return False, "no enabled detector", {"detector": detector}
+    results = {}
+    if detector.get("frequency") != frequency:
+        results["publishing frequency"] = {"passed": False,
+                                           "detail": f"{detector.get('frequency')}, expected {frequency}"}
+    features = detector.get("features", {})
+    for name in sorted(set(features) | set(declared_on)):
+        on = features.get(name) == "ENABLED"
+        want = name in declared_on
+        results[name] = {"passed": on == want,
+                         "detail": f"{'on' if on else 'off'}, declared {'on' if want else 'off'}"}
+    return _judged("settings", results)
+
+
+def evaluate_standards(subscriptions: dict[str, str], expected: list[str]) -> tuple[bool, str, dict]:
+    """Every expected standard subscribed and READY."""
+    return _judged("standards", {
+        arn: {"passed": subscriptions.get(arn) == "READY", "detail": subscriptions.get(arn, "not subscribed")}
+        for arn in expected
+    })
+
+
+def evaluate_trail_data_events(scoped: list[str], declared: list[str]) -> tuple[bool, str, dict]:
+    """Data events cover exactly the declared customer-data stores.
+
+    Both directions: a declared store without data events is customer-data
+    access going unrecorded, and an undeclared one is billing for scope
+    nobody chose (DECISIONS.md, 2026-09-05).
+    """
+    results = {}
+    for prefix in sorted(set(scoped) | set(declared)):
+        if prefix not in scoped:
+            results[prefix] = {"passed": False, "detail": "declared customer-data store, no data events"}
+        elif prefix not in declared:
+            results[prefix] = {"passed": False, "detail": "data events on a store not declared as customer data"}
+        else:
+            results[prefix] = {"passed": True, "detail": "data events recorded"}
+    if not results:
+        return False, "no customer-data stores declared -- nothing to judge", {"stores": {}, "failing": []}
+    return _judged("stores", results)
+
+
+def evaluate_state_bucket(versioning: str | None, encryption: str | None) -> tuple[bool, str]:
+    if versioning != "Enabled":
+        return False, f"versioning {versioning or 'never enabled'}"
+    if not encryption:
+        return False, "no default encryption"
+    return True, f"versioning enabled, default encryption {encryption}"
 
 
 def evaluate_object_lock(config: dict, mode: str, min_days: int) -> tuple[bool, str]:

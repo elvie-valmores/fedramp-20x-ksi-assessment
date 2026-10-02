@@ -1,0 +1,18 @@
+{
+  "id": "iam-elp-cfg-aws-users-hold-no-policies",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No IAM user carries an inline policy, an attached policy or a group membership: access is by role",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "iam_user_policies"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-ELP.verify.4",
+      "covers": "full"
+    }
+  ]
+}

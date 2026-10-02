@@ -1,0 +1,29 @@
+{
+  "id": "iam-snu-cfg-aws-oidc-providers-declared",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The account's OIDC providers are exactly GitHub Actions' issuer, with exactly the STS audience",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "oidc_providers",
+    "expected": [
+      {
+        "url": "token.actions.githubusercontent.com",
+        "client_ids": [
+          "sts.amazonaws.com"
+        ]
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.verify.5",
+      "covers": "full",
+      "with": [
+        "iam-snu-cfg-gcp-wif-provider-pinned"
+      ]
+    }
+  ]
+}

@@ -38,6 +38,8 @@ name: good
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '0 7 * * *'
 permissions:
   contents: read
   id-token: write
@@ -55,6 +57,11 @@ jobs:
         run: cosign verify
       - name: record the digest
         run: echo "$DIGEST"
+      - name: initialise
+        run: |
+          terraform -chdir=infra/aws init -input=false \
+            -backend-config="use_lockfile=true" \
+            -backend-config="encrypt=true"
 """
 
 # Each field below violates exactly one assertion, so a failure names the
@@ -76,6 +83,10 @@ jobs:
         run: echo "$DIGEST"
       - name: verify the signature
         run: cosign verify
+      - name: initialise
+        run: |
+          terraform -chdir=infra/aws init -input=false \
+            -backend-config="encrypt=true"
 """
 
 # assertion -> extra params, and why the bad fixture violates it.
@@ -90,6 +101,8 @@ CASES = [
         "digest recorded before the signature is verified",
     ),
     ("triggers_limited_to", {"branches": ["main"]}, "also triggers from develop"),
+    ("terraform_init_locks", {}, "init without use_lockfile=true"),
+    ("scheduled", {}, "no schedule trigger"),
 ]
 
 
@@ -415,6 +428,25 @@ def _tls(**change) -> dict:
 
 
 PAB_ON = {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}
+_GH = "arn:aws:iam::1:oidc-provider/token.actions.githubusercontent.com"
+_GH_SUB = "token.actions.githubusercontent.com:sub"
+_GH_AUD = "token.actions.githubusercontent.com:aud"
+
+
+def _trust(condition, principal=None, action="sts:AssumeRoleWithWebIdentity", path="/"):
+    return [{"role": "r", "path": path, "document": {"Statement": [{
+        "Effect": "Allow", "Principal": principal or {"Federated": _GH}, "Action": action,
+        **({"Condition": condition} if condition is not None else {})}]}}]
+
+
+_PINNED = {"StringEquals": {_GH_SUB: "repo:o@1/r@2:ref:refs/heads/main", _GH_AUD: "sts.amazonaws.com"}}
+SLR_EXEMPT = [{"path": "/aws-service-role/", "reason": "AWS writes the trust"}]
+GD_OK = {"status": "ENABLED", "frequency": "FIFTEEN_MINUTES",
+         "features": {"CLOUD_TRAIL": "ENABLED", "S3_DATA_EVENTS": "ENABLED", "EKS_AUDIT_LOGS": "DISABLED"}}
+GD_ON = ["CLOUD_TRAIL", "S3_DATA_EVENTS"]
+WIF_OK = {"state": "ACTIVE", "oidc": {"issuerUri": "https://token.actions.githubusercontent.com"},
+          "attributeCondition": "assertion.repository_id == '2' && assertion.ref == 'refs/heads/main'"}
+WIF_CLAUSES = ["assertion.repository_id == '2'", "assertion.ref == 'refs/heads/main'"]
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -557,6 +589,67 @@ CFG_CASES = [
         "unlimited second workgroup": (CORPUS_OK[0], CORPUS_OK[1] + [{"workgroup": "primary", "enforced": False, "cutoff": None}]),
         "no tables": ([], CORPUS_OK[1]),
     }),
+    ("evaluate_role_trusts", lambda c: cfg.evaluate_role_trusts(c, SLR_EXEMPT), _trust(_PINNED), {
+        "subject unpinned": _trust({"StringEquals": {_GH_AUD: "sts.amazonaws.com"}}),
+        "audience unpinned": _trust({"StringEquals": {_GH_SUB: "repo:o@1/r@2:ref:refs/heads/main"}}),
+        "subject wildcard": _trust({"StringEquals": {_GH_SUB: "repo:o@1/*", _GH_AUD: "sts.amazonaws.com"}}),
+        "subject by StringLike": _trust({**_PINNED, "StringLike": {_GH_SUB: "repo:o@1/*"}}),
+        "no condition": _trust(None),
+        "wildcard principal": _trust(None, principal="*", action="sts:AssumeRole"),
+        "wildcard AWS principal": _trust(None, principal={"AWS": "*"}, action="sts:AssumeRole"),
+        "SAML audience unpinned": _trust(None, principal={"Federated": "arn:aws:iam::1:saml-provider/x"},
+                                         action="sts:AssumeRoleWithSAML"),
+        # /service-role/ is a path customers can create; only AWS's reserved one is exempt.
+        "exempt path look-alike": _trust(None, principal="*", action="sts:AssumeRole",
+                                         path="/service-role/"),
+    }),
+    ("evaluate_session_bounds", lambda c: cfg.evaluate_session_bounds(c, {"web_identity": 3600, "identity_center": 14400}),
+     [{"role": "a", "kind": "web_identity", "seconds": 3600}, {"role": "b", "kind": "identity_center", "seconds": 14400}], {
+        "too long": [{"role": "a", "kind": "web_identity", "seconds": 43200}],
+        # The human ceiling does not stretch to a workload role.
+        "web identity at the human ceiling": [{"role": "a", "kind": "web_identity", "seconds": 14400}],
+        "unknown": [{"role": "b", "kind": "identity_center", "seconds": None}],
+    }),
+    ("evaluate_oidc_providers", lambda c: cfg.evaluate_oidc_providers(c, [{"url": "t.example", "client_ids": ["sts"]}]),
+     [{"url": "t.example", "client_ids": ["sts"]}], {
+        "extra audience": [{"url": "t.example", "client_ids": ["sts", "other"]}],
+        "undeclared provider": [{"url": "t.example", "client_ids": ["sts"]}, {"url": "evil.example", "client_ids": ["sts"]}],
+        "missing": [],
+    }),
+    ("evaluate_wif_provider", lambda c: cfg.evaluate_wif_provider(c, "https://token.actions.githubusercontent.com", WIF_CLAUSES),
+     WIF_OK, {
+        "branch clause gone": {**WIF_OK, "attributeCondition": "assertion.repository_id == '2'"},
+        "other issuer": {**WIF_OK, "oidc": {"issuerUri": "https://evil.example"}},
+        "disabled": {**WIF_OK, "state": "DELETED"},
+        "missing": None,
+    }),
+    ("evaluate_users_hold_no_policies", cfg.evaluate_users_hold_no_policies, [], {
+        "inline policy": [{"user": "u", "inline": ["p"], "attached": [], "groups": []}],
+        "attached policy": [{"user": "u", "inline": [], "attached": ["arn:aws:iam::aws:policy/X"], "groups": []}],
+        "group": [{"user": "u", "inline": [], "attached": [], "groups": ["admins"]}],
+    }),
+    ("evaluate_guardduty", lambda c: cfg.evaluate_guardduty(c, GD_ON, "FIFTEEN_MINUTES"), GD_OK, {
+        "undeclared plan on": {**GD_OK, "features": {**GD_OK["features"], "EKS_AUDIT_LOGS": "ENABLED"}},
+        "declared plan off": {**GD_OK, "features": {**GD_OK["features"], "S3_DATA_EVENTS": "DISABLED"}},
+        "slow publishing": {**GD_OK, "frequency": "SIX_HOURS"},
+        "suspended": {**GD_OK, "status": "DISABLED"},
+        "no detector": None,
+    }),
+    ("evaluate_standards", lambda c: cfg.evaluate_standards(c, ["cis", "fsbp"]), {"cis": "READY", "fsbp": "READY"}, {
+        "one missing": {"cis": "READY"},
+        "not ready": {"cis": "INCOMPLETE", "fsbp": "READY"},
+    }),
+    ("evaluate_trail_data_events", lambda c: cfg.evaluate_trail_data_events(c, ["arn:aws:s3:::data/"]),
+     ["arn:aws:s3:::data/"], {
+        "none": [],
+        "undeclared extra": ["arn:aws:s3:::data/", "arn:aws:s3:::logs/"],
+        "wrong store": ["arn:aws:s3:::logs/"],
+    }),
+    ("evaluate_state_bucket", lambda c: cfg.evaluate_state_bucket(*c), ("Enabled", "AES256"), {
+        "versioning suspended": ("Suspended", "AES256"),
+        "never versioned": (None, "AES256"),
+        "unencrypted": ("Enabled", None),
+    }),
     ("evaluate_gcs_public_access", cfg.evaluate_gcs_public_access, GCS_IAM_OK, {
         "nothing reported": None,
         # Inherited defers to an organization policy this project does not have.
@@ -671,6 +764,15 @@ CFG_RESOURCES = {
     "evaluate_public_access_blocked": "s3_buckets_block_public_access",
     "evaluate_gcs_public_access": "buckets_prevent_public_access",
     "evaluate_key_rotation": "key_rotation",
+    "evaluate_role_trusts": "role_trusts",
+    "evaluate_session_bounds": "federated_session_bounds",
+    "evaluate_oidc_providers": "oidc_providers",
+    "evaluate_wif_provider": "workload_identity_provider",
+    "evaluate_users_hold_no_policies": "iam_user_policies",
+    "evaluate_guardduty": "guardduty",
+    "evaluate_standards": "securityhub_standards",
+    "evaluate_trail_data_events": "trail_data_events",
+    "evaluate_state_bucket": "state_bucket",
     "evaluate_registries_immutable": "registries_immutable",
     "evaluate_no_user_access_keys": "iam_user_access_keys",
     "evaluate_log_corpus_limits": "log_corpus_query_limits",

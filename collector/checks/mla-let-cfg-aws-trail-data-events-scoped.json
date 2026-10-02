@@ -1,0 +1,23 @@
+{
+  "id": "mla-let-cfg-aws-trail-data-events-scoped",
+  "indicator": "KSI-MLA-LET",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The trail records S3 data events, reads and writes, for exactly the declared customer-data stores (DECISIONS.md, 2026-09-05): the extract bucket",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "trail_data_events",
+    "region": "us-east-1",
+    "trail": "fedramp-20x-ksi-trail",
+    "declared": [
+      "arn:aws:s3:::fedramp-20x-ksi-extracts-437672023758/"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-LET.verify.4",
+      "covers": "full"
+    }
+  ]
+}

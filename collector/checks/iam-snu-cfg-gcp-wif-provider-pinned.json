@@ -1,0 +1,37 @@
+{
+  "id": "iam-snu-cfg-gcp-wif-provider-pinned",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The GitHub workload identity provider is active, trusts GitHub's issuer, and its attribute condition pins the owner and repository by immutable numeric ID and the branch to main",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "workload_identity_provider",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "pool": "github-actions",
+    "wif_provider": "github",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "required_clauses": [
+      "assertion.repository_owner_id == '181586876'",
+      "assertion.repository_id == '1375137942'",
+      "assertion.ref == 'refs/heads/main'"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.verify.5",
+      "covers": "full",
+      "with": [
+        "iam-snu-cfg-aws-oidc-providers-declared"
+      ]
+    },
+    {
+      "row": "KSI-SVC-VCM.verify.1",
+      "covers": "full",
+      "with": [
+        "iam-snu-cfg-aws-role-trusts-pinned"
+      ]
+    }
+  ]
+}

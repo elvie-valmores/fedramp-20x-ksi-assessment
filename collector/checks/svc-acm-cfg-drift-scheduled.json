@@ -1,0 +1,21 @@
+{
+  "id": "svc-acm-cfg-drift-scheduled",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The drift workflow declares a schedule",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "drift.yml",
+    "assertion": "scheduled"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-acm-cfg-drift-workflow-active"
+      ]
+    }
+  ]
+}

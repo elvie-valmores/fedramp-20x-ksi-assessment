@@ -1,0 +1,23 @@
+{
+  "id": "svc-acm-cfg-drift-workflow-active",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "GitHub reports the drift workflow active: not disabled by hand or by 60 days of repository inactivity",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "github",
+    "resource": "workflow_active",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
+    "workflow": "drift.yml"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-acm-cfg-drift-scheduled"
+      ]
+    }
+  ]
+}
