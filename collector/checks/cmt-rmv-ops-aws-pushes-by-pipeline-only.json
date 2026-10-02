@@ -1,0 +1,22 @@
+{
+  "id": "cmt-rmv-ops-aws-pushes-by-pipeline-only",
+  "indicator": "KSI-CMT-RMV",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no image push to ECR in the last three days by anything but the build role",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, regexp_replace(actor.user.name, '^arn:aws:sts::\\d+:assumed-role/([^/]+)/.*$', '$1') AS actor, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 'ecr.amazonaws.com' AND api.operation IN ('PutImage','InitiateLayerUpload','UploadLayerPart','CompleteLayerUpload') AND status = 'Success' AND NOT regexp_like(coalesce(actor.user.name, ''), 'assumed-role/fedramp-20x-ksi-github-build/') GROUP BY 1,2,3 ORDER BY 1 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-RMV.validate.2",
+      "covers": "partial",
+      "gap": "ECR only: Artifact Registry pushes are in Cloud Audit Logs, which are not in the corpus."
+    }
+  ]
+}

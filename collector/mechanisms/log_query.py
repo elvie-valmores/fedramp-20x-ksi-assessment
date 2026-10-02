@@ -67,7 +67,12 @@ class LogQuery(Mechanism):
         rows = results["ResultSet"]["Rows"][1:]  # row 0 is the column header
 
         passed, detail = evaluate_query(state, len(rows), expect)
-        return CheckResult(check.id, passed, {"row_count": len(rows), "expect": expect}, detail)
+        header = [c.get("VarCharValue") for c in results["ResultSet"]["Rows"][0]["Data"]] if results["ResultSet"]["Rows"] else []
+        # The rows are the evidence for a standing query that should return
+        # none: which actor, which call, when. The first 20 are kept.
+        sample = [dict(zip(header, [c.get("VarCharValue") for c in r["Data"]])) for r in rows[:20]]
+        return CheckResult(check.id, passed, {"row_count": len(rows), "expect": expect, "rows": sample,
+                                              "query_id": query_id}, detail)
 
 
 def evaluate_query(state: str, row_count: int, expect: str) -> tuple[bool, str]:

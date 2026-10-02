@@ -1,0 +1,22 @@
+{
+  "id": "iam-elp-ops-aws-iam-mutations-by-platform-engineer",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no IAM write call in the last three days by anyone but the platform engineer's Identity Center role, or by AWS services acting on its behalf",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, actor.user.type AS type, regexp_replace(actor.user.name, '^arn:aws:sts::\\d+:assumed-role/([^/]+)/.*$', '$1') AS actor, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 'iam.amazonaws.com' AND regexp_like(api.operation, '^(Create|Delete|Put|Attach|Detach|Update|Tag|Untag|Add|Remove|Set|Upload|Change|Enable|Deactivate|Reset)') AND status = 'Success' AND actor.user.type <> 'AWSService' AND NOT regexp_like(coalesce(actor.user.name, ''), 'assumed-role/AWSReservedSSO_InterimOperatorAdmin_[0-9a-f]+/') GROUP BY 1,2,3,4 ORDER BY 1 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-ELP.validate.3",
+      "covers": "partial",
+      "gap": "AWS only: GCP's SetIamPolicy events are in Cloud Audit Logs, which are not in the corpus."
+    }
+  ]
+}
