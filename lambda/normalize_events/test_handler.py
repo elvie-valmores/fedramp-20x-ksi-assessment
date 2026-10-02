@@ -42,6 +42,15 @@ class Resources(unittest.TestCase):
             "uid": "arn:aws:kms:us-east-1:437672023758:key/384ac4d6-40dd-4da1-9bbc-771b270b4e6c",
             "type": "AWS::KMS::Key"}])
 
+    def test_tls_is_kept(self):
+        out = handler._to_ocsf(FIXTURES["api_call_over_tls"], "437672023758")
+        self.assertEqual(out["tls"], {"version": "TLSv1.3", "cipher": "TLS_AES_128_GCM_SHA256"})
+
+    def test_no_tls_is_none(self):
+        # Absent, not guessed: a plain-HTTP request must read as one.
+        self.assertEqual(handler._to_ocsf(FIXTURES["kms_decrypt"], "437672023758")["tls"],
+                         {"version": None, "cipher": None})
+
     def test_no_resources_is_an_empty_list(self):
         self.assertEqual(handler._to_ocsf(FIXTURES["console_login_success"], "437672023758")["resources"], [])
 

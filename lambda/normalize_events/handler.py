@@ -131,6 +131,14 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
         # What the call acted on, e.g. the key a Decrypt used. Kept since
         # 2026-10-02: without it no query can tell a customer key from an
         # AWS-managed one, or which store a data event touched.
+        # The connection's TLS, absent when the request was not over TLS --
+        # or when AWS made the call internally, which a query tells apart
+        # by the source being a service name rather than an address
+        # (2026-10-02).
+        "tls": {
+            "version": (record.get("tlsDetails") or {}).get("tlsVersion"),
+            "cipher": (record.get("tlsDetails") or {}).get("cipherSuite"),
+        },
         "resources": [
             {"uid": r.get("ARN"), "type": r.get("type")}
             for r in (record.get("resources") or [])

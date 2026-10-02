@@ -226,6 +226,11 @@ resource "aws_glue_catalog_table" "normalized_events" {
       name = "resources"
       type = "array<struct<uid:string,type:string>>"
     }
+    # Since 2026-10-02, as resources: null before then.
+    columns {
+      name = "tls"
+      type = "struct<version:string,cipher:string>"
+    }
   }
 
   # These are not stored inside the files -- their values come from the

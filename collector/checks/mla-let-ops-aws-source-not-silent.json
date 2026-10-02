@@ -1,0 +1,27 @@
+{
+  "id": "mla-let-ops-aws-source-not-silent",
+  "indicator": "KSI-MLA-LET",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "The AWS source is not silent: the corpus holds an event from the last two hours. CloudTrail delivers about every five minutes, so two hours of silence means delivery or normalization has stopped",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "any_rows",
+    "query": "SELECT from_unixtime(max(time) / 1000) AS newest FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -1, current_date), '%Y-%m-%d') HAVING max(time) > (to_unixtime(now()) - 7200) * 1000"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-LET.validate.1",
+      "covers": "partial",
+      "gap": "The AWS source only. GCP's audit and data-access logs deliver to their own log bucket, outside the corpus, so their silence is not judged here."
+    },
+    {
+      "row": "KSI-MLA-LET.validate.4",
+      "covers": "partial",
+      "gap": "The AWS source only, for the same reason."
+    }
+  ]
+}
