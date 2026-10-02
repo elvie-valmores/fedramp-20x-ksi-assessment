@@ -1,0 +1,35 @@
+# Direct dependencies of inventory/, collector/ and sdr/, one environment for
+# all three. Compiled to requirements.txt with every transitive dependency
+# pinned and hashed, as the app manifests are (DECISIONS.md, 2026-10-02):
+#
+#   uv pip compile requirements.in --generate-hashes --universal \
+#     --python-version 3.13 --output-file requirements.txt
+#
+# Install with hashes required, locally and in CI:
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install --require-hashes -r requirements.txt
+
+# AWS APIs: Config, Athena, S3, SNS.
+boto3==1.43.98
+
+# GCP: asset inventory, plus service account impersonation.
+google-cloud-asset==4.4.0
+google-auth==2.58.0
+
+# Parses the workflow files for collector/mechanisms/pipeline_config_read.py.
+# Pinned explicitly although a Google library already pulls it in: relying on
+# a transitive dependency means a version bump elsewhere can remove it, and
+# the failure would surface as a collector that cannot read the pipeline.
+PyYAML==6.0.3
+
+# Used only by inventory/self_test.py, to create throwaway resources.
+google-cloud-storage==3.14.1
+google-cloud-pubsub==2.41.0
+
+# SDR emitter: reads the determinations from the design matrix, and
+# validates what it emits against the pinned FedRAMP schema. Validation
+# failing is a build failure, so the validator is a pinned dependency
+# rather than something assumed present.
+openpyxl==3.1.5
+jsonschema==4.26.0
