@@ -1,0 +1,23 @@
+{
+  "id": "svc-vcm-ops-aws-internal-paths-over-tls",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no AWS API call by a task role in the last three days without TLS 1.2 or 1.3 -- the internal paths from the tasks to the VPC endpoints. Covers events normalized since 2026-10-02 23:06 UTC. Judged only while the tasks run: between sessions there are no task calls, and an empty result would be vacuous, not evidence",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, actor.user.name AS actor, api.service.name AS service, api.operation AS operation, tls.version AS tls, count(*) AS calls FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND regexp_like(coalesce(actor.user.name, ''), 'assumed-role/fedramp-20x-ksi-(api-task|worker-task|migrate-task|task-execution)/') AND regexp_like(coalesce(src_endpoint.ip, ''), '^[0-9a-fA-F.:]+$') AND tls IS NOT NULL AND (tls.version IS NULL OR tls.version NOT IN ('TLSv1.2','TLSv1.3')) GROUP BY 1,2,3,4,5 LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VCM.validate.3",
+      "covers": "partial",
+      "gap": "The task-to-AWS-API paths only. Database connections are not in CloudTrail (rds.force_ssl and the database-settings check stand in), and the load balancer-to-task hop is HTTPS by configuration, checked by svc-sin-cfg-aws-alb-tls, not observed."
+    }
+  ],
+  "requires_environment": "aws-phase2"
+}

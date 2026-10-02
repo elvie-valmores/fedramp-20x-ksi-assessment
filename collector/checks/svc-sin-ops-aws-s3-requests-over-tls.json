@@ -1,0 +1,22 @@
+{
+  "id": "svc-sin-ops-aws-s3-requests-over-tls",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no S3 request from a network address in the last three days without TLS 1.2 or 1.3. Requests AWS makes internally carry no TLS details and come from a service name, so they are not judged. Covers events normalized since 2026-10-02 23:06 UTC, when the normalizer began keeping TLS",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, actor.user.name AS actor, api.operation AS operation, tls.version AS tls, count(*) AS requests FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 's3.amazonaws.com' AND regexp_like(coalesce(src_endpoint.ip, ''), '^[0-9a-fA-F.:]+$') AND tls IS NOT NULL AND (tls.version IS NULL OR tls.version NOT IN ('TLSv1.2','TLSv1.3')) GROUP BY 1,2,3,4 LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.3",
+      "covers": "partial",
+      "gap": "S3 requests CloudTrail records: management events for every bucket, object requests for the extract bucket only, since data events are scoped to customer data. No server access logs. GCS is not in the corpus."
+    }
+  ]
+}
