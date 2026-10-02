@@ -7654,6 +7654,10 @@ check passed under the collector's own identities, except the finding below.
    - **The normalizer** maps any CloudTrail record generically, so data events will normalize.
    - **Status:** applied by the operator on 2026-10-02. The trail shows both selectors, is logging
      with no delivery error, and plans clean. `mla-let-cfg-aws-trail-data-events-scoped` passes.
+   - **Proven by delivery, not only by configuration.** A `HeadObject` on an extract object at
+     19:08:20 UTC arrived in the log store, naming the operator's Identity Center session and the
+     object key. So did the `HeadBucket` and `ListObjects` around it. Management events kept flowing
+     in the same files, so the explicit management selector lost nothing.
 2. **The analytics image is not registry-scanned.** Build row 1 names AWS only; it predates the
    analytics image, which lives in Artifact Registry. The Container Scanning API is not enabled. The
    image's Python dependencies are audited in CI, but its OS packages are not scanned anywhere.
