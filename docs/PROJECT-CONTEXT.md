@@ -240,7 +240,7 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 39 are fully automated, 17 partly, and 324 not
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 39 are fully automated, 16 partly, and 325 not
 yet. 21 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
 ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
