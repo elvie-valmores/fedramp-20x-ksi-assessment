@@ -67,6 +67,34 @@
         "name": "fedramp-20x-ksi-data-access",
         "expect": "projects/fedramp-20x-ksi-assessment/locations/us-central1/keyRings/fedramp-20x-ksi/cryptoKeys/evidence",
         "required": true
+      },
+      {
+        "type": "pubsub.googleapis.com/Topic",
+        "name": "container-analysis-notes-v1",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "Created by Container Analysis when Container Scanning was enabled on 2026-10-02, not by Terraform. They announce scan notes and occurrences: image digests and vulnerability identifiers, not customer data. Google-managed encryption is the topics' default and nothing in the project publishes to or subscribes from them (DECISIONS.md, 2026-10-02)",
+        "required": false
+      },
+      {
+        "type": "pubsub.googleapis.com/Topic",
+        "name": "container-analysis-notes-v1beta1",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "Created by Container Analysis when Container Scanning was enabled on 2026-10-02, not by Terraform. They announce scan notes and occurrences: image digests and vulnerability identifiers, not customer data. Google-managed encryption is the topics' default and nothing in the project publishes to or subscribes from them (DECISIONS.md, 2026-10-02)",
+        "required": false
+      },
+      {
+        "type": "pubsub.googleapis.com/Topic",
+        "name": "container-analysis-occurrences-v1",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "Created by Container Analysis when Container Scanning was enabled on 2026-10-02, not by Terraform. They announce scan notes and occurrences: image digests and vulnerability identifiers, not customer data. Google-managed encryption is the topics' default and nothing in the project publishes to or subscribes from them (DECISIONS.md, 2026-10-02)",
+        "required": false
+      },
+      {
+        "type": "pubsub.googleapis.com/Topic",
+        "name": "container-analysis-occurrences-v1beta1",
+        "expect": "GOOGLE-MANAGED",
+        "reason": "Created by Container Analysis when Container Scanning was enabled on 2026-10-02, not by Terraform. They announce scan notes and occurrences: image digests and vulnerability identifiers, not customer data. Google-managed encryption is the topics' default and nothing in the project publishes to or subscribes from them (DECISIONS.md, 2026-10-02)",
+        "required": false
       }
     ]
   },
