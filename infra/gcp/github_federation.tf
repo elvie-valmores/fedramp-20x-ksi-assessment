@@ -44,6 +44,10 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository" = "assertion.repository_id"
     "attribute.owner"      = "assertion.repository_owner_id"
     "attribute.ref"        = "assertion.ref"
+    # The workflow file the token was minted for, e.g. "collect.yml", taken
+    # from job_workflow_ref. Each grant below names its workflow, so one
+    # workflow's permissions are not every workflow's (2026-10-02).
+    "attribute.workflow" = "assertion.job_workflow_ref.extract('.github/workflows/{name}@')"
   }
 
   # Evaluated on every token exchange. A token from any other repository,
@@ -104,8 +108,35 @@ resource "google_project_iam_custom_role" "collector" {
   ]
 }
 
+# The collector role, to collect.yml only. Until 2026-10-02 it was granted
+# to the repository, so any workflow on main held it.
 resource "google_project_iam_member" "github_collector" {
   project = var.gcp_project_id
   role    = google_project_iam_custom_role.collector.id
-  member  = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repo_id}"
+  member  = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.workflow/collect.yml"
+}
+
+# Publishing the analytics image: build-and-push.yml, on the one Artifact
+# Registry repository, and nothing else. Enumerated, per CNA-DFP. Tags in the
+# repository are immutable, so this cannot move a published tag.
+resource "google_project_iam_custom_role" "image_publisher" {
+  role_id     = "fedrampKsiImagePublisher"
+  title       = "fedramp-20x-ksi image publisher"
+  description = "Push and sign images in the pipeline repository, from GitHub Actions."
+
+  permissions = [
+    "artifactregistry.repositories.downloadArtifacts",
+    "artifactregistry.repositories.get",
+    "artifactregistry.repositories.uploadArtifacts",
+    "artifactregistry.tags.create",
+    "artifactregistry.tags.get",
+    "artifactregistry.versions.get",
+  ]
+}
+
+resource "google_artifact_registry_repository_iam_member" "github_image_publisher" {
+  location   = google_artifact_registry_repository.pipeline.location
+  repository = google_artifact_registry_repository.pipeline.name
+  role       = google_project_iam_custom_role.image_publisher.id
+  member     = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.workflow/build-and-push.yml"
 }
