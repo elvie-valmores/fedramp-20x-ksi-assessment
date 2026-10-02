@@ -278,6 +278,14 @@ AccessDenied.
 
 **Phase 2 was last run 2026-10-02 (evening):** data crossed end to end. The worker's mark and the analytics fix were both proven live.
 
+**Torn down 2026-10-02 (evening), verified:**
+
+- **Persistent set:** `boundary.py` gives 271 persistent instances and 0 ephemeral.
+- **Torn down:** the cluster is inactive, and no database, load balancer, VPC, NAT gateway or
+  endpoint remains.
+- **Backups:** that session's retained backups are under the persistent database key, which is
+  enabled, so they stay restorable. The earlier ones under the deleted session key lapse 2026-10-09.
+
 ### Open items
 
 | Item | State |
