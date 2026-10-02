@@ -248,7 +248,8 @@ by any check at all. In rough priority:
 2. **The remaining partial rows mostly need design work, not a check.** Examples are deploy-time
    signature verification, GCP events in the corpus, and the second direction of inventory
    reconciliation. Each gap is stated in the report.
-3. **Negative controls for the older handlers.**
+3. ~~**Negative controls for the older handlers.**~~ Done 2026-10-02: every check's judgement now has
+   one (51 assertions), and the SDR lists a control for every check.
 
 **At the next phase 1:**
 

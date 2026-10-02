@@ -40,19 +40,26 @@ class InventoryReconciliation(Mechanism):
         else:
             raise ValueError(f"unsupported provider {provider!r}")
 
-        matches = [r for r in resources if r["resource_type"] == resource_type]
-
+        passed, detail, matched = evaluate_min_count(resources, resource_type, min_count)
         evidence = {
             "resource_type": resource_type,
-            "matched_count": len(matches),
+            "matched_count": len(matched),
             "min_count": min_count,
             # The IDs themselves are the evidence -- a count alone can't
             # be audited back to specific resources.
-            "matched_ids": [r["resource_id"] for r in matches],
+            "matched_ids": matched,
         }
-        return CheckResult(
-            check.id,
-            len(matches) >= min_count,
-            evidence,
-            f"found {len(matches)} of type {resource_type} (need >= {min_count})",
-        )
+        return CheckResult(check.id, passed, evidence, detail)
+
+
+def evaluate_min_count(resources: list[dict], resource_type: str, min_count: int) -> tuple[bool, str, list[str]]:
+    """At least min_count resources of exactly this type. Pure, for self_test.py.
+
+    A min_count below one is refused: "at least zero" passes on an empty
+    inventory, which is the failure this check exists to catch.
+    """
+    matched = [r["resource_id"] for r in resources if r["resource_type"] == resource_type]
+    if min_count < 1:
+        return False, f"min_count {min_count} proves nothing", matched
+    return (len(matched) >= min_count,
+            f"found {len(matched)} of type {resource_type} (need >= {min_count})", matched)

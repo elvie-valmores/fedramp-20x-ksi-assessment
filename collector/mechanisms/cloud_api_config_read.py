@@ -143,21 +143,8 @@ class CloudAPIConfigRead(Mechanism):
         }
         evidence = {"recorders": recorders, "statuses": statuses}
 
-        if not recorders:
-            return CheckResult(check.id, False, evidence, "no Config recorder exists")
-
-        recording = all(
-            statuses.get(recorder["name"], {}).get("recording", False)
-            for recorder in recorders
-        )
-        return CheckResult(
-            check.id,
-            recording,
-            evidence,
-            "recorder present and recording"
-            if recording
-            else "recorder exists but is not recording",
-        )
+        ok, detail = evaluate_config_recorder(recorders, statuses)
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_asset_feed(self, check: CheckDefinition) -> CheckResult:
         """Passes if the named asset feed exists and watches at least one type.
@@ -190,7 +177,7 @@ class CloudAPIConfigRead(Mechanism):
                 "feed not found",
             )
 
-        watches_types = bool(feed.asset_types)
+        watches_types, _ = evaluate_asset_feed({"name": feed.name, "asset_types": list(feed.asset_types)})
         return CheckResult(
             check.id,
             watches_types,
@@ -652,8 +639,8 @@ class CloudAPIConfigRead(Mechanism):
         with urllib.request.urlopen(request, timeout=30) as response:
             workflow = json.load(response)
         state = workflow.get("state")
-        return CheckResult(check.id, state == "active", {"state": state, "path": workflow.get("path")},
-                           f"workflow state {state!r}")
+        ok, detail = evaluate_workflow_state(state)
+        return CheckResult(check.id, ok, {"state": state, "path": workflow.get("path")}, detail)
 
     def _gcp_bigquery_dataset_access(self, check: CheckDefinition) -> CheckResult:
         """KSI-SVC-SIN verify row 7: every dataset's access list is its declared one.
@@ -1629,6 +1616,33 @@ def evaluate_certificates(certs: list[dict], min_days: int) -> tuple[bool, str, 
                                 f"{c['days_left']} days left")
         results[c["domain"]] = {"passed": ok, "detail": detail}
     return _judged("certificates", results)
+
+
+def evaluate_config_recorder(recorders: list[dict], statuses: dict[str, dict]) -> tuple[bool, str]:
+    """At least one recorder, and every recorder recording: a stopped
+    recorder exists and collects nothing."""
+    if not recorders:
+        return False, "no Config recorder exists"
+    stopped = [r["name"] for r in recorders if not statuses.get(r["name"], {}).get("recording", False)]
+    if stopped:
+        return False, f"recorder exists but is not recording: {', '.join(stopped)}"
+    return True, "recorder present and recording"
+
+
+def evaluate_asset_feed(feed: dict | None) -> tuple[bool, str]:
+    """The feed exists and watches at least one asset type; a feed watching
+    none is configured but inert."""
+    if not feed:
+        return False, "feed not found"
+    if not feed.get("asset_types"):
+        return False, "feed watches no asset types"
+    return True, "feed exists with asset types configured"
+
+
+def evaluate_workflow_state(state: str | None) -> tuple[bool, str]:
+    """Only "active" runs. GitHub's other states are all ways of not running:
+    disabled_manually, disabled_inactivity, disabled_fork, deleted."""
+    return state == "active", f"workflow state {state!r}"
 
 
 def evaluate_state_bucket(versioning: str | None, encryption: str | None) -> tuple[bool, str]:

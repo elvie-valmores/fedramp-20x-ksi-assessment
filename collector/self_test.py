@@ -30,6 +30,8 @@ from pathlib import Path
 
 from base import CheckDefinition
 import mechanisms.cloud_api_config_read as cfg
+import mechanisms.inventory_reconciliation as inv
+import mechanisms.log_query as lq
 import mechanisms.declared_versus_live_comparison as dvl
 import mechanisms.pipeline_config_read as pcr
 
@@ -688,6 +690,22 @@ CFG_CASES = [
         "idle and near expiry": [{**CERT_OK, "days_left": 10}],
         "no certificates": [],
     }),
+    ("evaluate_config_recorder", lambda c: cfg.evaluate_config_recorder(*c),
+     ([{"name": "r"}], {"r": {"recording": True}}), {
+        "no recorder": ([], {}),
+        "stopped": ([{"name": "r"}], {"r": {"recording": False}}),
+        "status missing": ([{"name": "r"}], {}),
+        "second recorder stopped": ([{"name": "r"}, {"name": "s"}], {"r": {"recording": True}}),
+    }),
+    ("evaluate_asset_feed", cfg.evaluate_asset_feed, {"name": "f", "asset_types": ["storage.googleapis.com/Bucket"]}, {
+        "missing": None,
+        "watches nothing": {"name": "f", "asset_types": []},
+    }),
+    ("evaluate_workflow_state", cfg.evaluate_workflow_state, "active", {
+        "disabled by hand": "disabled_manually",
+        "disabled by inactivity": "disabled_inactivity",
+        "unknown": None,
+    }),
     ("evaluate_state_bucket", lambda c: cfg.evaluate_state_bucket(*c), ("Enabled", "AES256"), {
         "versioning suspended": ("Suspended", "AES256"),
         "never versioned": (None, "AES256"),
@@ -816,6 +834,9 @@ CFG_RESOURCES = {
     "evaluate_standards": "securityhub_standards",
     "evaluate_trail_data_events": "trail_data_events",
     "evaluate_state_bucket": "state_bucket",
+    "evaluate_config_recorder": "config_recorder",
+    "evaluate_asset_feed": "cloud_asset_feed",
+    "evaluate_workflow_state": "workflow_active",
     "evaluate_scheduled_functions": "scheduled_functions",
     "evaluate_certificates": "acm_certificates",
     "evaluate_dataset_access": "bigquery_dataset_access",
@@ -836,7 +857,43 @@ CFG_RESOURCES = {
 
 
 # Judgements that serve more than one resource key.
-CFG_ALSO = {"evaluate_public_access_blocked": ["s3_account_public_access_block"]}
+CFG_ALSO = {"evaluate_public_access_blocked": ["s3_account_public_access_block"],
+            "evaluate_no_user_access_keys": ["service_account_user_keys"]}
+
+
+# Mechanisms with one judgement each. Their checks carry no assertion or
+# resource parameter, so the SDR emitter looks them up under None.
+_INV = [{"resource_type": "AWS::S3::Bucket", "resource_id": "a"}, {"resource_type": "AWS::S3::Bucket", "resource_id": "b"},
+        {"resource_type": "AWS::IAM::Role", "resource_id": "r"}]
+SINGLE_CASES = [
+    ("log_query", lambda c: lq.evaluate_query(*c), ("SUCCEEDED", 3, "any_rows"), {
+        "no rows": ("SUCCEEDED", 0, "any_rows"),
+        "query failed": ("FAILED", 0, "any_rows"),
+        # A failed standing query must not read as its hoped-for zero.
+        "query failed, zero expected": ("FAILED", 0, "no_rows"),
+        "rows where none expected": ("SUCCEEDED", 1, "no_rows"),
+        "unknown expectation": ("SUCCEEDED", 3, "some_rows"),
+    }),
+    ("inventory_reconciliation", lambda c: inv.evaluate_min_count(*c), (_INV, "AWS::S3::Bucket", 2), {
+        "too few": (_INV, "AWS::S3::Bucket", 3),
+        # Other types must not make up the count.
+        "only other types": (_INV, "AWS::EC2::Instance", 1),
+        "empty inventory": ([], "AWS::S3::Bucket", 1),
+        "at least zero": ([], "AWS::S3::Bucket", 0),
+    }),
+]
+
+
+def single_judgements() -> list[str]:
+    broken = []
+    for name, judge, good, bads in SINGLE_CASES:
+        wrong = [] if judge(good)[0] else ["good input"]
+        wrong += [why for why, bad in bads.items() if judge(bad)[0]]
+        print(f"[{name}] {'PASS' if not wrong else 'BROKEN'} -- fails on: {', '.join(bads)}")
+        if wrong:
+            broken.append(name)
+            print(f"    wrong verdict on: {', '.join(wrong)}")
+    return broken
 
 
 def negative_controls() -> dict[tuple[str, str], str]:
@@ -855,6 +912,8 @@ def negative_controls() -> dict[tuple[str, str], str]:
         found[("declared_versus_live_comparison", assertion)] = (
             "inventories that must fail it: " + ", ".join(should_fail)
         )
+    for mechanism, _, _, bads in SINGLE_CASES:
+        found[(mechanism, None)] = "inputs that must fail it: " + ", ".join(bads)
     for name, _, _, bads in CFG_CASES:
         for resource in [CFG_RESOURCES[name], *CFG_ALSO.get(name, [])]:
             found[("cloud_api_config_read", resource)] = (
@@ -894,8 +953,9 @@ def main() -> int:
     broken += service_owned_secret_predicate()
     print()
     broken += cloud_api_config_read()
+    broken += single_judgements()
     total = (1 + len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES)
-             + len({c[0] for c in PATH_CASES}) + 1 + len(CFG_CASES))
+             + len({c[0] for c in PATH_CASES}) + 1 + len(CFG_CASES) + len(SINGLE_CASES))
 
     print()
     if broken:

@@ -7678,3 +7678,35 @@ check passed under the collector's own identities, except the finding below.
 
 **Coverage:** 25 of 380 rows are full and 13 partial, across 17 of 40 determinations, from 63
 checks. That is up from 7 full and 11 partial in 9 determinations this morning.
+
+## 2026-10-02 — Every check's judgement now has a negative control
+
+Seven checks had none: the Config recorder, the asset feed, the GitHub workflow state, the log
+query, the two inventory counts, and the service-account key check.
+
+**What changed:** each judgement that was inline in a handler was moved into a pure function and
+given inputs that must fail it:
+
+- **`evaluate_config_recorder`:** fails with no recorder, a stopped one, missing status, or a
+  second recorder stopped.
+- **`evaluate_asset_feed`:** fails when the feed is missing or watches no types.
+- **`evaluate_workflow_state`:** fails when disabled by hand, disabled by inactivity, or the state
+  is unknown.
+- **`log_query.evaluate_query`:** fails on no rows, a failed query, or rows where none were
+  expected.
+- **`inventory_reconciliation.evaluate_min_count`:** fails with too few, only other types, or an
+  empty inventory.
+- **The service-account key check** shares the IAM-user key evaluator's controls.
+
+**Two judgements were tightened while moving:**
+
+- **A failed Athena query now fails a "no_rows" standing query.** It already did, but only through
+  an early return; the pure function makes it the rule, and a control holds it.
+- **`min_count` below one is refused.** "At least zero" passes an empty inventory, which is the
+  failure these checks exist to catch.
+
+**Keying:** mechanisms with a single judgement are keyed `(mechanism, None)`, which is what the SDR
+emitter looks up for checks with no `assertion` or `resource` parameter. Every check now has a
+listed control.
+
+**Verified:** 51 assertions pass, and all six refactored checks gave the same verdicts live.

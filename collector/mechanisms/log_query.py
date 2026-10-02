@@ -56,23 +56,30 @@ class LogQuery(Mechanism):
                 break
             time.sleep(POLL_INTERVAL_SECONDS)
 
-        # A query that failed proves nothing either way, so it is a failed
-        # check rather than an empty result.
         if state != "SUCCEEDED":
             reason = status["QueryExecution"]["Status"].get(
                 "StateChangeReason", "unknown"
             )
-            return CheckResult(
-                check.id, False, {"state": state, "reason": reason}, f"query {state}"
-            )
+            passed, detail = evaluate_query(state, 0, expect)
+            return CheckResult(check.id, passed, {"state": state, "reason": reason}, detail)
 
         results = client.get_query_results(QueryExecutionId=query_id)
         rows = results["ResultSet"]["Rows"][1:]  # row 0 is the column header
 
-        passed = bool(rows) if expect == "any_rows" else not rows
-        return CheckResult(
-            check.id,
-            passed,
-            {"row_count": len(rows), "expect": expect},
-            f"query returned {len(rows)} row(s), expected {expect}",
-        )
+        passed, detail = evaluate_query(state, len(rows), expect)
+        return CheckResult(check.id, passed, {"row_count": len(rows), "expect": expect}, detail)
+
+
+def evaluate_query(state: str, row_count: int, expect: str) -> tuple[bool, str]:
+    """The judgement, pure, so self_test.py can feed it what must fail.
+
+    A query that did not succeed proves nothing either way, so it fails
+    whatever was expected: for "no_rows" an error would otherwise read as
+    the clean zero-result a standing query hopes for.
+    """
+    if state != "SUCCEEDED":
+        return False, f"query {state}"
+    if expect not in ("any_rows", "no_rows"):
+        return False, f"unknown expectation {expect!r}"
+    passed = row_count > 0 if expect == "any_rows" else row_count == 0
+    return passed, f"query returned {row_count} row(s), expected {expect}"
