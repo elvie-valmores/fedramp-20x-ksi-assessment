@@ -485,6 +485,7 @@ _DENY = {"Sid": "DenyReads", "Effect": "Deny", "Principal": "*", "Action": ["s3:
          "Resource": "arn:aws:s3:::logs/*", "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS}}}
 _TLS_DENY = {"Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": ["arn:aws:s3:::logs", "arn:aws:s3:::logs/*"],
              "Condition": {"Bool": {"aws:SecureTransport": "false"}}}
+VALIDATE_OK = "Results found for ...:\n\n24/24 digest files valid\n831/831 log files valid\n"
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -803,6 +804,14 @@ CFG_CASES = [
         "unknown": {"a": None},
         "none named": {},
     }),
+    ("evaluate_validate_logs", lambda c: cfg.evaluate_validate_logs(*c), (VALIDATE_OK, 0), {
+        "tampered log": (VALIDATE_OK.replace("831/831 log", "830/831 log") +
+                         "Log file s3://b/k.json.gz INVALID: hash value doesn't match\n", 0),
+        "digest missing": ("23/24 digest files valid, 1/24 digest files INVALID\n831/831 log files valid\n", 0),
+        "empty window": ("0/0 digest files valid\n0/0 log files valid\n", 0),
+        "validator failed": ("An error occurred (AccessDenied)", 254),
+        "no counts": ("Results requested for ...\n", 0),
+    }),
     ("evaluate_function_runs", cfg.evaluate_function_runs, {"f": {"invocations": 1, "errors": 0, "within_hours": 26}}, {
         "did not run": {"f": {"invocations": 0, "errors": 0, "within_hours": 26}},
         "ran with errors": {"f": {"invocations": 1, "errors": 1, "within_hours": 26}},
@@ -972,6 +981,7 @@ CFG_RESOURCES = {
     "evaluate_read_deny": "bucket_read_restricted",
     "evaluate_vpcs_declared": "vpcs_declared",
     "evaluate_function_runs": "function_runs",
+    "evaluate_validate_logs": "trail_logs_validate",
     "evaluate_services_enabled": "services_enabled",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",

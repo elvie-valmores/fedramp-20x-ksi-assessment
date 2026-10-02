@@ -1,0 +1,29 @@
+{
+  "id": "svc-sin-ops-aws-trail-digests-validate",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "CloudTrail's own validator walks the signed digest chain over the last 26 hours and finds every digest and every log file valid: nothing delivered to the store was altered, removed or forged",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "trail_logs_validate",
+    "region": "us-east-1",
+    "trail": "fedramp-20x-ksi-trail",
+    "hours": 26
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.5",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-MLA-OSM.validate.2",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VRI.validate.3",
+      "covers": "full"
+    }
+  ]
+}

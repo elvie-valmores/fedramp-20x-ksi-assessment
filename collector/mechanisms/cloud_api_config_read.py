@@ -128,6 +128,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_run_job_images(check)
         if provider == "gcp" and resource == "services_enabled":
             return self._gcp_services_enabled(check)
+        if provider == "aws" and resource == "trail_logs_validate":
+            return self._aws_trail_logs_validate(check)
         if provider == "aws" and resource == "function_runs":
             return self._aws_function_runs(check)
         if provider == "aws" and resource == "vpcs_declared":
@@ -930,6 +932,30 @@ class CloudAPIConfigRead(Mechanism):
             states[service] = response.json().get("state")
         ok, detail, evidence = evaluate_services_enabled(states)
         return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_trail_logs_validate(self, check: CheckDefinition) -> CheckResult:
+        """Digest validation succeeds over the window (SVC-SIN validate 5,
+        MLA-OSM validate 2, SVC-VRI validate 3).
+
+        Requires params: region, trail, hours. Runs AWS's own validator,
+        `aws cloudtrail validate-logs`, which walks the signed digest chain
+        and checks every log file's hash against it. Reimplementing that
+        here would be a second, less trusted validator. The window is a day
+        plus overlap, so daily runs leave no gap.
+        """
+        import subprocess
+        from datetime import datetime, timedelta, timezone
+
+        p = check.params
+        ct = boto3.client("cloudtrail", region_name=p["region"])
+        arn = ct.describe_trails(trailNameList=[p["trail"]])["trailList"][0]["TrailARN"]
+        start = (datetime.now(timezone.utc) - timedelta(hours=p["hours"])).strftime("%Y-%m-%dT%H:%M:%SZ")
+        run = subprocess.run(["aws", "cloudtrail", "validate-logs", "--region", p["region"], "--trail-arn", arn,
+                              "--start-time", start], capture_output=True, text=True, timeout=900)
+        output = run.stdout + run.stderr
+        ok, detail = evaluate_validate_logs(output, run.returncode)
+        return CheckResult(check.id, ok, {"start": start, "returncode": run.returncode,
+                                          "output": output.strip().splitlines()[-12:]}, detail)
 
     def _aws_function_runs(self, check: CheckDefinition) -> CheckResult:
         """KSI-MLA-OSM validate 4: each scheduled function ran within its cadence, without error.
@@ -2103,6 +2129,32 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
 
 def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:
     return _judged("services", {s: {"passed": st == "ENABLED", "detail": str(st)} for s, st in states.items()})
+
+
+def evaluate_validate_logs(output: str, returncode: int) -> tuple[bool, str]:
+    """Every digest and log file valid, and some of each found.
+
+    The validator prints "N/M digest files valid" and "N/M log files
+    valid", and an INVALID line for anything tampered with, missing, or
+    unreadable. Zero files is a failure: an empty window validates
+    vacuously, which is not evidence of integrity.
+    """
+    import re
+
+    counts = {kind: tuple(map(int, m.groups()))
+              for kind in ("digest", "log")
+              for m in [re.search(rf"(\d+)/(\d+) {kind} files valid", output)] if m}
+    if returncode != 0:
+        return False, f"validator exited {returncode}"
+    if "INVALID" in output:
+        return False, "validator reported INVALID files"
+    for kind in ("digest", "log"):
+        if kind not in counts:
+            return False, f"no {kind} file count reported"
+        valid, total = counts[kind]
+        if total == 0 or valid != total:
+            return False, f"{valid}/{total} {kind} files valid"
+    return True, f"{counts['digest'][0]} digest and {counts['log'][0]} log files valid"
 
 
 def evaluate_function_runs(found: dict[str, dict]) -> tuple[bool, str, dict]:
