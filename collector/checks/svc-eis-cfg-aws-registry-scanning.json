@@ -1,0 +1,20 @@
+{
+  "id": "svc-eis-cfg-aws-registry-scanning",
+  "indicator": "KSI-SVC-EIS",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "ECR uses enhanced scanning, continuously, on every repository, with Inspector enabled for ECR (build row 1)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "registry_scanning",
+    "region": "us-east-1"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-EIS.verify.1",
+      "covers": "partial",
+      "gap": "Artifact Registry is not scanned: the Container Scanning API is not enabled, so the analytics image's OS packages are unscanned. Build row 1 predates the analytics image (2026-10-02) and names AWS only. Its Python dependencies are audited in CI (scr-mon-cfg-dependencies-audited)."
+    }
+  ]
+}

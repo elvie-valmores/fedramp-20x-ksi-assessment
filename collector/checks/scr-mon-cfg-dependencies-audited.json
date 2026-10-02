@@ -16,6 +16,11 @@
       "row": "KSI-SCR-MON.verify.1",
       "covers": "partial",
       "gap": "Shows the build audits each application image's manifest. The collector's own manifest (requirements.txt) and the Terraform providers are not scanned."
+    },
+    {
+      "row": "KSI-SVC-EIS.verify.1",
+      "covers": "partial",
+      "gap": "The CI half only: dependencies are audited before each image build. Registry scanning is svc-eis-cfg-aws-registry-scanning's, and Artifact Registry has none."
     }
   ]
 }

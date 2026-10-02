@@ -1,0 +1,25 @@
+{
+  "id": "mla-osm-cfg-aws-alarms-target-detection",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The log store growth alarm and the normalizer's error alarm exist, have actions enabled, and notify the detection topic",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "alarms_target",
+    "region": "us-east-1",
+    "alarms": [
+      "fedramp-20x-ksi-log-store-growth",
+      "fedramp-20x-ksi-normalize-events-errors"
+    ],
+    "topic": "arn:aws:sns:us-east-1:437672023758:fedramp-20x-ksi-detection-interim"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.verify.4",
+      "covers": "partial",
+      "gap": "Delivery failure is alarmed where events are normalized (Lambda errors). CloudTrail's own delivery into the store has no alarm: CloudTrail publishes no delivery metric, only LatestDeliveryError on the trail status."
+    }
+  ]
+}

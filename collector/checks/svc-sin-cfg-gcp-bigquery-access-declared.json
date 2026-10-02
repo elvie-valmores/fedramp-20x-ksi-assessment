@@ -1,0 +1,31 @@
+{
+  "id": "svc-sin-cfg-gcp-bigquery-access-declared",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every BigQuery dataset's access list is exactly its declared one: the pipeline writes, terraform-admin owns, and nothing else is granted at dataset level. Project-level roles that reach BigQuery are the basic-roles check's",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "bigquery_dataset_access",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "declared": {
+      "measurements": [
+        {
+          "role": "WRITER",
+          "member": "userByEmail:analytics-pipeline@fedramp-20x-ksi-assessment.iam.gserviceaccount.com"
+        },
+        {
+          "role": "OWNER",
+          "member": "userByEmail:terraform-admin@fedramp-20x-ksi-assessment.iam.gserviceaccount.com"
+        }
+      ]
+    }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.7",
+      "covers": "full"
+    }
+  ]
+}

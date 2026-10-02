@@ -447,6 +447,10 @@ GD_ON = ["CLOUD_TRAIL", "S3_DATA_EVENTS"]
 WIF_OK = {"state": "ACTIVE", "oidc": {"issuerUri": "https://token.actions.githubusercontent.com"},
           "attributeCondition": "assertion.repository_id == '2' && assertion.ref == 'refs/heads/main'"}
 WIF_CLAUSES = ["assertion.repository_id == '2'", "assertion.ref == 'refs/heads/main'"]
+DS_OK = {"d": [{"role": "WRITER", "member": "userByEmail:pipe@p"}, {"role": "OWNER", "member": "userByEmail:tf@p"}]}
+DS_DECLARED = {"d": DS_OK["d"]}
+SCAN_OK = {"scanType": "ENHANCED", "rules": [{"scanFrequency": "CONTINUOUS_SCAN",
+                                              "repositoryFilters": [{"filter": "*", "filterType": "WILDCARD"}]}]}
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -645,6 +649,29 @@ CFG_CASES = [
         "undeclared extra": ["arn:aws:s3:::data/", "arn:aws:s3:::logs/"],
         "wrong store": ["arn:aws:s3:::logs/"],
     }),
+    ("evaluate_dataset_access", lambda c: cfg.evaluate_dataset_access(c, DS_DECLARED), DS_OK, {
+        "extra reader": {"d": DS_OK["d"] + [{"role": "READER", "member": "specialGroup:allAuthenticatedUsers"}]},
+        "declared entry absent": {"d": DS_OK["d"][:1]},
+        "role widened": {"d": [{"role": "OWNER", "member": "userByEmail:pipe@p"}, DS_OK["d"][1]]},
+        "undeclared dataset": {**DS_OK, "other": []},
+        "no datasets": {},
+    }),
+    ("evaluate_alarms_target", lambda c: cfg.evaluate_alarms_target(c, ["a"], "topic"),
+     {"a": {"actions_enabled": True, "actions": ["topic"]}}, {
+        "missing": {},
+        "actions disabled": {"a": {"actions_enabled": False, "actions": ["topic"]}},
+        "other target": {"a": {"actions_enabled": True, "actions": ["elsewhere"]}},
+    }),
+    ("evaluate_registry_scanning", lambda c: cfg.evaluate_registry_scanning(*c), (SCAN_OK, {"account": "ENABLED", "ecr": "ENABLED"}), {
+        "basic scanning": ({**SCAN_OK, "scanType": "BASIC"}, {"account": "ENABLED", "ecr": "ENABLED"}),
+        "narrow filter": ({**SCAN_OK, "rules": [{"scanFrequency": "CONTINUOUS_SCAN",
+                                                 "repositoryFilters": [{"filter": "api*", "filterType": "WILDCARD"}]}]},
+                          {"account": "ENABLED", "ecr": "ENABLED"}),
+        "push only": ({**SCAN_OK, "rules": [{"scanFrequency": "SCAN_ON_PUSH",
+                                             "repositoryFilters": [{"filter": "*", "filterType": "WILDCARD"}]}]},
+                      {"account": "ENABLED", "ecr": "ENABLED"}),
+        "Inspector off for ECR": (SCAN_OK, {"account": "ENABLED", "ecr": "DISABLED"}),
+    }),
     ("evaluate_state_bucket", lambda c: cfg.evaluate_state_bucket(*c), ("Enabled", "AES256"), {
         "versioning suspended": ("Suspended", "AES256"),
         "never versioned": (None, "AES256"),
@@ -773,6 +800,9 @@ CFG_RESOURCES = {
     "evaluate_standards": "securityhub_standards",
     "evaluate_trail_data_events": "trail_data_events",
     "evaluate_state_bucket": "state_bucket",
+    "evaluate_dataset_access": "bigquery_dataset_access",
+    "evaluate_alarms_target": "alarms_target",
+    "evaluate_registry_scanning": "registry_scanning",
     "evaluate_registries_immutable": "registries_immutable",
     "evaluate_no_user_access_keys": "iam_user_access_keys",
     "evaluate_log_corpus_limits": "log_corpus_query_limits",

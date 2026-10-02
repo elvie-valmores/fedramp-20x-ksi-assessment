@@ -104,6 +104,12 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_trail_data_events(check)
         if provider == "aws" and resource == "state_bucket":
             return self._aws_state_bucket(check)
+        if provider == "gcp" and resource == "bigquery_dataset_access":
+            return self._gcp_bigquery_dataset_access(check)
+        if provider == "aws" and resource == "alarms_target":
+            return self._aws_alarms_target(check)
+        if provider == "aws" and resource == "registry_scanning":
+            return self._aws_registry_scanning(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
 
@@ -644,6 +650,64 @@ class CloudAPIConfigRead(Mechanism):
         state = workflow.get("state")
         return CheckResult(check.id, state == "active", {"state": state, "path": workflow.get("path")},
                            f"workflow state {state!r}")
+
+    def _gcp_bigquery_dataset_access(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-SIN verify row 7: every dataset's access list is its declared one.
+
+        Requires params: project_id, declared ({dataset: [{role, member}]},
+        member as "<entity type>:<value>", e.g. "userByEmail:x@y").
+        Datasets come from Cloud Asset, so an undeclared one fails rather
+        than going unread; each access list from BigQuery itself.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        session = AuthorizedSession(impersonated_token(project_id))
+        found = {}
+        for res in asset_client(project_id).search_all_resources(request={
+            "scope": f"projects/{project_id}", "asset_types": ["bigquery.googleapis.com/Dataset"],
+        }):
+            dataset = res.name.split("/")[-1]
+            response = session.get(
+                f"https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}/datasets/{dataset}", timeout=30)
+            response.raise_for_status()
+            found[dataset] = [
+                {"role": entry.get("role"),
+                 "member": next(f"{k}:{v}" for k, v in entry.items() if k != "role")}
+                for entry in response.json().get("access", [])
+            ]
+        ok, detail, evidence = evaluate_dataset_access(found, check.params["declared"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_alarms_target(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-OSM verify row 4: the declared alarms exist and alert the detection path.
+
+        Requires params: region, alarms (names), topic (the detection SNS topic ARN).
+        """
+        cw = boto3.client("cloudwatch", region_name=check.params["region"])
+        found = {
+            a["AlarmName"]: {"actions_enabled": a["ActionsEnabled"], "actions": a["AlarmActions"]}
+            for page in cw.get_paginator("describe_alarms").paginate(AlarmNames=check.params["alarms"])
+            for a in page["MetricAlarms"]
+        }
+        ok, detail, evidence = evaluate_alarms_target(found, check.params["alarms"], check.params["topic"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_registry_scanning(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-EIS verify row 1, the AWS registry half.
+
+        Requires param: region. Enhanced scanning (Inspector) continuously
+        on every repository: a filter narrower than "*" leaves a repository
+        created later unscanned.
+        """
+        region = check.params["region"]
+        config = boto3.client("ecr", region_name=region).get_registry_scanning_configuration()["scanningConfiguration"]
+        status = boto3.client("inspector2", region_name=region).batch_get_account_status()["accounts"][0]
+        inspector = {"account": status["state"]["status"], "ecr": status["resourceState"]["ecr"]["status"]}
+        ok, detail = evaluate_registry_scanning(config, inspector)
+        return CheckResult(check.id, ok, {"scanning": config, "inspector": inspector}, detail)
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
         """The GCP half of KSI-SVC-SIN verify row 2: no bucket permits public access.
@@ -1423,6 +1487,54 @@ def evaluate_trail_data_events(scoped: list[str], declared: list[str]) -> tuple[
     if not results:
         return False, "no customer-data stores declared -- nothing to judge", {"stores": {}, "failing": []}
     return _judged("stores", results)
+
+
+def evaluate_dataset_access(found: dict[str, list[dict]],
+                            declared: dict[str, list[dict]]) -> tuple[bool, str, dict]:
+    """Each dataset's access entries are exactly its declared ones; a dataset
+    without a declared model fails."""
+    results = {}
+    for dataset, entries in sorted(found.items()):
+        if dataset not in declared:
+            results[dataset] = {"passed": False, "detail": "no declared access model", "entries": entries}
+            continue
+        have = {(e["role"], e["member"]) for e in entries}
+        want = {(e["role"], e["member"]) for e in declared[dataset]}
+        extra, missing = sorted(have - want), sorted(want - have)
+        problems = [f"undeclared {r} for {m}" for r, m in extra] + [f"declared {r} for {m} absent" for r, m in missing]
+        results[dataset] = {"passed": not problems, "detail": "; ".join(problems) or "access matches the declared model",
+                            "entries": entries}
+    return _judged("datasets", results)
+
+
+def evaluate_alarms_target(found: dict[str, dict], expected: list[str], topic: str) -> tuple[bool, str, dict]:
+    results = {}
+    for name in expected:
+        alarm = found.get(name)
+        if alarm is None:
+            results[name] = {"passed": False, "detail": "alarm missing"}
+        elif not alarm["actions_enabled"]:
+            results[name] = {"passed": False, "detail": "actions disabled, so it alarms silently"}
+        elif topic not in alarm["actions"]:
+            results[name] = {"passed": False, "detail": f"does not notify the detection topic: {alarm['actions']}"}
+        else:
+            results[name] = {"passed": True, "detail": "notifies the detection topic"}
+    return _judged("alarms", results)
+
+
+def evaluate_registry_scanning(config: dict, inspector: dict) -> tuple[bool, str]:
+    if config.get("scanType") != "ENHANCED":
+        return False, f"scan type {config.get('scanType')!r}, expected ENHANCED"
+    every = any(
+        rule.get("scanFrequency") == "CONTINUOUS_SCAN"
+        and any(f.get("filter") == "*" and f.get("filterType") == "WILDCARD" for f in rule.get("repositoryFilters", []))
+        for rule in config.get("rules", [])
+    )
+    if not every:
+        return False, "no continuous-scan rule covering every repository"
+    if inspector.get("account") != "ENABLED" or inspector.get("ecr") != "ENABLED":
+        return False, f"Inspector account {inspector.get('account')}, ECR {inspector.get('ecr')}"
+    return True, "enhanced continuous scanning on every repository, Inspector on"
 
 
 def evaluate_state_bucket(versioning: str | None, encryption: str | None) -> tuple[bool, str]:
