@@ -1,0 +1,20 @@
+{
+  "id": "svc-asm-cfg-aws-certificates-managed",
+  "indicator": "KSI-SVC-ASM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every ACM certificate is issued by ACM and DNS-validated, renewal-eligible while in use, and at least 30 days from expiry while idle",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "acm_certificates",
+    "region": "us-east-1",
+    "min_days": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ASM.verify.3",
+      "covers": "full"
+    }
+  ]
+}

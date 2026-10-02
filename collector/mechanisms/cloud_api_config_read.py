@@ -110,6 +110,10 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_alarms_target(check)
         if provider == "aws" and resource == "registry_scanning":
             return self._aws_registry_scanning(check)
+        if provider == "aws" and resource == "scheduled_functions":
+            return self._aws_scheduled_functions(check)
+        if provider == "aws" and resource == "acm_certificates":
+            return self._aws_acm_certificates(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
 
@@ -708,6 +712,53 @@ class CloudAPIConfigRead(Mechanism):
         inspector = {"account": status["state"]["status"], "ecr": status["resourceState"]["ecr"]["status"]}
         ok, detail = evaluate_registry_scanning(config, inspector)
         return CheckResult(check.id, ok, {"scanning": config, "inspector": inspector}, detail)
+
+    def _aws_scheduled_functions(self, check: CheckDefinition) -> CheckResult:
+        """Each declared schedule is enabled and invokes its function.
+
+        Requires params: region, schedules ([{rule, function}]). KSI-MLA-OSM
+        verify row 5's "scheduled" half; that the deployed query is the
+        versioned one is the drift check's.
+        """
+        region = check.params["region"]
+        events = boto3.client("events", region_name=region)
+        lam = boto3.client("lambda", region_name=region)
+        found = {}
+        for item in check.params["schedules"]:
+            try:
+                rule = events.describe_rule(Name=item["rule"])
+                targets = [t["Arn"] for t in events.list_targets_by_rule(Rule=item["rule"])["Targets"]]
+                function = lam.get_function(FunctionName=item["function"])["Configuration"]["FunctionArn"]
+                found[item["rule"]] = {"state": rule["State"], "schedule": rule.get("ScheduleExpression"),
+                                       "targets": targets, "function_arn": function}
+            except (events.exceptions.ResourceNotFoundException, lam.exceptions.ResourceNotFoundException):
+                found[item["rule"]] = None
+        ok, detail, evidence = evaluate_scheduled_functions(found)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_acm_certificates(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-ASM verify row 3: certificates are issued and renewed by ACM.
+
+        Requires params: region, min_days.
+        """
+        from datetime import datetime, timezone
+
+        acm = boto3.client("acm", region_name=check.params["region"])
+        now = datetime.now(timezone.utc)
+        certs = []
+        for page in acm.get_paginator("list_certificates").paginate(
+                Includes={"keyTypes": ["RSA_2048", "RSA_3072", "RSA_4096", "EC_prime256v1", "EC_secp384r1"]}):
+            for summary in page["CertificateSummaryList"]:
+                c = acm.describe_certificate(CertificateArn=summary["CertificateArn"])["Certificate"]
+                not_after = c.get("NotAfter")
+                certs.append({
+                    "domain": c["DomainName"], "type": c["Type"], "status": c["Status"],
+                    "eligible": c.get("RenewalEligibility") == "ELIGIBLE", "in_use": bool(c.get("InUseBy")),
+                    "validation": sorted({o.get("ValidationMethod") for o in c.get("DomainValidationOptions", [])} - {None}),
+                    "days_left": (not_after - now).days if not_after else None,
+                })
+        ok, detail, evidence = evaluate_certificates(certs, check.params["min_days"])
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
         """The GCP half of KSI-SVC-SIN verify row 2: no bucket permits public access.
@@ -1535,6 +1586,49 @@ def evaluate_registry_scanning(config: dict, inspector: dict) -> tuple[bool, str
     if inspector.get("account") != "ENABLED" or inspector.get("ecr") != "ENABLED":
         return False, f"Inspector account {inspector.get('account')}, ECR {inspector.get('ecr')}"
     return True, "enhanced continuous scanning on every repository, Inspector on"
+
+
+def evaluate_scheduled_functions(found: dict[str, dict | None]) -> tuple[bool, str, dict]:
+    results = {}
+    for rule, r in found.items():
+        if r is None:
+            ok, detail = False, "rule or function missing"
+        elif r["state"] != "ENABLED":
+            ok, detail = False, f"rule {r['state']}"
+        elif not r["schedule"]:
+            ok, detail = False, "rule has no schedule"
+        elif r["function_arn"] not in r["targets"]:
+            ok, detail = False, "rule does not invoke the function"
+        else:
+            ok, detail = True, f"{r['schedule']}, invokes the function"
+        results[rule] = {"passed": ok, "detail": detail}
+    return _judged("schedules", results)
+
+
+def evaluate_certificates(certs: list[dict], min_days: int) -> tuple[bool, str, dict]:
+    """ACM-issued, DNS-validated, and either renewal-eligible or safely unexpired.
+
+    ACM marks a certificate eligible only while it is in use, so between
+    sessions, with the load balancer down, it reads INELIGIBLE. In use it
+    must be eligible; not in use it must have min_days left, which is the
+    case where an idle certificate would lapse unnoticed. Email validation
+    fails: renewal would wait on someone answering a mail.
+    """
+    results = {}
+    for c in certs:
+        if c["type"] != "AMAZON_ISSUED":
+            ok, detail = False, f"{c['type']}, not issued by ACM, so ACM does not renew it"
+        elif c["validation"] != ["DNS"]:
+            ok, detail = False, f"validated by {c['validation']}, not DNS alone"
+        elif c["in_use"] and not c["eligible"]:
+            ok, detail = False, "in use but not eligible for renewal"
+        elif c["days_left"] is None or c["days_left"] < min_days:
+            ok, detail = False, f"{c['days_left']} days left"
+        else:
+            ok, detail = True, (f"ACM-issued, DNS-validated, {'eligible' if c['in_use'] else 'idle'}, "
+                                f"{c['days_left']} days left")
+        results[c["domain"]] = {"passed": ok, "detail": detail}
+    return _judged("certificates", results)
 
 
 def evaluate_state_bucket(versioning: str | None, encryption: str | None) -> tuple[bool, str]:

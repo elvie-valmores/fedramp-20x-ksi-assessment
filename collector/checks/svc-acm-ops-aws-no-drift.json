@@ -21,6 +21,13 @@
       "with": [
         "svc-acm-ops-gcp-no-drift"
       ]
+    },
+    {
+      "row": "KSI-MLA-OSM.verify.5",
+      "covers": "full",
+      "with": [
+        "mla-osm-cfg-aws-detection-query-scheduled"
+      ]
     }
   ]
 }

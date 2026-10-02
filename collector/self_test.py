@@ -451,6 +451,9 @@ DS_OK = {"d": [{"role": "WRITER", "member": "userByEmail:pipe@p"}, {"role": "OWN
 DS_DECLARED = {"d": DS_OK["d"]}
 SCAN_OK = {"scanType": "ENHANCED", "rules": [{"scanFrequency": "CONTINUOUS_SCAN",
                                               "repositoryFilters": [{"filter": "*", "filterType": "WILDCARD"}]}]}
+SCHED_OK = {"state": "ENABLED", "schedule": "rate(1 day)", "targets": ["arn:f"], "function_arn": "arn:f"}
+CERT_OK = {"domain": "d", "type": "AMAZON_ISSUED", "status": "ISSUED", "eligible": False, "in_use": False,
+           "validation": ["DNS"], "days_left": 300}
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -672,6 +675,19 @@ CFG_CASES = [
                       {"account": "ENABLED", "ecr": "ENABLED"}),
         "Inspector off for ECR": (SCAN_OK, {"account": "ENABLED", "ecr": "DISABLED"}),
     }),
+    ("evaluate_scheduled_functions", cfg.evaluate_scheduled_functions, {"r": SCHED_OK}, {
+        "missing": {"r": None},
+        "disabled": {"r": {**SCHED_OK, "state": "DISABLED"}},
+        "no schedule": {"r": {**SCHED_OK, "schedule": None}},
+        "targets elsewhere": {"r": {**SCHED_OK, "targets": ["arn:other"]}},
+    }),
+    ("evaluate_certificates", lambda c: cfg.evaluate_certificates(c, 30), [CERT_OK, {**CERT_OK, "in_use": True, "eligible": True}], {
+        "imported": [{**CERT_OK, "type": "IMPORTED"}],
+        "email validated": [{**CERT_OK, "validation": ["EMAIL"]}],
+        "in use, ineligible": [{**CERT_OK, "in_use": True, "eligible": False}],
+        "idle and near expiry": [{**CERT_OK, "days_left": 10}],
+        "no certificates": [],
+    }),
     ("evaluate_state_bucket", lambda c: cfg.evaluate_state_bucket(*c), ("Enabled", "AES256"), {
         "versioning suspended": ("Suspended", "AES256"),
         "never versioned": (None, "AES256"),
@@ -800,6 +816,8 @@ CFG_RESOURCES = {
     "evaluate_standards": "securityhub_standards",
     "evaluate_trail_data_events": "trail_data_events",
     "evaluate_state_bucket": "state_bucket",
+    "evaluate_scheduled_functions": "scheduled_functions",
+    "evaluate_certificates": "acm_certificates",
     "evaluate_dataset_access": "bigquery_dataset_access",
     "evaluate_alarms_target": "alarms_target",
     "evaluate_registry_scanning": "registry_scanning",

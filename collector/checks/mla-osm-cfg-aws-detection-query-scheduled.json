@@ -1,0 +1,28 @@
+{
+  "id": "mla-osm-cfg-aws-detection-query-scheduled",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The detection query's schedule is enabled and invokes the detection Lambda, whose query is packaged from lambda/run_detection_query/ in the repository",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "scheduled_functions",
+    "region": "us-east-1",
+    "schedules": [
+      {
+        "rule": "fedramp-20x-ksi-run-detection-query",
+        "function": "fedramp-20x-ksi-run-detection-query"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.verify.5",
+      "covers": "full",
+      "with": [
+        "svc-acm-ops-aws-no-drift"
+      ]
+    }
+  ]
+}
