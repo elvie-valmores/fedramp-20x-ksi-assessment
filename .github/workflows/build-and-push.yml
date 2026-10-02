@@ -93,6 +93,15 @@ jobs:
 
           echo "$manifest: hashed and fully pinned"
 
+      # Here rather than in the build job so a failing test stops the image
+      # before it exists, the same reason the scan runs first. The worker's
+      # tests prove its high-water mark (DECISIONS.md, 2026-10-02); they are
+      # hermetic, so they need none of the image's dependencies.
+      - name: unit tests
+        if: matrix.service == 'worker'
+        working-directory: app
+        run: python -m unittest -v worker.test_main
+
       - name: install scanner
         run: python -m pip install --disable-pip-version-check pip-audit==2.10.1
 

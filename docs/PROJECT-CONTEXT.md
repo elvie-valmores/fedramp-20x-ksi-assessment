@@ -238,11 +238,9 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 12 of 46 indicators carry automated evidence, from 35
 of roughly 380 checks. In rough priority:
 
-1. **Stop a failed landing losing its batch** (`app/worker`): extract from a recorded high-water
-   mark, not a window behind now, so a failed cycle's records are retried (2026-10-02 entry).
-2. **The ECR lifecycle policy** keeps 10 artifacts including signatures and attestations, so about
+1. **The ECR lifecycle policy** keeps 10 artifacts including signatures and attestations, so about
    three builds survive. Count tagged images instead, so a deployable tag is not expired by builds.
-3. **More check definitions**, negative controls for the older handlers, and **links from checks
+2. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -254,6 +252,14 @@ of roughly 380 checks. In rough priority:
   secrets, logs). They have no declared model yet, and the failure is how their models get written.
 - Confirm the default security group has no rules, and that `svc-acm-cfg-aws-inventory-is-declared`
   passes.
+
+**At the next phase 2:**
+
+- Deploy the worker image built from the high-water-mark commit (the newest `git-` tag in ECR; the
+  build pushes it).
+- Confirm the first landing's key carries `-through-<mark>`, and that a cycle with no new rows lands
+  nothing (log line "nothing new since the high-water mark"). Confirm `s3:ListBucket` works through
+  the endpoint. Until then, the fix is proven only by unit tests (2026-10-02 high-water mark entry).
 
 **Phase 2 was last run 2026-10-02:** data crossed end to end (api, RDS, worker, S3 via the endpoint, the GCP job, BigQuery).
 
@@ -271,7 +277,7 @@ of roughly 380 checks. In rough priority:
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| Worker drops a batch whose landing fails | Next thing to do, item 1 |
+| Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
 | ECR lifecycle expires deployable tags | Next thing to do, item 2 |
 | `caliper.elvievalmores.com` has no DNS record | The load balancer is new each phase 1. Use `curl --connect-to caliper.elvievalmores.com:443:<alb>:443` |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

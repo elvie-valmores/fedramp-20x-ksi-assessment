@@ -28,10 +28,13 @@ two — it never touches the application database, so it carries neither
 The two AWS services never talk to each other. That is the point: MAT's segmentation claim
 is tested by confirming a connection between them fails.
 
-**The worker's landings are at-least-once.** Its extract window is wider than
-its interval so that no row is missed, which means rows in the overlap land
-twice. The analytics side deduplicates on `id`. This is stated here because it
-is a contract between the two clouds, not an implementation detail of one.
+**The worker's landings are at-least-once.** Each extract's key carries a
+high-water mark, the database time it read through, and each cycle starts five
+minutes behind the newest mark so that a row committed late is not missed. Rows
+in that overlap land twice, and a failed landing leaves the mark where it was,
+so its rows are read again rather than lost. The analytics side deduplicates on
+`id`. This is stated here because it is a contract between the two clouds, not
+an implementation detail of one.
 
 ## Constraints both services are built to
 

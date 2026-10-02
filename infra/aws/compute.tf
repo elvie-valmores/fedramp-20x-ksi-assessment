@@ -358,6 +358,24 @@ data "aws_iam_policy_document" "worker_task" {
     resources = ["${aws_s3_bucket.extracts.arn}/measurements/*"]
   }
 
+  # The high-water mark (2026-10-02): each extract's key names the database
+  # time it read through, and each cycle lists the prefix to find the
+  # newest. Key names only. Still no GetObject, so the worker learns where
+  # it got to without being able to read what it landed.
+  statement {
+    sid    = "FindHighWaterMark"
+    effect = "Allow"
+
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.extracts.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["measurements/*"]
+    }
+  }
+
   # The network-boundary dimension KSI-CNA-RNT adds for resources with no
   # interface: whether access is restricted to the VPC or reachable from
   # anywhere with the right credential. Writes must arrive through the S3
@@ -713,7 +731,6 @@ resource "aws_ecs_task_definition" "worker" {
         { name = "EXTRACT_PREFIX", value = "measurements" },
         { name = "EXTRACT_KMS_KEY_ARN", value = aws_kms_key.artifacts.arn },
         { name = "EXTRACT_INTERVAL_SECONDS", value = "900" },
-        { name = "EXTRACT_WINDOW_MINUTES", value = "20" },
         { name = "LOG_LEVEL", value = "INFO" },
       ]
 

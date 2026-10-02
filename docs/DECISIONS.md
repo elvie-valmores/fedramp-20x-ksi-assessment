@@ -7355,3 +7355,86 @@ that cycle could not connect.
   which clears.
 - **The RDS orphan finding is resolved:** its log groups were declared with the database and left
   with it.
+
+## 2026-10-02 — A failed landing no longer loses its batch: the worker keeps a high-water mark
+
+**The defect** (found at the end-to-end run, entry above). Each cycle extracted a fixed window behind
+the worker's clock: 20 minutes, every 15. When a landing failed, the worker logged "will retry next
+cycle", but that was true only for the last five minutes of the batch. The rest had left the window
+before the next cycle, and the three measurements from 14:53 were never extracted.
+
+**The worker had durable state all along: the extracts it landed.** The old docstring rejected a
+high-water mark because the worker "restarts with no memory". That ruled out keeping the mark in
+the worker, but it did not rule out keeping it on the output.
+
+**What changed** (`app/worker/main.py`):
+
+- **Each extract's key carries its mark**, as in
+  `measurements-<landed>-through-<mark>.ndjson`. The mark is the database's `now()`, read before the
+  rows.
+- **Each cycle lists the prefix and takes the largest mark.** It takes the largest mark rather than
+  the last key, because keys sort by the worker's clock and marks by the database's. It then
+  extracts rows stamped after that mark, less a five-minute overlap.
+- **The overlap covers rows stamped before a mark but committed after it.** `recorded_at` defaults to
+  `now()`, which is transaction start, so commit order is not stamp order.
+- **A failed landing writes no key**, so the mark does not move and the next cycle reads the same rows.
+  A database failure behaves the same way.
+- **If the listing fails, the cycle is skipped.** Without a mark, any start point is a guess, and a
+  late guess loses rows.
+- **If no extract carries a mark, every row is read.** That covers the first cycle and extracts
+  landed before this change. The table is rebuilt each session, so this means the session's rows
+  and no more.
+- `EXTRACT_WINDOW_MINUTES` is gone from the code and the task definition.
+
+**Choices, and what was rejected:**
+
+- **A timestamp, not an `id`.** The database is rebuilt each session and its ids restart at 1, so an
+  id mark from an earlier session would skip every row of a new one.
+- **The mark is the time read through, not the newest row landed.** A newest-row mark sits inside
+  its own overlap. The row at the mark is re-read by every later cycle, so a new duplicate object
+  lands every 15 minutes, forever, with no new data. With a read-through mark, a quiet cycle lands
+  nothing.
+- **The database's clock, not the worker's.** A skewed task clock cannot open a gap between what one
+  cycle read and where the next starts.
+- **In the key, not in object metadata.** Metadata would need `HeadObject`, which needs
+  `s3:GetObject`. The worker role deliberately has no read access to what it lands (KSI-CNA-MAT's
+  blast radius). Listing needs only `s3:ListBucket`, which reveals key names, not content.
+
+**Permission added** (`infra/aws/compute.tf`, `FindHighWaterMark`): `s3:ListBucket` on the extracts
+bucket, only for `s3:prefix` values matching `measurements/*`. The S3 gateway endpoint's policy
+already allowed `ListBucket` for this role, and the bucket policy denies nothing that applies.
+Extracts expire after 30 days, which bounds the listing at a few pages per cycle.
+
+**The delivery contract is unchanged.** Delivery is still at-least-once: rows in the overlap land
+twice, and the analytics MERGE on `id` absorbs the duplicates. `app/README.md` states the contract
+in its new form.
+
+**Proof so far is unit tests, not a run.** `app/worker/test_main.py` has eight hermetic tests,
+covering:
+
+- the regression: a failed landing, with the rows landed 30 minutes later
+- a quiet cycle landing nothing
+- a late commit inside the overlap being caught
+- the mark being the database clock
+- no mark meaning every row is read
+- an unmarked newer key not hiding an older mark
+- an unreadable listing skipping the cycle
+- a database outage keeping the mark
+
+Two negative controls ran against the same tests:
+
+- **The old window logic** fails the regression test and three others.
+- **A newest-row mark** fails four, including the quiet-cycle test.
+
+The quiet-cycle test first passed the newest-row control by accident. In the fake, two landings in
+the same second with the same mark share a key, so the duplicate overwrote and looked like no
+landing. The fake now counts writes.
+
+The tests run in `build-and-push.yml`'s scan job, which the build needs, so a failing test stops the
+image.
+
+**Still to verify at the next phase 2,** with an image built from this commit:
+
+- The first cycle lands with a `-through-` key.
+- A cycle with no new rows lands nothing.
+- `s3:ListBucket` works through the endpoint.
