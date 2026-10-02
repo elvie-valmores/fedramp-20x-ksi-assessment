@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-10-02:
 
-- **Persisting between sessions**: 269 AWS resource instances (83 resources plus 186 disabled
+- **Persisting between sessions**: 271 AWS resource instances (85 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 74 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 77 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  38 are fully automated, 16 partly, and 326 not yet, across 20 of 40 determinations (2026-10-02).
+  39 are fully automated, 16 partly, and 325 not yet, across 21 of 40 determinations (2026-10-02).
   14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
@@ -96,7 +96,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
      expected to be red **only** on the one known finding below. Open its log: the self-test says
      22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
      `evidence-<run id>` holds `results.json` and the SDR.
-   - `infra/aws/boundary.py --persistent | wc -l` gives **269**, and `--ephemeral` gives 0.
+   - `infra/aws/boundary.py --persistent | wc -l` gives **271**, and `--ephemeral` gives 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
@@ -113,11 +113,11 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
 
 ### What is standing
 
-**AWS: 269 persistent resource instances** (83 resources plus 186 disabled Security Hub
+**AWS: 271 persistent resource instances** (85 resources plus 186 disabled Security Hub
 controls). Nothing ephemeral is in state, and nothing expensive is running (verified 2026-10-01).
-`terraform state list` prints more lines than 269; the rest are data sources.
+`terraform state list` prints more lines than 271; the rest are data sources.
 
-The persistent set, by file (`boundary.py --files`, 15 files):
+The persistent set, by file (`boundary.py --files`, 17 files):
 
 - **Evidence layer:** the Object Locked log store (`COMPLIANCE`, 7 days), CloudTrail, the Config
   recorder, Athena (the evidence workgroup, plus the built-in `primary`, governed the same way) and
@@ -125,7 +125,12 @@ The persistent set, by file (`boundary.py --files`, 15 files):
 - **The evidence key** (`evidence_key.tf`, `alias/fedramp-20x-ksi-evidence`) encrypts the log
   store, the Config and Athena results buckets, the trail, both workgroups' results, the detection
   topic and the Lambda log groups. Only root can disable or delete it; the operator's attempt is
-  denied and alerts. Objects written before 2026-09-30 stay SSE-S3 until they age out (7 days).
+  denied and alerts. Objects written before 2026-09-30 are SSE-S3 and stay: there is no lifecycle
+  rule, and the 7 days is Object Lock retention. Since 2026-10-02 a bucket-policy deny confines all
+  object reads to the evidence key's readers: the normalizer, the detection query, the collector and
+  the operator.
+- **The database key** (`database_key.tf`, `alias/fedramp-20x-ksi-database`) persists since
+  2026-10-02, so database backups kept between sessions stay restorable.
 - **Guardrails:** the budget guardrail, the account-level S3 public access block, and the SSM
   document public-sharing block.
 - **CI and cross-cloud identity:** the OIDC provider, the drift role, the build role and the
@@ -184,7 +189,7 @@ Nothing below is "configured". Each was exercised.
   `alex@corp.elvievalmores.com` in CloudTrail.
 - **Declared versus live, inventory currency, the SDR, drift, bucket protections, posture,
   pipeline, application, teardown, federation and cross-cloud trust:** as recorded through
-  2026-09-25. Drift is green in CI over all 269.
+  2026-09-25. Drift is green in CI over all of them.
 
 ### The persistence boundary, which is a rule
 
@@ -235,8 +240,8 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 38 are fully automated, 16 partly, and 326 not
-yet. 20 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 39 are fully automated, 17 partly, and 324 not
+yet. 21 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
 ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
@@ -296,10 +301,11 @@ by any check at all. In rough priority:
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
 | Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
-| Retained database backups expire with their key | **Open, for a decision; time-bound.** The database key is ephemeral (7-day deletion), so backups kept between sessions become unrestorable 7 days after each teardown. Today's go on 2026-10-09. `svc-sin-cfg-aws-backups-restorable` fails on it. Options are in DECISIONS.md, "Checks of the ephemeral environment are gated" |
-| Account default VPC | Open, for a decision. It is outside Terraform, and its default security group allows all egress. The network checks are scoped to the project VPC |
-| Analytics image not registry-scanned | Open, for a decision. Artifact Registry has no Container Scanning; the image's OS packages are unscanned, and its Python dependencies are audited in CI (SVC-EIS v1, partial) |
-| Log store does not restrict object reads | Open, for a decision, with the MLA-ALA lane model. The readers would have to be named: the normalizer, the detection query, the collector's run history and the operator (MLA-ALA v5) |
+| Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
+| Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
+| Detection query under the log-read deny | Check its first daily run after 2026-10-02 20:40 UTC: no AccessDenied in `/aws/lambda/fedramp-20x-ksi-run-detection-query`. Simulation and every other reader already passed |
+| Analytics image not registry-scanned | **Fixed 2026-10-02:** Container Scanning is enabled. The running image is scanned at its next push |
+| Log store does not restrict object reads | **Fixed 2026-10-02:** a deny confines reads to the evidence key's four readers. The MLA-ALA lane model itself is still unbuilt |
 | ECR lifecycle expires deployable tags | Fixed 2026-10-02: it keeps 10 builds and their signatures, counted per kind, checked by preview and applied. Orphaned buildx attestations are left, since no lifecycle rule reaches them |
 | `caliper.elvievalmores.com` has no DNS record | The load balancer is new each phase 1. Use `curl --connect-to caliper.elvievalmores.com:443:<alb>:443` |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

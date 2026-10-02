@@ -7779,3 +7779,58 @@ The options are:
 default security group allows all egress, and anything launched without a VPC lands in it with
 public IPs. The network checks are scoped to the project VPC and say so. **Open, for a decision:**
 deleting the default VPC is an account-level change.
+
+## 2026-10-02 — Four open items decided and closed
+
+The operator took the recommendations on all four. The checks that found each item now pass, or
+fail for the stated reason only.
+
+**1. The database key persists** (`infra/aws/database_key.tf`; boundary is now 17 files and 271
+instances).
+
+- **The problem:** backups kept between sessions were encrypted under a key deleted 7 days after
+  every teardown.
+- **The fix:** the key moved to the persistent side of the boundary. Its policy names only the
+  account and the RDS service, so it crossed the boundary unchanged; the recreated-role problem
+  that reshaped `artifacts_key.tf` does not apply.
+- **Today's backups lapse** on 2026-10-09 under the old key, as agreed: they are test data.
+  `svc-sin-cfg-aws-backups-restorable` fails until then and passes from the next session's backups.
+- **Verified:** the key is enabled and rotates yearly, and the AWS decrypt-model check passes for
+  it, 3 of 3 keys, in CI.
+
+**2. Audit-log reads are restricted** (`DenyObjectReadsOutsideDeclaredReaders` on the log store).
+
+- **The rule:** `GetObject` and `GetObjectVersion` are denied to every principal except the
+  normalizer, the detection query, the collector and the operator. That is exactly the evidence
+  key's decrypt model, so the two layers agree.
+- **It closed a real gap.** Objects from before the evidence key are SSE-S3, and they do not age
+  out: there is no lifecycle rule; the 7 days is Object Lock retention. Objects from 2026-09-19 are
+  still there, and the drift role's `s3:Get*` on `*` could read them.
+- **Verified from both sides:**
+  - **IAM simulation with the bucket policy:** the drift and build roles are now explicitly
+    denied; the collector and normalizer are allowed.
+  - **Live reads:** the operator read a legacy object. The normalizer ran 61 times in the
+    following 30 minutes with no errors. CI's Athena query and history fetch succeeded.
+- **Not yet observed:** the detection query's first daily run under the deny.
+- **Check:** `mla-ala-cfg-aws-log-store-reads-restricted` passes. MLA-ALA verify 5 is partial: the
+  row names the query role alone, and the tiered lane model is not built.
+
+**3. The default VPCs are deleted.** All 17 regions had one, and none had a network interface.
+
+- **Done by** the operator with `infra/aws/delete_default_vpcs.sh`, which refuses any VPC with an
+  interface and is reversible per region with `create-default-vpc`.
+- **Check:** `cna-rnt-cfg-aws-no-undeclared-vpcs` reads every region and passes with no VPC
+  anywhere. With the project VPC's egress check, the AWS half of CNA-RNT verify 2 now covers the
+  whole account.
+
+**4. Container Scanning is enabled** (`containerscanning` and `containeranalysis`, applied
+directly).
+
+- **Effect:** Artifact Registry images are scanned on push and re-analysed for 30 days.
+  `svc-eis-cfg-gcp-container-scanning` passes.
+- **Coverage:** with ECR's enhanced scanning and the CI dependency audit, SVC-EIS verify 1 is full.
+- **Limitation:** the running analytics image is scanned at its next push, not retroactively.
+  Findings land in Artifact Analysis, not the AWS detection path (SVC-EIS verify 2, open).
+
+**Also corrected:** the resume block said pre-key log objects "age out (7 days)". They do not, as
+item 2 explains.
