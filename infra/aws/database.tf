@@ -229,11 +229,8 @@ resource "aws_cloudwatch_log_group" "rds" {
   kms_key_id        = aws_kms_key.logs.arn
 }
 
-# The /postgresql group left by the 2026-09-23 teardown, adopted at the next
-# full apply rather than deleted now: its contents are database logs from
-# the phase 2 sessions, and whether to keep them is the record's call, not
-# a cleanup's. Ignored by the drift plan, which targets persistent files.
-import {
-  to = aws_cloudwatch_log_group.rds["postgresql"]
-  id = "/aws/rds/instance/fedramp-20x-ksi/postgresql"
-}
+# An import block adopted the /postgresql group the 2026-09-23 teardown had
+# left behind, at the 2026-10-02 apply; that teardown then removed it with
+# the rest of the environment. Removed 2026-10-03: an import of an object
+# that no longer exists fails the plan, and the depends_on above now creates
+# both groups before the instance can.
