@@ -34,6 +34,18 @@ def classify(record):
     return out["class_name"], out["status"]
 
 
+class Resources(unittest.TestCase):
+    def test_resources_are_kept(self):
+        # The key a Decrypt used is what SVC-SIN validate 1's query asks.
+        out = handler._to_ocsf(FIXTURES["kms_decrypt"], "437672023758")
+        self.assertEqual(out["resources"], [{
+            "uid": "arn:aws:kms:us-east-1:437672023758:key/384ac4d6-40dd-4da1-9bbc-771b270b4e6c",
+            "type": "AWS::KMS::Key"}])
+
+    def test_no_resources_is_an_empty_list(self):
+        self.assertEqual(handler._to_ocsf(FIXTURES["console_login_success"], "437672023758")["resources"], [])
+
+
 class Classification(unittest.TestCase):
     def test_sign_ins(self):
         for name, cls, status in EXPECTED:

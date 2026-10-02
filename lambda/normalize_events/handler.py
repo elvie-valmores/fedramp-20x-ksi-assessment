@@ -128,6 +128,13 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
             "service": {"name": record.get("eventSource")},
         },
         "src_endpoint": {"ip": record.get("sourceIPAddress")},
+        # What the call acted on, e.g. the key a Decrypt used. Kept since
+        # 2026-10-02: without it no query can tell a customer key from an
+        # AWS-managed one, or which store a data event touched.
+        "resources": [
+            {"uid": r.get("ARN"), "type": r.get("type")}
+            for r in (record.get("resources") or [])
+        ],
         "metadata": {
             "original_source": "aws_cloudtrail",
             "original_event_id": record.get("eventID"),

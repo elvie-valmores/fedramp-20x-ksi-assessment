@@ -998,7 +998,29 @@ CFG_ALSO = {"evaluate_public_access_blocked": ["s3_account_public_access_block"]
 # resource parameter, so the SDR emitter looks them up under None.
 _INV = [{"resource_type": "AWS::S3::Bucket", "resource_id": "a"}, {"resource_type": "AWS::S3::Bucket", "resource_id": "b"},
         {"resource_type": "AWS::IAM::Role", "resource_id": "r"}]
+_DK = "arn:aws:kms:us-east-1:1:key/k"
+_DKEYS = {_DK: {"manager": "CUSTOMER", "aliases": ["alias/data"]},
+          "arn:aws:kms:us-east-1:1:key/aws": {"manager": "AWS", "aliases": ["aws/lambda"]}}
+_DMODEL = {"alias/data": ["arn:aws:iam::1:role/reader", "arn:aws:iam::1:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Op_*",
+                          "service:s3.amazonaws.com"]}
+
+
+def _dec(actor, key=_DK, kind="AssumedRole"):
+    return {"key": key, "actor_type": kind, "actor": actor, "events": "3"}
+
+
+_DEC_OK = [_dec("arn:aws:sts::1:assumed-role/reader/s"), _dec("arn:aws:sts::1:assumed-role/AWSReservedSSO_Op_abc/me"),
+           _dec("", kind="AWSService"), _dec("arn:aws:sts::1:assumed-role/anyone/s", key="arn:aws:kms:us-east-1:1:key/aws")]
+
 SINGLE_CASES = [
+    ("log_query (decrypt_model)", lambda c: lq.judge_decrypt_events(*c), (_DEC_OK, _DKEYS, _DMODEL), {
+        "undeclared role": (_DEC_OK + [_dec("arn:aws:sts::1:assumed-role/drift/s")], _DKEYS, _DMODEL),
+        # A service pattern must not admit a role of the same name.
+        "role named like a service entry": (_DEC_OK + [_dec("arn:aws:sts::1:assumed-role/s3.amazonaws.com/s")], _DKEYS, _DMODEL),
+        "customer key without a model": (_DEC_OK, {**_DKEYS, _DK: {"manager": "CUSTOMER", "aliases": ["alias/other"]}}, _DMODEL),
+        "key KMS does not know": (_DEC_OK, {**_DKEYS, _DK: None}, _DMODEL),
+        "IAM user": (_DEC_OK + [_dec("terraform-admin", kind="IAMUser")], _DKEYS, _DMODEL),
+    }),
     ("log_query", lambda c: lq.evaluate_query(*c), ("SUCCEEDED", 3, "any_rows"), {
         "no rows": ("SUCCEEDED", 0, "any_rows"),
         "query failed": ("FAILED", 0, "any_rows"),
@@ -1051,7 +1073,11 @@ def negative_controls() -> dict[tuple[str, str], str]:
             "inventories that must fail it: " + ", ".join(should_fail)
         )
     for mechanism, _, _, bads in SINGLE_CASES:
-        found[(mechanism, None)] = "inputs that must fail it: " + ", ".join(bads)
+        # "log_query (decrypt_model)" is keyed apart from plain log_query:
+        # the emitter looks a check up by its assertion or resource, which
+        # a judged query carries as its judge.
+        name, _, judge = mechanism.partition(" (")
+        found[(name, judge.rstrip(")") or None)] = "inputs that must fail it: " + ", ".join(bads)
     for name, _, _, bads in CFG_CASES:
         for resource in [CFG_RESOURCES[name], *CFG_ALSO.get(name, [])]:
             found[("cloud_api_config_read", resource)] = (

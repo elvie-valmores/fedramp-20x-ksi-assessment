@@ -342,7 +342,7 @@ def tests(det: Determination, mine: list[dict], controls: dict) -> list[str]:
     found = []
     for o in mine:
         check = o["check"]
-        key = check["params"].get("assertion") or check["params"].get("resource")
+        key = check["params"].get("assertion") or check["params"].get("resource") or check["params"].get("judge")
         if (check["mechanism"], key) in controls:
             found.append(
                 f"Negative control for `{check['id']}` (collector/self_test.py): "

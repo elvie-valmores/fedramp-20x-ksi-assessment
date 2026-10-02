@@ -10,6 +10,9 @@ Check params:
     workgroup   Athena workgroup (carries the per-query scan limit)
     query       the SQL to run
     expect      "any_rows" (default) or "no_rows"
+    judge       optional: "decrypt_model" -- the rows are judged rather than
+                counted (see judge_decrypt_events)
+    model_from  with judge: the check file whose declared models to use
 
 The SQL lives in the check definition rather than being assembled here.
 Evidence queries vary too much to express as parameters, and a query
@@ -22,7 +25,11 @@ result set is what proves it.
 
 from __future__ import annotations
 
+import fnmatch
+import json
+import re
 import time
+from pathlib import Path
 
 import boto3
 
@@ -66,13 +73,76 @@ class LogQuery(Mechanism):
         results = client.get_query_results(QueryExecutionId=query_id)
         rows = results["ResultSet"]["Rows"][1:]  # row 0 is the column header
 
-        passed, detail = evaluate_query(state, len(rows), expect)
         header = [c.get("VarCharValue") for c in results["ResultSet"]["Rows"][0]["Data"]] if results["ResultSet"]["Rows"] else []
+        if check.params.get("judge") == "decrypt_model":
+            records = [dict(zip(header, [c.get("VarCharValue") for c in r["Data"]])) for r in rows]
+            return self._judge_decrypts(check, records, query_id)
+        passed, detail = evaluate_query(state, len(rows), expect)
         # The rows are the evidence for a standing query that should return
         # none: which actor, which call, when. The first 20 are kept.
         sample = [dict(zip(header, [c.get("VarCharValue") for c in r["Data"]])) for r in rows[:20]]
         return CheckResult(check.id, passed, {"row_count": len(rows), "expect": expect, "rows": sample,
                                               "query_id": query_id}, detail)
+
+
+    @staticmethod
+    def _judge_decrypts(check: CheckDefinition, records: list[dict], query_id: str) -> CheckResult:
+        """Resolve each key the rows name, then judge each actor against its model."""
+        checks_dir = Path(__file__).resolve().parents[1] / "checks"
+        declared = json.loads((checks_dir / f"{check.params['model_from']}.json").read_text())["params"]["declared"]
+        kms = boto3.client("kms", region_name=check.params["region"])
+        keys = {}
+        for uid in sorted({r["key"] for r in records}):
+            try:
+                meta = kms.describe_key(KeyId=uid)["KeyMetadata"]
+                aliases = [a["AliasName"] for a in kms.list_aliases(KeyId=meta["KeyId"])["Aliases"]]
+                keys[uid] = {"manager": meta["KeyManager"], "aliases": aliases}
+            except kms.exceptions.NotFoundException:
+                keys[uid] = None
+        passed, detail, evidence = judge_decrypt_events(records, keys, declared)
+        evidence["query_id"] = query_id
+        return CheckResult(check.id, passed, evidence, detail)
+
+
+_ASSUMED = re.compile(r"^arn:aws:sts::\d+:assumed-role/([^/]+)/")
+
+
+def judge_decrypt_events(records: list[dict], keys: dict[str, dict | None],
+                         declared: dict[str, list[str]]) -> tuple[bool, str, dict]:
+    """Every decrypt of a customer key by a principal its model declares.
+
+    records: {key, actor_type, actor, events}. AWS-managed keys are outside
+    every model and skipped. A decrypt by an AWS service is recorded, not
+    judged: the normalized event does not say which service. A role is
+    matched by name against the last segment of each declared pattern,
+    since an assumed-role ARN drops the role's path. A customer key with no
+    model, or one KMS no longer knows, fails: nothing can vouch for it.
+    """
+    violations, unattributed, judged = [], 0, 0
+    for r in records:
+        info = keys.get(r["key"])
+        if info is not None and info["manager"] != "CUSTOMER":
+            continue
+        if r["actor_type"] == "AWSService":
+            unattributed += int(r["events"])
+            continue
+        judged += int(r["events"])
+        if info is None:
+            violations.append({**r, "why": "key unknown to KMS"})
+            continue
+        model = next((declared[a] for a in info["aliases"] if a in declared), None)
+        if model is None:
+            violations.append({**r, "why": f"customer key {info['aliases'] or r['key']} has no declared model"})
+            continue
+        match = _ASSUMED.match(r["actor"] or "")
+        name = match.group(1) if match else None
+        if not name or not any(not p.startswith("service:") and fnmatch.fnmatchcase(name, p.rsplit("/", 1)[-1])
+                               for p in model):
+            violations.append({**r, "why": "actor not in the key's declared model"})
+    evidence = {"violations": violations[:20], "judged_events": judged, "service_events_unattributed": unattributed}
+    if violations:
+        return False, f"{len(violations)} decrypt pattern(s) outside a declared model", evidence
+    return True, f"{judged} decrypt(s) of customer keys, all by declared principals", evidence
 
 
 def evaluate_query(state: str, row_count: int, expect: str) -> tuple[bool, str]:

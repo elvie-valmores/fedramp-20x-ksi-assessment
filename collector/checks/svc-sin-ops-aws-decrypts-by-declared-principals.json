@@ -1,0 +1,24 @@
+{
+  "id": "svc-sin-ops-aws-decrypts-by-declared-principals",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero violations expected: every successful decrypt of a customer key in the last three days was by a principal that key's declared model names. Models come from svc-sin-cfg-aws-keys-decrypt-only-declared, so configuration and observation are judged against one list. Covers events normalized since 2026-10-02 23:00 UTC, when the normalizer began keeping each call's key",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "query": "SELECT r.uid AS key, actor.user.type AS actor_type, coalesce(actor.user.name, '') AS actor, count(*) AS events FROM normalized_events CROSS JOIN UNNEST(resources) AS t(r) WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 'kms.amazonaws.com' AND api.operation = 'Decrypt' AND status = 'Success' AND r.type = 'AWS::KMS::Key' GROUP BY 1,2,3",
+    "expect": "no_rows",
+    "judge": "decrypt_model",
+    "model_from": "svc-sin-cfg-aws-keys-decrypt-only-declared"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.1",
+      "covers": "partial",
+      "gap": "AWS only: Cloud KMS audit logs are not in the corpus. Decrypts by AWS services are counted but not attributed, since the normalized event does not say which service acted."
+    }
+  ]
+}

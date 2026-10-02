@@ -220,6 +220,12 @@ resource "aws_glue_catalog_table" "normalized_events" {
       name = "metadata"
       type = "struct<original_source:string,original_event_id:string>"
     }
+    # Since 2026-10-02. Files written before it lack the field and read
+    # back as null, so a query over resources covers from that date.
+    columns {
+      name = "resources"
+      type = "array<struct<uid:string,type:string>>"
+    }
   }
 
   # These are not stored inside the files -- their values come from the
