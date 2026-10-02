@@ -7126,3 +7126,41 @@ workstation record. The first showed on its day and in both summaries; the secon
 **What it does not claim:** a year. The store began 2026-10-02, and every window says how many days
 it covers. **Wording fixed after that run:** it said "scheduled runs" while counting a run started
 by hand in CI. It now says CI runs, and what that includes.
+
+---
+
+## 2026-10-02 — Correction: the KMS inventory "finding" was a 27- to 51-hour lag
+
+**What was claimed** (2026-09-30): "the Config-backed inventory does not see a scheduled KMS key
+deletion complete … not a lag." That was wrong. **Config recorded all eleven deletions, within one
+second of each other, at 2026-10-02 00:48:44 UTC.**
+
+- The keys deleted on 2026-09-29 at about 21:47 were recorded about **51 hours** late.
+- The ones deleted on 2026-09-30 at about 21:25 were recorded about **27 hours** late.
+
+The single batch points to a periodic reconciliation by Config, not to per-event recording. The
+claim was made after about 25 hours of waiting, which was too early, and it was called a finding
+rather than a lag on the strength of the 70-minute lag seen on 2026-09-23. Two delays from two
+kinds of deletion are not a pattern.
+
+**Found by the schedule, not by looking.** The first daily-run era made `piy-giv-ops-aws-inventory-current`
+pass in run 36952591062 with nobody touching anything, and that change is what prompted the check.
+
+**What stands:**
+
+- **An inventory sourced from Config can be stale for up to about two days** after a deletion
+  Config is not told about. KSI-PIY-GIV's "real-time" claim holds for what Config records promptly,
+  not for this.
+- `inventory_current` makes the staleness visible while it lasts, and recovers by itself when Config
+  catches up. **It did exactly that, and needs no change.**
+
+**Collector now: 31 of 32.** The one failure is the RDS orphan log group, which waits for the next
+phase 1.
+
+**Also on 2026-10-02 (night):**
+
+- `requirements.txt` is compiled from the new `requirements.in` with uv, universal, **45 packages
+  and 694 hashes**, with every direct pin unchanged. `collect.yml` installs with
+  `--require-hashes`, proven in run 36952591062.
+- Both workflows run **Terraform 1.16.3**, the version that writes the state they read. That was
+  proven by run 36952592951 (drift, "No changes" over 269) and the same collect run.

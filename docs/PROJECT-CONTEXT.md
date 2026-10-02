@@ -94,15 +94,15 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    not have it. There are no static AWS credentials anywhere, and no IAM users.
 2. **Verify, do not trust:**
    - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The 05:30 UTC run is
-     expected to be red **only** on the two known findings below. Open its log: the self-test says
+     expected to be red **only** on the one known finding below. Open its log: the self-test says
      22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
      `evidence-<run id>` holds `results.json` and the SDR.
    - `infra/aws/boundary.py --persistent | wc -l` gives **269**, and `--ephemeral` gives 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
-     things" gives **30 of 32**. The failures are `piy-giv-ops-aws-inventory-current` (the KMS
-     finding) and `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS orphan log group).
+     things" gives **31 of 32**. The failure is `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS
+     orphan log group, adopted at the next phase 1).
 3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
    were both done on 2026-10-01 evening.
 
@@ -235,11 +235,9 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 32
 of roughly 380 checks. In rough priority:
 
-1. **Hash-pin `requirements.txt`**, now that CI installs from it, and align CI's Terraform
-   (1.10.5) with local (1.16.3).
-2. **The analytics image build**, now that GitHub can reach GCP: a third image and an Artifact
+1. **The analytics image build**, now that GitHub can reach GCP: a third image and an Artifact
    Registry push identity, then GCP phase 2.
-3. **More check definitions**, negative controls for the older handlers, and **links from checks
+2. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -263,12 +261,12 @@ of roughly 380 checks. In rough priority:
 | api image build hung 21 minutes on 2026-10-01 | Transient: the retry built in under 2 minutes. Cause unknown, no logs kept. Jobs now time out |
 | Unprovisioned directory accounts leave no CloudTrail trace | Coverage gap for KSI-IAM-SUS and KSI-MLA-LET. Google's SAML audit log is the only record, and nothing collects it |
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
-| Config and scheduled KMS key deletion | A finding: 11 deleted keys still `OK` in Config. Correct Config's record, or stop trusting Config for keys |
+| Config lag on scheduled KMS deletions | Not a finding: recorded 27 to 51 hours late, in one batch (2026-10-02 correction). `inventory_current` shows the staleness while it lasts |
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| The analytics image has no build path | GitHub-to-GCP federation now exists; the push identity and build entry remain. Next thing to do, item 2 |
+| The analytics image has no build path | GitHub-to-GCP federation now exists; the push identity and build entry remain. Next thing to do, item 1 |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |

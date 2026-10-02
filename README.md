@@ -113,7 +113,7 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented. 32 check definitions, 30 passing (2026-10-01); the failures are real findings. **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
+| Collector framework | 5 of 9 mechanisms implemented. 32 check definitions, 31 passing (2026-10-02); the one failure is a real finding. **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
 | SDR emitter | Emits a schema-valid record for all 46 indicators; automated evidence for 11 |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only. Sign-in classification fixed and tested 2026-10-01; the detection Lambda's alert path to the encrypted topic is not yet proven |
