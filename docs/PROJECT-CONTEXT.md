@@ -275,7 +275,7 @@ by any check at all. In rough priority:
 | api image build hung 21 minutes on 2026-10-01 | Transient: the retry built in under 2 minutes. Cause unknown, no logs kept. Jobs now time out |
 | Unprovisioned directory accounts leave no CloudTrail trace | Coverage gap for KSI-IAM-SUS and KSI-MLA-LET. Google's SAML audit log is the only record, and nothing collects it |
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
-| Config lag on scheduled KMS deletions | Not a finding: recorded 27 to 51 hours late, in one batch (2026-10-02 correction). `inventory_current` shows the staleness while it lasts |
+| Config lag on deletions | Not a finding: recorded 27 to 51 hours late, in one batch (2026-10-02 correction). `inventory_current` shows the staleness while it lasts. Second instance: CI run 37044949435 (2026-10-02) failed it on `sg-0607b33343156f7f2`. That is the VPC's default security group, deleted implicitly with the VPC at teardown. It was gone live, and Config still held only its `ResourceDiscovered` record. Expect it to clear |
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
