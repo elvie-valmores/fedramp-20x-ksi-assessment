@@ -7070,3 +7070,59 @@ old evaluator passed it, and the new one fails it.
 Asset, so the inventory misses regional log buckets too. The bucket is declared, so no check fails
 on it, but "the inventory is complete" is not true for that type until the generator reads Logging
 too.
+
+---
+
+## 2026-10-02 — A record store, and SDR-CSX-KMT's metrics start accumulating
+
+**What Class C asks** (read from the pinned rules, not from memory), per applicable indicator:
+
+- a summary of each metric over the past 30 days
+- a summary up to the past year
+- all daily metric data up to the past year
+
+The last two are "where available". The rule's `schema` block names the SDR schema itself, and that
+schema has no metrics fields. So the metrics go where it does allow: an **evidence object**. Its
+`evidenceType` is an enumeration (`Log`, `Report`, `Screenshot`, `Configuration`, `Policy`,
+`Procedure`, `Audit Record`). The first emission used a type of its own and validation refused it,
+so metrics are a `Report`, and the description says which kind.
+
+**The store is the log store, under `collector-runs/`.** Each CI run of `collect.yml` writes its
+results there, adding the run id, commit, event and `runtime: ci`. That puts each record under:
+
+- **the evidence key**
+- **Object Lock, COMPLIANCE** (undeletable for 7 days)
+- **versioning** (a key written twice keeps both)
+
+It costs nothing new. The log store's notification fires only for `AWSLogs/…json.gz`, so records
+never reach the normalizer, and it has no expiry, so a year accumulates. The collector role gained
+`s3:PutObject` on `collector-runs/*` only, applied by the user. It already reads the bucket and uses
+the key through S3.
+
+**`emit.py --history <dir>`** builds, per indicator with checks, one metrics object:
+
+- **the 30-day and up-to-a-year summaries:** days with data, days on which every check passed, the
+  mean daily pass rate, and which checks did not pass on how many days
+- **every day's data, inline**
+
+Three rules hold it, each with a test in `sdr/test_metrics.py`:
+
+- **only CI runs count, never a workstation run**
+- **one data point per day:** that day's latest CI run, scheduled or started by hand
+- **every window states how many days actually had data**
+
+The first emission run against a synthetic history planted a failure on one day and a failure in a
+workstation record. The first showed on its day and in both summaries; the second appeared nowhere.
+
+**Proven: run 36952160383.**
+
+- **The record:** `collector-runs/dt=2026-10-02/run=36952160383.json`, under the evidence key,
+  COMPLIANCE until 2026-10-09.
+- **The read-back:** the run read its own record back as history.
+- **The SDR:** clean at `40a788635849`, with a metrics object on all 11 indicators that have checks
+  ("data on 1 of 30 days").
+- **The tests:** CI now also runs the normalizer's and the metrics' tests every day.
+
+**What it does not claim:** a year. The store began 2026-10-02, and every window says how many days
+it covers. **Wording fixed after that run:** it said "scheduled runs" while counting a run started
+by hand in CI. It now says CI runs, and what that includes.

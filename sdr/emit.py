@@ -224,7 +224,7 @@ def collection_statement(mine: list[dict], context: dict) -> str:
         return (
             f"**Automated evidence.** {len(mine)} collector check(s) in the run on "
             f"{context['run_date']}: {tally}. Historical metrics (SDR-CSX-KMT) cover "
-            f"{len(context['history'])} day(s) of scheduled runs since {first}, in the metrics "
+            f"{len(context['history'])} day(s) of CI runs since {first}, in the metrics "
             "evidence object below; the year is what exists, not a full year."
         )
     return (
@@ -238,11 +238,11 @@ def collection_statement(mine: list[dict], context: dict) -> str:
 #
 # Class C asks, per indicator, for a 30-day summary, a summary up to the past
 # year, and all daily data up to the past year, each "where available". The
-# data is the record store: every scheduled CI run writes its results to the
+# data is the record store: every CI run writes its results to the
 # log store under collector-runs/ (Object Locked, evidence key), and
 # collect.yml hands those records to this emitter with --history. One data
-# point per day: the latest scheduled run that day. Workstation runs are never
-# stored, so the history is the schedule's. See DECISIONS.md, 2026-10-01.
+# point per day: the latest CI run that day, scheduled or started by hand. Workstation runs are never
+# stored or counted. See DECISIONS.md, 2026-10-01.
 
 
 def load_history(directory: Path) -> dict[date, dict]:
@@ -306,11 +306,11 @@ def metrics_evidence(ksi_id: str, history: dict[date, dict], as_of: date) -> dic
         # Report, and the description says which kind.
         "evidenceType": "Report",
         "evidenceDescription": (
-            f"Historical metrics (SDR-CSX-KMT): daily scheduled collector results for {ksi_id}. Past 30 days: {_window(days, as_of, 30)}. "
+            f"Historical metrics (SDR-CSX-KMT): daily collector results from CI for {ksi_id} (the daily schedule and any run started by hand in CI; never a workstation run). Past 30 days: {_window(days, as_of, 30)}. "
             f"Past year: {_window(days, as_of, 365)}. The record store began {min(days)}, so the year is "
             "what exists, not a full year."
         ),
-        "evidenceText": "All daily data, past year (latest scheduled run each day):\n" + daily,
+        "evidenceText": "All daily data, past year (the latest CI run each day):\n" + daily,
         "lastUpdated": max(days).isoformat(),
     }
 
@@ -452,7 +452,7 @@ def render(sdr: dict, context: dict) -> str:
         f"from one collector run started {context['started_at']}.",
         "- **No independent assessor is engaged.** Assessment statements are the provider's own reasoning.",
         "- **`fedRampRequirements` is empty.** The project determined the 46 indicators, not the FRR rules.",
-        (f"- **Historical metrics (SDR-CSX-KMT)** from {len(context['history'])} day(s) of scheduled runs "
+        (f"- **Historical metrics (SDR-CSX-KMT)** from {len(context['history'])} day(s) of CI runs "
          f"since {min(context['history'])}, per indicator in a metrics evidence object. The year is what "
          "exists since then, not a full year."
          if context["history"] else
@@ -493,7 +493,7 @@ def main() -> int:
     parser.add_argument("--runtime", choices=["ci", "local"], required=True,
                         help="where the collector run came from: the scheduled CI job, or a workstation")
     parser.add_argument("--history", type=Path,
-                        help="directory of stored scheduled-run records, for SDR-CSX-KMT's metrics")
+                        help="directory of stored CI run records, for SDR-CSX-KMT's metrics")
     args = parser.parse_args()
 
     schema, common = load_schemas()
