@@ -56,13 +56,21 @@ resource "google_kms_crypto_key_iam_member" "pipeline_analytics" {
 variable "deploy_pipeline" {
   description = "Create the Cloud Run job. Requires an image already pushed to the Artifact Registry repository."
   type        = bool
-  default     = false
+  # On since 2026-10-02: the analytics image exists, built and signed by
+  # build-and-push.yml. Declared here rather than passed at apply, so the
+  # collector's CI plan of this root sees the job as declared, not as
+  # something to destroy.
+  default = true
 }
 
 variable "pipeline_image" {
   description = "Fully qualified image reference for the pipeline job, pinned by digest (repo@sha256:...)."
   type        = string
-  default     = ""
+  # The deployed image, by digest, as a reviewed declaration: changing what
+  # runs is a commit. This digest is build run 36954218125's, tag
+  # git-193454c1a7b2, signed and verified in that run (DECISIONS.md,
+  # 2026-10-02).
+  default = "us-central1-docker.pkg.dev/fedramp-20x-ksi-assessment/fedramp-20x-ksi/analytics@sha256:19f7fda8771949788a858b389ca0cc83e16536dfbfcd1b133ef9fcf1c4df5d9f"
 
   validation {
     # A tag reference is the mutable pointer KSI-SVC-VRI exists to reject.
@@ -77,13 +85,13 @@ variable "pipeline_image" {
 variable "aws_extract_bucket" {
   description = "Name of the AWS S3 bucket holding measurement extracts."
   type        = string
-  default     = ""
+  default     = "fedramp-20x-ksi-extracts-437672023758"
 }
 
 variable "aws_extract_role_arn" {
   description = "AWS role the pipeline assumes to read the extract bucket. Created by the aws root; see infra/aws/cross_cloud.tf."
   type        = string
-  default     = ""
+  default     = "arn:aws:iam::437672023758:role/fedramp-20x-ksi-gcp-pipeline"
 }
 
 resource "google_cloud_run_v2_job" "pipeline" {

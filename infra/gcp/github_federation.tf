@@ -81,6 +81,9 @@ resource "google_project_iam_custom_role" "collector" {
     # The GCP drift checks' terraform plan: one read per resource type in
     # state, seeded from the state's types and corrected by CI runs.
     "artifactregistry.repositories.get",
+    # The repository grant to build-and-push.yml (below). Missed when that grant
+    # was added on 2026-10-02, so the first unattended run errored on it.
+    "artifactregistry.repositories.getIamPolicy",
     "bigquery.datasets.get",
     "bigquery.tables.get",
     "cloudkms.cryptoKeys.get",
@@ -97,6 +100,10 @@ resource "google_project_iam_custom_role" "collector" {
     "logging.sinks.get",
     # At the TESTING support level for custom roles: accepted, and may change.
     "monitoring.notificationChannels.get",
+    # GCP phase 2 (pipeline.tf), from 2026-10-02.
+    "cloudscheduler.jobs.get",
+    "run.jobs.get",
+    "run.jobs.getIamPolicy",
     "pubsub.topics.get",
     "pubsub.topics.getIamPolicy",
     "resourcemanager.projects.get",
