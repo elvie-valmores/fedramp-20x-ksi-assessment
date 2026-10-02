@@ -101,8 +101,8 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
-     things" gives **34 of 35**. The failure is `svc-sin-cfg-aws-stores-use-declared-keys` (the RDS
-     orphan log group, adopted at the next phase 1).
+     things" gives **35 of 35**, or 34 while Config catches up on an implicit deletion
+     (`inventory_current`, which clears by itself; see the 2026-10-02 lag correction).
 3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
    were both done on 2026-10-01 evening.
 
@@ -216,7 +216,10 @@ cd sdr && ../.venv/bin/python emit.py --results ../collector/results.json --frr 
 ```
 
 - **AWS phase 1:** `terraform apply` in `infra/aws`. **Phase 2:** add `-var deploy_services=true
-  -var app_image_tag=git-f9f2c35f8fd1`. **Teardown:** `infra/aws/teardown.sh`.
+  -var app_image_tag=git-193454c1a7b2` (`f9f2c35` has expired from ECR), then run the migration
+  task (`infra/README.md`). With phase 2 up, the collector also needs `TF_VAR_deploy_services=true`
+  and `TF_VAR_app_image_tag`. **Teardown:** `infra/aws/teardown.sh`, which asks for `y` and needs
+  all three `TF_VAR_`s; the user runs it.
 - **The drift-scoped plan, locally:** build a bash array from `boundary.py --persistent
   --target-flags`, as `drift.yml` does. zsh does not split an unquoted variable.
 - **Hand-offs to the user** go to their own terminal, without a `!` prefix. In zsh a leading `!`
@@ -235,9 +238,11 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 12 of 46 indicators carry automated evidence, from 35
 of roughly 380 checks. In rough priority:
 
-1. **An end-to-end analytics run with data:** AWS phase 2 up, so the worker writes extracts, and
-   the GCP job loads them into BigQuery. Everything up to the empty bucket is proven (2026-10-02).
-2. **More check definitions**, negative controls for the older handlers, and **links from checks
+1. **Stop a failed landing losing its batch** (`app/worker`): extract from a recorded high-water
+   mark, not a window behind now, so a failed cycle's records are retried (2026-10-02 entry).
+2. **The ECR lifecycle policy** keeps 10 artifacts including signatures and attestations, so about
+   three builds survive. Count tagged images instead, so a deployable tag is not expired by builds.
+3. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -250,7 +255,7 @@ of roughly 380 checks. In rough priority:
 - Confirm the default security group has no rules, and that `svc-acm-cfg-aws-inventory-is-declared`
   passes.
 
-**At the next phase 2:** confirm the worker's extracts still land through the VPC endpoint.
+**Phase 2 was last run 2026-10-02:** data crossed end to end (api, RDS, worker, S3 via the endpoint, the GCP job, BigQuery).
 
 ### Open items
 
@@ -266,7 +271,9 @@ of roughly 380 checks. In rough priority:
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| GCP phase 2 deployed, but no data has crossed yet | The job runs every 6 hours and the cross-cloud handshake is proven; the extract bucket stays empty until AWS phase 2 runs the worker |
+| Worker drops a batch whose landing fails | Next thing to do, item 1 |
+| ECR lifecycle expires deployable tags | Next thing to do, item 2 |
+| `caliper.elvievalmores.com` has no DNS record | The load balancer is new each phase 1. Use `curl --connect-to caliper.elvievalmores.com:443:<alb>:443` |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |
