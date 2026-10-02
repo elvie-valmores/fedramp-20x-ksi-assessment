@@ -255,8 +255,9 @@ of roughly 380 checks. In rough priority:
 
 **At the next phase 2:**
 
-- Deploy the worker image built from the high-water-mark commit (the newest `git-` tag in ECR; the
-  build pushes it).
+- Deploy `TF_VAR_app_image_tag=git-70600724abeb` (or newer). That build carries the high-water mark,
+  and it is signed and was tested in CI (run 37042865065). Use it before ECR's lifecycle expires it
+  (next-thing item 1).
 - Confirm the first landing's key carries `-through-<mark>`, and that a cycle with no new rows lands
   nothing (log line "nothing new since the high-water mark"). Confirm `s3:ListBucket` works through
   the endpoint. Until then, the fix is proven only by unit tests (2026-10-02 high-water mark entry).
