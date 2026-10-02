@@ -1,0 +1,23 @@
+{
+  "id": "svc-asm-cfg-gcp-keys-rotate",
+  "indicator": "KSI-SVC-ASM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every Cloud KMS symmetric key has an automatic rotation period of at most a year (build row 3)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "key_rotation",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "max_days": 365
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ASM.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-asm-cfg-aws-keys-rotate"
+      ]
+    }
+  ]
+}

@@ -72,6 +72,18 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_buckets_public_access(check)
         if provider == "gcp" and resource == "key_decrypt_principals":
             return self._gcp_key_decrypt_principals(check)
+        if provider == "aws" and resource == "key_rotation":
+            return self._aws_key_rotation(check)
+        if provider == "gcp" and resource == "key_rotation":
+            return self._gcp_key_rotation(check)
+        if provider == "aws" and resource == "registries_immutable":
+            return self._aws_registries_immutable(check)
+        if provider == "gcp" and resource == "registries_immutable":
+            return self._gcp_registries_immutable(check)
+        if provider == "aws" and resource == "iam_user_access_keys":
+            return self._aws_iam_user_access_keys(check)
+        if provider == "aws" and resource == "log_corpus_query_limits":
+            return self._aws_log_corpus_query_limits(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -226,6 +238,161 @@ class CloudAPIConfigRead(Mechanism):
         }
         ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
         evidence["unreadable_roles"] = sorted(r for r, p in permissions.items() if p is None)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_key_rotation(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-ASM verify row 2, AWS: every enabled customer key rotates.
+
+        Requires params: region, max_days. Keys pending deletion or disabled
+        are not judged: AWS reports no rotation for them, and they can
+        encrypt nothing. Every enabled customer key is, so a key created
+        outside Terraform is judged with the rest.
+        """
+        kms = boto3.client("kms", region_name=check.params["region"])
+        aliases = {}
+        for page in kms.get_paginator("list_aliases").paginate():
+            for alias in page["Aliases"]:
+                if alias.get("TargetKeyId"):
+                    aliases.setdefault(alias["TargetKeyId"], alias["AliasName"])
+        keys = []
+        for page in kms.get_paginator("list_keys").paginate():
+            for entry in page["Keys"]:
+                meta = kms.describe_key(KeyId=entry["KeyId"])["KeyMetadata"]
+                if meta["KeyManager"] != "CUSTOMER" or meta["KeyState"] != "Enabled":
+                    continue
+                status = kms.get_key_rotation_status(KeyId=meta["KeyId"])
+                keys.append({
+                    "key": aliases.get(meta["KeyId"], meta["KeyId"]),
+                    "rotation_days": status.get("RotationPeriodInDays") if status["KeyRotationEnabled"] else None,
+                })
+        ok, detail, evidence = evaluate_key_rotation(keys, check.params["max_days"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _gcp_key_rotation(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-ASM verify row 2, GCP: every symmetric key has a rotation period.
+
+        Requires params: project_id, max_days. Only ENCRYPT_DECRYPT keys
+        rotate automatically in Cloud KMS; any other purpose is recorded
+        and not judged.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        session = AuthorizedSession(impersonated_token(project_id))
+        keys, other = [], []
+        for res in asset_client(project_id).search_all_resources(request={
+            "scope": f"projects/{project_id}", "asset_types": ["cloudkms.googleapis.com/CryptoKey"],
+        }):
+            name = res.name.removeprefix("//cloudkms.googleapis.com/")
+            response = session.get(f"https://cloudkms.googleapis.com/v1/{name}", timeout=30)
+            response.raise_for_status()
+            key = response.json()
+            if key.get("purpose") != "ENCRYPT_DECRYPT":
+                other.append({"key": gcp_key_short_name(name), "purpose": key.get("purpose")})
+                continue
+            period = key.get("rotationPeriod")
+            keys.append({"key": gcp_key_short_name(name),
+                         "rotation_days": int(period.rstrip("s")) / 86400 if period else None})
+        ok, detail, evidence = evaluate_key_rotation(keys, check.params["max_days"])
+        evidence["not_judged"] = other
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_registries_immutable(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-VRI verify row 2, AWS: every ECR repository's tags are immutable.
+
+        Requires param: region. IMMUTABLE_WITH_EXCLUSION fails: an excluded
+        tag pattern is a tag that can be moved.
+        """
+        ecr = boto3.client("ecr", region_name=check.params["region"])
+        repos = [
+            {"repository": r["repositoryName"], "setting": r["imageTagMutability"],
+             "immutable": r["imageTagMutability"] == "IMMUTABLE"}
+            for page in ecr.get_paginator("describe_repositories").paginate()
+            for r in page["repositories"]
+        ]
+        ok, detail, evidence = evaluate_registries_immutable(repos)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _gcp_registries_immutable(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-VRI verify row 2, GCP: every Docker repository's tags are immutable.
+
+        Requires param: project_id. Immutability is a Docker setting in
+        Artifact Registry; a repository of another format is recorded and
+        not judged.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        session = AuthorizedSession(impersonated_token(project_id))
+        repos, other = [], []
+        for res in asset_client(project_id).search_all_resources(request={
+            "scope": f"projects/{project_id}", "asset_types": ["artifactregistry.googleapis.com/Repository"],
+        }):
+            name = res.name.removeprefix("//artifactregistry.googleapis.com/")
+            response = session.get(f"https://artifactregistry.googleapis.com/v1/{name}", timeout=30)
+            response.raise_for_status()
+            repo = response.json()
+            if repo.get("format") != "DOCKER":
+                other.append({"repository": name, "format": repo.get("format")})
+                continue
+            immutable = bool((repo.get("dockerConfig") or {}).get("immutableTags"))
+            repos.append({"repository": name.split("/")[-1], "setting": "immutableTags" if immutable else "mutable",
+                          "immutable": immutable})
+        ok, detail, evidence = evaluate_registries_immutable(repos)
+        evidence["not_judged"] = other
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_iam_user_access_keys(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU verify row 1: no IAM user holds an access key.
+
+        No params. An inactive key fails as well as an active one: it can be
+        reactivated by anyone who can call UpdateAccessKey, and nothing here
+        needs one.
+        """
+        iam = boto3.client("iam")
+        users = []
+        for page in iam.get_paginator("list_users").paginate():
+            for user in page["Users"]:
+                keys = iam.list_access_keys(UserName=user["UserName"])["AccessKeyMetadata"]
+                users.append({"user": user["UserName"],
+                              "keys": [{"id": k["AccessKeyId"], "status": k["Status"]} for k in keys]})
+        ok, detail, evidence = evaluate_no_user_access_keys(users)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_log_corpus_query_limits(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-OSM verify row 3: projection on every corpus table, limits on every workgroup.
+
+        Requires params: region, database, max_bytes. Every enabled
+        workgroup in the account is judged, not only the corpus's: a query
+        run through an unlimited workgroup is an unlimited query.
+        """
+        region = check.params["region"]
+        glue = boto3.client("glue", region_name=region)
+        athena = boto3.client("athena", region_name=region)
+        tables = [
+            {"table": t["Name"], "projection": (t.get("Parameters") or {}).get("projection.enabled")}
+            for page in glue.get_paginator("get_tables").paginate(DatabaseName=check.params["database"])
+            for t in page["TableList"]
+        ]
+        workgroups, token = [], None
+        # boto3 has no paginator for this one.
+        while True:
+            page = athena.list_work_groups(**({"NextToken": token} if token else {}))
+            for summary in page["WorkGroups"]:
+                if summary["State"] != "ENABLED":
+                    continue
+                config = athena.get_work_group(WorkGroup=summary["Name"])["WorkGroup"].get("Configuration", {})
+                workgroups.append({"workgroup": summary["Name"],
+                                   "enforced": config.get("EnforceWorkGroupConfiguration", False),
+                                   "cutoff": config.get("BytesScannedCutoffPerQuery")})
+            token = page.get("NextToken")
+            if not token:
+                break
+        ok, detail, evidence = evaluate_log_corpus_limits(tables, workgroups, check.params["max_bytes"])
         return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
@@ -764,6 +931,75 @@ def evaluate_gcs_public_access(config: dict | None) -> tuple[bool, str]:
     if not (config.get("uniformBucketLevelAccess") or {}).get("enabled"):
         return False, "uniform bucket-level access is off"
     return True, "public access prevention enforced, uniform bucket-level access on"
+
+
+def _judged(kind: str, results: dict[str, dict], allow_empty: bool = False) -> tuple[bool, str, dict]:
+    """Pass only if every member passes; an empty population fails unless
+    emptiness is itself the claim."""
+    failing = sorted(n for n, r in results.items() if not r["passed"])
+    evidence = {kind: results, "failing": failing}
+    if not results and not allow_empty:
+        return False, f"no {kind} found -- nothing to judge", evidence
+    if failing:
+        return False, f"{len(failing)} of {len(results)} {kind} fail: {', '.join(failing)}", evidence
+    return True, f"all {len(results)} {kind} pass", evidence
+
+
+def evaluate_key_rotation(keys: list[dict], max_days: float) -> tuple[bool, str, dict]:
+    """Every key rotates automatically, at least every max_days."""
+    results = {}
+    for k in keys:
+        days = k["rotation_days"]
+        if days is None:
+            results[k["key"]] = {"passed": False, "detail": "automatic rotation off"}
+        elif days > max_days:
+            results[k["key"]] = {"passed": False, "detail": f"rotates every {days:g} days, more than {max_days:g}"}
+        else:
+            results[k["key"]] = {"passed": True, "detail": f"rotates every {days:g} days"}
+    return _judged("keys", results)
+
+
+def evaluate_registries_immutable(repos: list[dict]) -> tuple[bool, str, dict]:
+    return _judged("repositories", {
+        r["repository"]: {"passed": r["immutable"], "detail": r["setting"]} for r in repos
+    })
+
+
+def evaluate_no_user_access_keys(users: list[dict]) -> tuple[bool, str, dict]:
+    """No user holds a key. No users at all passes: absence is the claim."""
+    if not users:
+        return True, "no IAM users exist, so none holds a key", {"users": {}, "failing": []}
+    return _judged("users", {
+        u["user"]: {"passed": not u["keys"],
+                    "detail": "no access keys" if not u["keys"] else
+                              ", ".join(f"{k['id']} ({k['status']})" for k in u["keys"])}
+        for u in users
+    }, allow_empty=True)
+
+
+def evaluate_log_corpus_limits(tables: list[dict], workgroups: list[dict],
+                               max_bytes: int) -> tuple[bool, str, dict]:
+    results = {}
+    for t in tables:
+        on = t["projection"] == "true"
+        results[f"table {t['table']}"] = {"passed": on, "detail": "partition projection on" if on else
+                                          f"partition projection {t['projection'] or 'unset'}"}
+    for w in workgroups:
+        cutoff = w["cutoff"]
+        if not w["enforced"]:
+            ok, detail = False, "workgroup settings not enforced, so a client can override the limit"
+        elif cutoff is None:
+            ok, detail = False, "no scan limit"
+        elif cutoff > max_bytes:
+            ok, detail = False, f"scan limit {cutoff} bytes, more than {max_bytes}"
+        else:
+            ok, detail = True, f"enforced, scan limit {cutoff} bytes"
+        results[f"workgroup {w['workgroup']}"] = {"passed": ok, "detail": detail}
+    if not tables:
+        results["tables"] = {"passed": False, "detail": "no tables in the corpus database"}
+    if not workgroups:
+        results["workgroups"] = {"passed": False, "detail": "no enabled workgroups"}
+    return _judged("settings", results)
 
 
 def evaluate_object_lock(config: dict, mode: str, min_days: int) -> tuple[bool, str]:

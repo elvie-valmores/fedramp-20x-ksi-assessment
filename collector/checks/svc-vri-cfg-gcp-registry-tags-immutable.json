@@ -1,0 +1,22 @@
+{
+  "id": "svc-vri-cfg-gcp-registry-tags-immutable",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every Artifact Registry Docker repository has immutable tags",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "registries_immutable",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-vri-cfg-aws-registry-tags-immutable"
+      ]
+    }
+  ]
+}

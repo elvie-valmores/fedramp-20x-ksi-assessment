@@ -1,0 +1,18 @@
+{
+  "id": "iam-snu-cfg-aws-no-user-access-keys",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No IAM user holds an access key, active or inactive",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "iam_user_access_keys"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.verify.1",
+      "covers": "full"
+    }
+  ]
+}

@@ -14,7 +14,7 @@
     {
       "row": "KSI-PIY-GIV.verify.1",
       "covers": "partial",
-      "gap": "Checks the recorder exists and is recording in us-east-1. It does not assert that all supported resource types are recorded, or enumerate the in-scope regions."
+      "gap": "By design, the recorder records a declared list of resource types, not all supported types: Config bills per item recorded and the environment is rebuilt often (DECISIONS.md, 2026-09-05). That the live recorder matches the declared list is shown by svc-acm-ops-aws-no-drift, not here. Only us-east-1 is in scope."
     }
   ]
 }

@@ -415,6 +415,7 @@ def _tls(**change) -> dict:
 
 
 PAB_ON = {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}
+CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
 
@@ -531,6 +532,31 @@ CFG_CASES = [
         "no block": None,
         "one setting off": {**PAB_ON, "RestrictPublicBuckets": False},
     }),
+    ("evaluate_key_rotation", lambda c: cfg.evaluate_key_rotation(c, 365), [{"key": "a", "rotation_days": 365}], {
+        "rotation off": [{"key": "a", "rotation_days": 365}, {"key": "b", "rotation_days": None}],
+        "too slow": [{"key": "a", "rotation_days": 730}],
+        "no keys": [],
+    }),
+    ("evaluate_registries_immutable", cfg.evaluate_registries_immutable,
+     [{"repository": "r", "setting": "IMMUTABLE", "immutable": True}], {
+        "one mutable": [{"repository": "r", "setting": "IMMUTABLE", "immutable": True},
+                        {"repository": "s", "setting": "MUTABLE", "immutable": False}],
+        "no repositories": [],
+    }),
+    # No users passes: here absence is the claim, unlike every bucket check.
+    ("evaluate_no_user_access_keys", cfg.evaluate_no_user_access_keys, [], {
+        "active key": [{"user": "u", "keys": [{"id": "AKIA1", "status": "Active"}]}],
+        "inactive key": [{"user": "u", "keys": [{"id": "AKIA1", "status": "Inactive"}]}],
+    }),
+    ("evaluate_log_corpus_limits", lambda c: cfg.evaluate_log_corpus_limits(*c, 1 << 30), CORPUS_OK, {
+        "projection off": ([{"table": "t", "projection": "false"}], CORPUS_OK[1]),
+        "projection unset": ([{"table": "t", "projection": None}], CORPUS_OK[1]),
+        "not enforced": (CORPUS_OK[0], [{"workgroup": "w", "enforced": False, "cutoff": 1 << 30}]),
+        "no limit": (CORPUS_OK[0], [{"workgroup": "w", "enforced": True, "cutoff": None}]),
+        "limit too high": (CORPUS_OK[0], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 40}]),
+        "unlimited second workgroup": (CORPUS_OK[0], CORPUS_OK[1] + [{"workgroup": "primary", "enforced": False, "cutoff": None}]),
+        "no tables": ([], CORPUS_OK[1]),
+    }),
     ("evaluate_gcs_public_access", cfg.evaluate_gcs_public_access, GCS_IAM_OK, {
         "nothing reported": None,
         # Inherited defers to an organization policy this project does not have.
@@ -644,6 +670,10 @@ CFG_RESOURCES = {
     "evaluate_tls_only": "s3_buckets_deny_insecure_transport",
     "evaluate_public_access_blocked": "s3_buckets_block_public_access",
     "evaluate_gcs_public_access": "buckets_prevent_public_access",
+    "evaluate_key_rotation": "key_rotation",
+    "evaluate_registries_immutable": "registries_immutable",
+    "evaluate_no_user_access_keys": "iam_user_access_keys",
+    "evaluate_log_corpus_limits": "log_corpus_query_limits",
     "evaluate_object_lock": "s3_object_lock",
     "evaluate_trail_validation": "cloudtrail_log_file_validation",
     "evaluate_basic_roles": "basic_roles",

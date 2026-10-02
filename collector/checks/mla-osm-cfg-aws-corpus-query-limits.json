@@ -1,0 +1,21 @@
+{
+  "id": "mla-osm-cfg-aws-corpus-query-limits",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every table in the log corpus uses partition projection, and every enabled Athena workgroup enforces a scan limit of at most 1 GiB",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "log_corpus_query_limits",
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "max_bytes": 1073741824
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.verify.3",
+      "covers": "full"
+    }
+  ]
+}

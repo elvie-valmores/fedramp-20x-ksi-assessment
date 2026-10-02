@@ -1,0 +1,23 @@
+{
+  "id": "svc-asm-cfg-aws-keys-rotate",
+  "indicator": "KSI-SVC-ASM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every enabled AWS customer key rotates automatically, at least yearly (build row 3)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "key_rotation",
+    "region": "us-east-1",
+    "max_days": 365
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ASM.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-asm-cfg-gcp-keys-rotate"
+      ]
+    }
+  ]
+}
