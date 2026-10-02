@@ -1,0 +1,14 @@
+{
+  "id": "svc-vri-cfg-image-signed-analytics",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The build workflow signs every image it publishes -- the analytics image, built for GCP",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "step_present",
+    "job": "build-analytics",
+    "step": "sign the image"
+  }
+}

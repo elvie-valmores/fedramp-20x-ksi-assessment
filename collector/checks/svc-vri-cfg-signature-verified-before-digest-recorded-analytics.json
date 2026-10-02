@@ -1,0 +1,15 @@
+{
+  "id": "svc-vri-cfg-signature-verified-before-digest-recorded-analytics",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The signature is verified before the digest is recorded, so an unverifiable image never becomes a deployable reference -- the analytics image, built for GCP",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "build-and-push.yml",
+    "assertion": "step_precedes",
+    "job": "build-analytics",
+    "before": "verify the signature",
+    "after": "record the digest"
+  }
+}
