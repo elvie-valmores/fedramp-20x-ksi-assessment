@@ -1,0 +1,24 @@
+{
+  "id": "cna-rnt-cfg-aws-no-open-egress",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No security group rule in the project VPC permits egress to anywhere; there are no recorded exceptions",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "security_group_reach",
+    "region": "us-east-1",
+    "vpc_name": "fedramp-20x-ksi",
+    "direction": "egress",
+    "allowed": []
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.2",
+      "covers": "partial",
+      "gap": "The project VPC only. The account's default VPC, outside Terraform, keeps AWS's allow-all default group (an open item). GCP: the Cloud Run job has no VPC, so no egress firewall applies to it; it reaches AWS over the internet by design."
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

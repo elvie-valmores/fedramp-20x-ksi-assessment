@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from base import CheckDefinition
+import environments
 from registry import MECHANISMS
 
 CHECKS_DIR = Path(__file__).resolve().parent / "checks"
@@ -76,6 +77,22 @@ def main() -> int:
             print(f"[{check.id}] SKIP -- {outcome['message']}")
             all_passed = False
             continue
+
+        if check.requires_environment:
+            try:
+                up, anchors = environments.standing(check.requires_environment)
+            except Exception as exc:
+                # Not knowing is not the same as absent: an error, never a skip.
+                outcome.update(status="ERROR", message=f"could not tell whether "
+                               f"{check.requires_environment} is standing: {exc}")
+                print(f"[{check.id}] ERROR -- {outcome['message']}")
+                all_passed = False
+                continue
+            if not up:
+                outcome.update(status="NOT_STANDING", message=f"{check.requires_environment} is not "
+                               "standing (no anchor resource exists); not judged")
+                print(f"[{check.id}] NOT_STANDING -- {outcome['message']}")
+                continue
 
         try:
             result = mechanism.run(check)

@@ -1,0 +1,34 @@
+{
+  "id": "cna-rnt-cfg-aws-no-open-ingress",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No security group rule in the project VPC admits traffic from anywhere, except the load balancer's 443 and 80, the declared public face",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "security_group_reach",
+    "region": "us-east-1",
+    "vpc_name": "fedramp-20x-ksi",
+    "direction": "ingress",
+    "allowed": [
+      {
+        "group": "fedramp-20x-ksi-alb",
+        "port": 443,
+        "reason": "the public HTTPS listener"
+      },
+      {
+        "group": "fedramp-20x-ksi-alb",
+        "port": 80,
+        "reason": "HTTP, which only redirects to HTTPS (edge.tf)"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.3",
+      "covers": "full"
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

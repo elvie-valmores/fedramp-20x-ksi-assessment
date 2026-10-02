@@ -35,6 +35,10 @@ class CheckDefinition:
     # are validated by sdr/matrix_rows.py (DECISIONS.md, 2026-10-02).
     matrix_rows: list[dict[str, Any]] = field(default_factory=list)
     unlinked_reason: str = ""
+    # An ephemeral environment the check reads, e.g. "aws-phase1". While it
+    # is not standing the check is recorded NOT_STANDING, not judged
+    # (environments.py).
+    requires_environment: str = ""
 
 
 @dataclass

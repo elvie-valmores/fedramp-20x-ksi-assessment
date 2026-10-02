@@ -118,13 +118,18 @@ def link_problems(checks: list[dict], rows: list[dict]) -> list[str]:
 
 def coverage(checks: list[dict], rows: list[dict]) -> dict[str, dict]:
     """Per row: "full", "partial" or "none", the checks behind it, and the gaps."""
-    result = {r["id"]: {"status": "none", "checks": [], "gaps": []} for r in rows}
+    result = {r["id"]: {"status": "none", "checks": [], "gaps": [], "environments": {}} for r in rows}
     for c in checks:
         for link in c.get("matrix_rows", []):
             entry = result.get(link["row"])
             if entry is None:
                 continue
             entry["checks"].append(c["id"])
+            if c.get("requires_environment"):
+                # Judged only while that environment stands; said wherever
+                # the check is named, so a row is never read as proven daily
+                # when it is proven per session.
+                entry["environments"][c["id"]] = c["requires_environment"]
             if link["covers"] == "full":
                 # A "with" group is checked whole by link_problems; any
                 # member's full link stands for the group.
@@ -157,6 +162,9 @@ def report(checks: list[dict], rows: list[dict]) -> str:
         f"- **{counts['none']} none**: no check yet.",
         "",
         f"{len(touched)} of {len(indicators)} determinations have at least one row with automated evidence.",
+        f"{sum(1 for v in cov.values() if v['status'] != 'none' and v['environments'] and set(v['environments']) == set(v['checks']))} "
+        "of the covered rows rest only on checks of the ephemeral environment, marked \"while ... stands\": "
+        "those are judged in sessions when it is applied, not daily.",
         "A row id is positional (`KSI-SVC-SIN.verify.1` is the first VERIFY row under KSI-SVC-SIN); "
         "`docs/matrix-rows.json` holds each id with its row's text.",
         "",
@@ -176,7 +184,9 @@ def report(checks: list[dict], rows: list[dict]) -> str:
             v = cov[r["id"]]
             cell = {"full": "**full**", "partial": "partial", "none": "—"}[v["status"]]
             if v["checks"]:
-                cell += ": " + ", ".join(f"`{c}`" for c in v["checks"])
+                cell += ": " + ", ".join(
+                    f"`{c}`" + (f" (while {v['environments'][c]} stands)" if c in v["environments"] else "")
+                    for c in v["checks"])
             if v["status"] == "partial":
                 cell += ". Missing: " + " ".join(dict.fromkeys(g.split(": ", 1)[1] for g in v["gaps"]))
             artifact, cell = (x.replace("|", "\\|") for x in (r["artifact"], cell))

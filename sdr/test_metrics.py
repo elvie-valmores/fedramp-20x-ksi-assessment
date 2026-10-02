@@ -57,6 +57,15 @@ class Metrics(unittest.TestCase):
         self.assertIn("2026-10-01: 2/2 passed", e["evidenceText"])
         self.assertIn("2026-10-02: 1/2 passed (not passing: c1)", e["evidenceText"])
 
+    def test_not_standing_is_not_judged(self):
+        # A torn-down environment is neither a pass nor an error that day.
+        run = _run("2026-10-04T05:30:00+00:00", "ci", {"c1": "PASS", "c2": "NOT_STANDING"})
+        counts = emit._day_counts(run, "KSI-X")
+        self.assertEqual((counts["checks"], counts["passed"], counts["errored"], counts["not_standing"]), (1, 1, 0, 1))
+        self.assertEqual(counts["not_passing"], [])
+        # Only NOT_STANDING: no data point that day, rather than a 0 of 0.
+        self.assertIsNone(emit._day_counts(_run("2026-10-04T05:30:00+00:00", "ci", {"c2": "NOT_STANDING"}), "KSI-X"))
+
     def test_no_data_no_object(self):
         self.assertIsNone(emit.metrics_evidence("KSI-NONE", self.history, date(2026, 10, 2)))
 

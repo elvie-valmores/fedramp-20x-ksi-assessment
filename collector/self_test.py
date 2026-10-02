@@ -29,6 +29,7 @@ import tempfile
 from pathlib import Path
 
 from base import CheckDefinition
+import environments as env
 import mechanisms.cloud_api_config_read as cfg
 import mechanisms.inventory_reconciliation as inv
 import mechanisms.log_query as lq
@@ -456,6 +457,26 @@ SCAN_OK = {"scanType": "ENHANCED", "rules": [{"scanFrequency": "CONTINUOUS_SCAN"
 SCHED_OK = {"state": "ENABLED", "schedule": "rate(1 day)", "targets": ["arn:f"], "function_arn": "arn:f"}
 CERT_OK = {"domain": "d", "type": "AMAZON_ISSUED", "status": "ISSUED", "eligible": False, "in_use": False,
            "validation": ["DNS"], "days_left": 300}
+ROUTES_OK = [{"id": "rt-a", "tier": "app", "routes": [{"destination": "10.0.0.0/16", "target": "local"},
+                                                    {"destination": "pl-1", "target": "vpce-1"}]},
+             {"id": "rt-p", "tier": "public", "routes": [{"destination": "0.0.0.0/0", "target": "igw-1"}]}]
+SG_ALLOWED = [{"group": "alb", "port": 443, "reason": "public"}]
+SG_OK = [{"group": "alb", "protocol": "tcp", "from": 443, "to": 443, "cidr": "0.0.0.0/0"},
+         {"group": "api", "protocol": "tcp", "from": 8443, "to": 8443, "cidr": None}]
+EP_OK = [{"service": "logs", "type": "Interface", "policy": {"Statement": [
+    {"Effect": "Allow", "Principal": {"AWS": ["arn:aws:iam::1:role/api"]}, "Action": ["logs:PutLogEvents"], "Resource": "*"}]}},
+         {"service": "s3", "type": "Gateway", "policy": {"Statement": [
+    {"Effect": "Allow", "Principal": "*", "Action": ["s3:GetObject"], "Resource": "*",
+     "Condition": {"ArnEquals": {"aws:PrincipalArn": ["arn:aws:iam::1:role/api"]}}}]}}]
+LB_LISTENERS = [{"port": 443, "protocol": "HTTPS", "policy": "ELBSecurityPolicy-TLS13-1-2-2021-06", "actions": [{"type": "forward"}]},
+                {"port": 80, "protocol": "HTTP", "policy": None,
+                 "actions": [{"type": "redirect", "protocol": "HTTPS", "status": "HTTP_301"}]}]
+LB_GROUPS = [{"name": "api", "protocol": "HTTPS", "health_protocol": "HTTPS"}]
+DB_INSTANCE = {"iam_auth": True, "backup_days": 7, "encrypted": True}
+CONTAINER_OK = {"name": "api", "image": "r/api@sha256:" + "a" * 64, "command": ["python", "main.py"], "user": "10001:10001",
+                "readonlyRootFilesystem": True, "privileged": False, "portMappings": [],
+                "linuxParameters": {"capabilities": {"add": [], "drop": ["ALL"]}}}
+BACKUP_OK = {"id": "b", "encrypted": True, "key": "k", "key_manager": "CUSTOMER", "key_state": "Enabled"}
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -706,6 +727,69 @@ CFG_CASES = [
         "disabled by inactivity": "disabled_inactivity",
         "unknown": None,
     }),
+    ("evaluate_private_routes", lambda c: cfg.evaluate_private_routes(c, ["app"]), ROUTES_OK, {
+        "NAT route": [{**ROUTES_OK[0], "routes": ROUTES_OK[0]["routes"] + [{"destination": "0.0.0.0/0", "target": "nat-1"}]}],
+        "internet gateway": [{**ROUTES_OK[0], "routes": [{"destination": "0.0.0.0/0", "target": "igw-1"}]}],
+        "peering": [{**ROUTES_OK[0], "routes": [{"destination": "10.9.0.0/16", "target": "pcx-1"}]}],
+        "no table for the tier": [ROUTES_OK[1]],
+    }),
+    ("evaluate_open_rules", lambda c: cfg.evaluate_open_rules(c, SG_ALLOWED, "ingress"), SG_OK, {
+        "undeclared group open": SG_OK + [{"group": "api", "protocol": "tcp", "from": 22, "to": 22, "cidr": "0.0.0.0/0"}],
+        "declared group, other port": SG_OK + [{"group": "alb", "protocol": "tcp", "from": 22, "to": 22, "cidr": "0.0.0.0/0"}],
+        "range including the port": [{"group": "alb", "protocol": "tcp", "from": 0, "to": 65535, "cidr": "0.0.0.0/0"}],
+        "all protocols": [{"group": "alb", "protocol": "-1", "from": None, "to": None, "cidr": "0.0.0.0/0"}],
+        "IPv6 everywhere": SG_OK + [{"group": "api", "protocol": "tcp", "from": 443, "to": 443, "cidr": "::/0"}],
+        "no rules": [],
+    }),
+    ("evaluate_endpoint_policies", cfg.evaluate_endpoint_policies, EP_OK, {
+        "AWS default policy": [{"service": "logs", "type": "Interface", "policy": {"Statement": [
+            {"Effect": "Allow", "Principal": "*", "Action": "*", "Resource": "*"}]}}],
+        "service wildcard": [{"service": "logs", "type": "Interface", "policy": {"Statement": [
+            {"Effect": "Allow", "Principal": {"AWS": ["arn:aws:iam::1:role/api"]}, "Action": "logs:*", "Resource": "*"}]}}],
+        "anyone, unconditioned": [{"service": "s3", "type": "Gateway", "policy": {"Statement": [
+            {"Effect": "Allow", "Principal": "*", "Action": ["s3:GetObject"], "Resource": "*"}]}}],
+        "no policy": [{"service": "s3", "type": "Gateway", "policy": {}}],
+    }),
+    ("evaluate_load_balancer_tls", lambda c: cfg.evaluate_load_balancer_tls(*c, ["ELBSecurityPolicy-TLS13-1-2-2021-06"]),
+     (LB_LISTENERS, LB_GROUPS), {
+        "old TLS policy": ([{**LB_LISTENERS[0], "policy": "ELBSecurityPolicy-2016-08"}, LB_LISTENERS[1]], LB_GROUPS),
+        "HTTP forwards": ([LB_LISTENERS[0], {**LB_LISTENERS[1], "actions": [{"type": "forward"}]}], LB_GROUPS),
+        "redirect to HTTP": ([LB_LISTENERS[0], {**LB_LISTENERS[1], "actions": [{"type": "redirect", "protocol": "HTTP", "status": "HTTP_301"}]}], LB_GROUPS),
+        "plain HTTP to targets": (LB_LISTENERS, [{**LB_GROUPS[0], "protocol": "HTTP"}]),
+        "no HTTPS listener": ([LB_LISTENERS[1]], LB_GROUPS),
+    }),
+    ("evaluate_database_settings", lambda c: cfg.evaluate_database_settings(*c, {"rds.force_ssl": "1"}, 7),
+     (DB_INSTANCE, {"rds.force_ssl": "1"}), {
+        "TLS not forced": (DB_INSTANCE, {"rds.force_ssl": "0"}),
+        "parameter unset": (DB_INSTANCE, {}),
+        "no IAM auth": ({**DB_INSTANCE, "iam_auth": False}, {"rds.force_ssl": "1"}),
+        "short retention": ({**DB_INSTANCE, "backup_days": 1}, {"rds.force_ssl": "1"}),
+        "unencrypted": ({**DB_INSTANCE, "encrypted": False}, {"rds.force_ssl": "1"}),
+    }),
+    ("evaluate_task_definitions (hardened)", lambda c: cfg.evaluate_task_definitions(c, "hardened"), {"api": [CONTAINER_OK]}, {
+        "writable root": {"api": [{**CONTAINER_OK, "readonlyRootFilesystem": False}]},
+        "root user": {"api": [{**CONTAINER_OK, "user": "0"}]},
+        "no user": {"api": [{**CONTAINER_OK, "user": None}]},
+        "capabilities kept": {"api": [{**CONTAINER_OK, "linuxParameters": {"capabilities": {"drop": []}}}]},
+        "capability added": {"api": [{**CONTAINER_OK, "linuxParameters": {"capabilities": {"add": ["NET_ADMIN"], "drop": ["ALL"]}}}]},
+        "privileged": {"api": [{**CONTAINER_OK, "privileged": True}]},
+        "no services": {},
+        "declared one-off with no definition": {"api": [CONTAINER_OK], "migrate": []},
+    }),
+    ("evaluate_task_definitions (explicit)", lambda c: cfg.evaluate_task_definitions(c, "explicit"), {"api": [CONTAINER_OK]}, {
+        "command inherited": {"api": [{k: v for k, v in CONTAINER_OK.items() if k != "command"}]},
+        "capabilities inherited": {"api": [{**CONTAINER_OK, "linuxParameters": {}}]},
+        "ports unstated": {"api": [{k: v for k, v in CONTAINER_OK.items() if k != "portMappings"}]},
+    }),
+    ("evaluate_task_definitions (digest)", lambda c: cfg.evaluate_task_definitions(c, "digest_pinned"), {"api": [CONTAINER_OK]}, {
+        "by tag": {"api": [{**CONTAINER_OK, "image": "r/api:git-abc"}]},
+    }),
+    ("evaluate_backups_restorable", cfg.evaluate_backups_restorable, [BACKUP_OK], {
+        # 2026-10-02 exactly: the database key scheduled for deletion at teardown.
+        "key pending deletion": [{**BACKUP_OK, "key_state": "PendingDeletion", "deletion_date": "2026-10-09"}],
+        "AWS-managed key": [{**BACKUP_OK, "key_manager": "AWS"}],
+        "unencrypted": [{**BACKUP_OK, "encrypted": False}],
+    }),
     ("evaluate_state_bucket", lambda c: cfg.evaluate_state_bucket(*c), ("Enabled", "AES256"), {
         "versioning suspended": ("Suspended", "AES256"),
         "never versioned": (None, "AES256"),
@@ -834,6 +918,15 @@ CFG_RESOURCES = {
     "evaluate_standards": "securityhub_standards",
     "evaluate_trail_data_events": "trail_data_events",
     "evaluate_state_bucket": "state_bucket",
+    "evaluate_private_routes": "private_routes",
+    "evaluate_open_rules": "security_group_reach",
+    "evaluate_endpoint_policies": "endpoint_policies",
+    "evaluate_load_balancer_tls": "load_balancer_tls",
+    "evaluate_database_settings": "database_settings",
+    "evaluate_task_definitions (hardened)": "task_definitions",
+    "evaluate_task_definitions (explicit)": "task_definitions",
+    "evaluate_task_definitions (digest)": "task_definitions",
+    "evaluate_backups_restorable": "database_backups_restorable",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",
     "evaluate_workflow_state": "workflow_active",
@@ -873,6 +966,11 @@ SINGLE_CASES = [
         "query failed, zero expected": ("FAILED", 0, "no_rows"),
         "rows where none expected": ("SUCCEEDED", 1, "no_rows"),
         "unknown expectation": ("SUCCEEDED", 3, "some_rows"),
+    }),
+    # The gate on ephemeral checks: any anchor makes the environment standing,
+    # so a half-torn-down one runs its checks instead of skipping them.
+    ("environments", lambda c: (env.evaluate_standing(c),), {"vpc": False, "database": True}, {
+        "nothing": {"vpc": False, "database": False},
     }),
     ("inventory_reconciliation", lambda c: inv.evaluate_min_count(*c), (_INV, "AWS::S3::Bucket", 2), {
         "too few": (_INV, "AWS::S3::Bucket", 3),

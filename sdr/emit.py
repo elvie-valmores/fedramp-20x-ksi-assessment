@@ -176,7 +176,9 @@ def evidence_row_statement(row: list[str], row_id: str | None = None, coverage: 
     # (sdr/matrix_rows.py). A row with no check says so rather than leaving
     # the reader to infer it from the evidence list.
     entry = coverage[row_id]
-    checks = ", ".join(f"`{c}`" for c in entry["checks"])
+    checks = ", ".join(
+        f"`{c}`" + (f" (judged only while {entry['environments'][c]} stands)" if c in entry.get("environments", {}) else "")
+        for c in entry["checks"])
     if entry["status"] == "full":
         return f"{statement} *Row `{row_id}`: automated by {checks}.*"
     if entry["status"] == "partial":
@@ -275,11 +277,16 @@ def load_history(directory: Path) -> dict[date, dict]:
 
 
 def _day_counts(run: dict, ksi_id: str) -> dict | None:
-    mine = [o for o in run["outcomes"] if o["check"]["indicator"] == ksi_id]
+    everything = [o for o in run["outcomes"] if o["check"]["indicator"] == ksi_id]
+    # A check whose environment was torn down was not judged that day. It is
+    # left out of the day's count rather than counted as an error: the
+    # environment is down by design between sessions (collector/environments.py).
+    mine = [o for o in everything if o["status"] != "NOT_STANDING"]
     if not mine:
         return None
     return {
         "checks": len(mine),
+        "not_standing": len(everything) - len(mine),
         "passed": sum(o["status"] == "PASS" for o in mine),
         "failed": sum(o["status"] == "FAIL" for o in mine),
         "errored": sum(o["status"] not in ("PASS", "FAIL") for o in mine),

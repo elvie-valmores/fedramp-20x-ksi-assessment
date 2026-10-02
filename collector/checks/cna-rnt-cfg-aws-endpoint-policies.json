@@ -1,0 +1,29 @@
+{
+  "id": "cna-rnt-cfg-aws-endpoint-policies",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every VPC endpoint carries a policy naming or conditioning its principals and allowing no wildcard action",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "endpoint_policies",
+    "region": "us-east-1",
+    "vpc_name": "fedramp-20x-ksi"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.6",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-ULN.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VCM.verify.4",
+      "covers": "full"
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

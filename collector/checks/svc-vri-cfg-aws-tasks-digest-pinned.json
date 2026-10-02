@@ -1,0 +1,28 @@
+{
+  "id": "svc-vri-cfg-aws-tasks-digest-pinned",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every container the services and the migration run references its image by digest, not tag",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "task_definitions",
+    "region": "us-east-1",
+    "cluster": "fedramp-20x-ksi",
+    "assertion": "digest_pinned",
+    "one_off_families": [
+      "fedramp-20x-ksi-migrate"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-vri-cfg-gcp-run-jobs-digest-pinned"
+      ]
+    }
+  ],
+  "requires_environment": "aws-phase2"
+}

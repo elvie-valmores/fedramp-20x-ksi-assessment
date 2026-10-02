@@ -1,0 +1,29 @@
+{
+  "id": "cna-rnt-cfg-aws-private-routes",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The app and data tiers' route tables route only within the VPC and to gateway endpoints: no internet, NAT, peering or transit route",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "private_routes",
+    "region": "us-east-1",
+    "vpc_name": "fedramp-20x-ksi",
+    "private_tiers": [
+      "app",
+      "data"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-ULN.verify.2",
+      "covers": "full"
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

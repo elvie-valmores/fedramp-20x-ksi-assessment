@@ -1,0 +1,34 @@
+{
+  "id": "svc-sin-cfg-aws-database-settings",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The database forces TLS (rds.force_ssl = 1), authenticates by IAM, encrypts storage, and keeps automated backups at least the declared 7 days",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "database_settings",
+    "region": "us-east-1",
+    "instance": "fedramp-20x-ksi",
+    "parameters": {
+      "rds.force_ssl": "1"
+    },
+    "min_backup_days": 7
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-OFA.verify.2",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VCM.verify.2",
+      "covers": "partial",
+      "gap": "IAM authentication is read from RDS; that password authentication is disabled for the application user is a database role attribute, which this does not connect to read."
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

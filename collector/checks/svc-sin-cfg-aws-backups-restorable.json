@@ -1,0 +1,19 @@
+{
+  "id": "svc-sin-cfg-aws-backups-restorable",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every retained database backup is encrypted with a customer key that is enabled, so it can still be restored",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "database_backups_restorable",
+    "region": "us-east-1"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.8",
+      "covers": "full"
+    }
+  ]
+}

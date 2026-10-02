@@ -1,0 +1,29 @@
+{
+  "id": "svc-sin-cfg-aws-alb-tls",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The load balancer's HTTPS listener uses the TLS 1.3 policy, HTTP only redirects to HTTPS with a 301, and every target group carries traffic and health checks over HTTPS (build row 2)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "load_balancer_tls",
+    "region": "us-east-1",
+    "load_balancer": "fedramp-20x-ksi",
+    "allowed_policies": [
+      "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VCM.verify.3",
+      "covers": "partial",
+      "gap": "The target group's TLS is read; the certificate inside the task is not, since nothing outside the container can read it."
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

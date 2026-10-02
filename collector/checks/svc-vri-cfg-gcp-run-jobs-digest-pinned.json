@@ -1,0 +1,26 @@
+{
+  "id": "svc-vri-cfg-gcp-run-jobs-digest-pinned",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The analytics pipeline's Cloud Run job references its image by digest, not tag",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "run_job_images",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "region": "us-central1",
+    "jobs": [
+      "analytics-pipeline"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-vri-cfg-aws-tasks-digest-pinned"
+      ]
+    }
+  ]
+}

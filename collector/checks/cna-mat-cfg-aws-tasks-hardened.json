@@ -1,0 +1,25 @@
+{
+  "id": "cna-mat-cfg-aws-tasks-hardened",
+  "indicator": "KSI-CNA-MAT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every container the services and the migration run has a read-only root filesystem, a non-root user, every capability dropped and none added, and no privileged mode",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "task_definitions",
+    "region": "us-east-1",
+    "cluster": "fedramp-20x-ksi",
+    "assertion": "hardened",
+    "one_off_families": [
+      "fedramp-20x-ksi-migrate"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-MAT.verify.2",
+      "covers": "full"
+    }
+  ],
+  "requires_environment": "aws-phase2"
+}

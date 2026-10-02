@@ -114,6 +114,22 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_scheduled_functions(check)
         if provider == "aws" and resource == "acm_certificates":
             return self._aws_acm_certificates(check)
+        if provider == "aws" and resource == "private_routes":
+            return self._aws_private_routes(check)
+        if provider == "aws" and resource == "security_group_reach":
+            return self._aws_security_group_reach(check)
+        if provider == "aws" and resource == "endpoint_policies":
+            return self._aws_endpoint_policies(check)
+        if provider == "aws" and resource == "load_balancer_tls":
+            return self._aws_load_balancer_tls(check)
+        if provider == "aws" and resource == "database_settings":
+            return self._aws_database_settings(check)
+        if provider == "gcp" and resource == "run_job_images":
+            return self._gcp_run_job_images(check)
+        if provider == "aws" and resource == "task_definitions":
+            return self._aws_task_definitions(check)
+        if provider == "aws" and resource == "database_backups_restorable":
+            return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
 
@@ -745,6 +761,196 @@ class CloudAPIConfigRead(Mechanism):
                     "days_left": (not_after - now).days if not_after else None,
                 })
         ok, detail, evidence = evaluate_certificates(certs, check.params["min_days"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    @staticmethod
+    def _project_vpc(ec2, name: str) -> str:
+        vpcs = ec2.describe_vpcs(Filters=[{"Name": "tag:Name", "Values": [name]}])["Vpcs"]
+        if len(vpcs) != 1:
+            raise RuntimeError(f"expected one VPC named {name}, found {len(vpcs)}")
+        return vpcs[0]["VpcId"]
+
+    def _aws_private_routes(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-RNT verify 4 / CNA-ULN verify 2: private route tables reach nothing outside.
+
+        Requires params: region, vpc_name, private_tiers. Route tables are
+        found by their Tier tag within the project VPC.
+        """
+        ec2 = boto3.client("ec2", region_name=check.params["region"])
+        vpc = self._project_vpc(ec2, check.params["vpc_name"])
+        tables = []
+        for t in ec2.describe_route_tables(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["RouteTables"]:
+            tags = {x["Key"]: x["Value"] for x in t.get("Tags", [])}
+            tables.append({"id": t["RouteTableId"], "tier": tags.get("Tier"), "routes": [
+                {"destination": r.get("DestinationCidrBlock") or r.get("DestinationIpv6CidrBlock")
+                 or r.get("DestinationPrefixListId"),
+                 "target": next((r[k] for k in ("GatewayId", "NatGatewayId", "NetworkInterfaceId",
+                                                "TransitGatewayId", "VpcPeeringConnectionId", "InstanceId",
+                                                "EgressOnlyInternetGatewayId") if r.get(k)), None)}
+                for r in t["Routes"]]})
+        ok, detail, evidence = evaluate_private_routes(tables, check.params["private_tiers"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_security_group_reach(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-RNT verify 2 and 3: no rule opens the VPC to or from anywhere, except as declared.
+
+        Requires params: region, vpc_name, direction ("ingress" or
+        "egress"), allowed ([{group, port, reason}]). Scoped to the project
+        VPC; the account's default VPC is outside it (an open item).
+        """
+        ec2 = boto3.client("ec2", region_name=check.params["region"])
+        vpc = self._project_vpc(ec2, check.params["vpc_name"])
+        names = {g["GroupId"]: g["GroupName"]
+                 for g in ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["SecurityGroups"]}
+        egress = check.params["direction"] == "egress"
+        rules = [
+            {"group": names[r["GroupId"]], "protocol": r["IpProtocol"], "from": r.get("FromPort"),
+             "to": r.get("ToPort"), "cidr": r.get("CidrIpv4") or r.get("CidrIpv6")}
+            for page in ec2.get_paginator("describe_security_group_rules").paginate(
+                Filters=[{"Name": "group-id", "Values": list(names)}])
+            for r in page["SecurityGroupRules"] if r["IsEgress"] == egress
+        ]
+        ok, detail, evidence = evaluate_open_rules(rules, check.params["allowed"], check.params["direction"])
+        evidence["groups"] = sorted(names.values())
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_endpoint_policies(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-RNT verify 6, CNA-ULN verify 3, SVC-VCM verify 4: endpoint policies restrict.
+
+        Requires params: region, vpc_name.
+        """
+        ec2 = boto3.client("ec2", region_name=check.params["region"])
+        vpc = self._project_vpc(ec2, check.params["vpc_name"])
+        endpoints = [
+            {"service": e["ServiceName"].split(".")[-1], "type": e["VpcEndpointType"],
+             "policy": json.loads(e.get("PolicyDocument") or "{}")}
+            for page in ec2.get_paginator("describe_vpc_endpoints").paginate(
+                Filters=[{"Name": "vpc-id", "Values": [vpc]}])
+            for e in page["VpcEndpoints"]
+        ]
+        ok, detail, evidence = evaluate_endpoint_policies(endpoints)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_load_balancer_tls(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-SIN verify 4: TLS policy, HTTP redirected, TLS to the targets.
+
+        Requires params: region, load_balancer, allowed_policies.
+        """
+        elb = boto3.client("elbv2", region_name=check.params["region"])
+        lb = elb.describe_load_balancers(Names=[check.params["load_balancer"]])["LoadBalancers"][0]
+        listeners = [
+            {"port": l["Port"], "protocol": l["Protocol"], "policy": l.get("SslPolicy"),
+             "actions": [{"type": a["Type"], **({"protocol": a["RedirectConfig"]["Protocol"],
+                                               "status": a["RedirectConfig"]["StatusCode"]}
+                                              if a["Type"] == "redirect" else {})}
+                         for a in l["DefaultActions"]]}
+            for l in elb.describe_listeners(LoadBalancerArn=lb["LoadBalancerArn"])["Listeners"]
+        ]
+        groups = [{"name": g["TargetGroupName"], "protocol": g["Protocol"],
+                   "health_protocol": g.get("HealthCheckProtocol")}
+                  for g in elb.describe_target_groups(LoadBalancerArn=lb["LoadBalancerArn"])["TargetGroups"]]
+        ok, detail, evidence = evaluate_load_balancer_tls(listeners, groups, check.params["allowed_policies"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_database_settings(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-SIN verify 3, SVC-VCM verify 2, CNA-OFA verify 2: the instance and its parameters.
+
+        Requires params: region, instance, parameters ({name: value}),
+        min_backup_days.
+        """
+        rds = boto3.client("rds", region_name=check.params["region"])
+        db = rds.describe_db_instances(DBInstanceIdentifier=check.params["instance"])["DBInstances"][0]
+        group = db["DBParameterGroups"][0]["DBParameterGroupName"]
+        wanted = set(check.params["parameters"])
+        values = {
+            p["ParameterName"]: p.get("ParameterValue")
+            for page in rds.get_paginator("describe_db_parameters").paginate(DBParameterGroupName=group)
+            for p in page["Parameters"] if p["ParameterName"] in wanted
+        }
+        instance = {"iam_auth": db.get("IAMDatabaseAuthenticationEnabled", False),
+                    "backup_days": db.get("BackupRetentionPeriod", 0), "encrypted": db.get("StorageEncrypted", False)}
+        ok, detail, evidence = evaluate_database_settings(instance, values, check.params["parameters"],
+                                                          check.params["min_backup_days"])
+        evidence["parameter_group"] = group
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_task_definitions(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-MAT verify 2, CNA-DFP verify 1, SVC-VRI verify 1: what the services run.
+
+        Requires params: region, cluster, assertion ("hardened",
+        "explicit" or "digest_pinned"), one_off_families. Reads the task
+        definition each service is running, not the latest revision of its
+        family: the running one is what the row is about. Tasks run once
+        rather than as a service (the migration) have no service to ask, so
+        their family's latest active revision is read; a declared one-off
+        family with no active revision fails.
+        """
+        ecs = boto3.client("ecs", region_name=check.params["region"])
+        cluster = check.params["cluster"]
+        arns = [a for page in ecs.get_paginator("list_services").paginate(cluster=cluster) for a in page["serviceArns"]]
+        definitions = {}
+        for i in range(0, len(arns), 10):
+            for svc in ecs.describe_services(cluster=cluster, services=arns[i:i + 10])["services"]:
+                td = ecs.describe_task_definition(taskDefinition=svc["taskDefinition"])["taskDefinition"]
+                definitions[svc["serviceName"]] = td["containerDefinitions"]
+        for family in check.params.get("one_off_families", []):
+            latest = ecs.list_task_definitions(familyPrefix=family, status="ACTIVE", sort="DESC",
+                                               maxResults=1)["taskDefinitionArns"]
+            definitions[family] = (ecs.describe_task_definition(taskDefinition=latest[0])["taskDefinition"]
+                                   ["containerDefinitions"] if latest else [])
+        ok, detail, evidence = evaluate_task_definitions(definitions, check.params["assertion"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _gcp_run_job_images(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-VRI verify 1, GCP: every Cloud Run job's containers are pinned by digest.
+
+        Requires params: project_id, region, jobs. Read from Cloud Run, the
+        configuration that runs, with the same judgement as ECS's.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        p = check.params
+        session = AuthorizedSession(impersonated_token(p["project_id"]))
+        definitions = {}
+        for job in p["jobs"]:
+            response = session.get(
+                f"https://run.googleapis.com/v2/projects/{p['project_id']}/locations/{p['region']}/jobs/{job}", timeout=30)
+            response.raise_for_status()
+            containers = response.json()["template"]["template"].get("containers", [])
+            definitions[job] = [{"name": c.get("name") or job, "image": c.get("image", "")} for c in containers]
+        ok, detail, evidence = evaluate_task_definitions(definitions, "digest_pinned")
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_database_backups_restorable(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-SIN verify 8: every retained backup is encrypted with a customer key that can still decrypt it.
+
+        Requires param: region. Snapshots and retained automated backups
+        persist between sessions by design (DECISIONS.md, 2026-09-05), so
+        this reads them whether or not the environment stands. A backup
+        whose key is pending deletion becomes unrestorable on the key's
+        deletion date, which is reported.
+        """
+        region = check.params["region"]
+        rds = boto3.client("rds", region_name=region)
+        kms = boto3.client("kms", region_name=region)
+        backups = []
+        for page in rds.get_paginator("describe_db_snapshots").paginate():
+            for s in page["DBSnapshots"]:
+                backups.append({"id": s["DBSnapshotIdentifier"], "encrypted": s.get("Encrypted", False),
+                                "key": s.get("KmsKeyId")})
+        for page in rds.get_paginator("describe_db_instance_automated_backups").paginate():
+            for b in page["DBInstanceAutomatedBackups"]:
+                if b.get("Status") == "retained":
+                    backups.append({"id": f"retained automated backups of {b['DBInstanceIdentifier']}",
+                                    "encrypted": b.get("Encrypted", False), "key": b.get("KmsKeyId")})
+        for b in backups:
+            if b["key"]:
+                meta = kms.describe_key(KeyId=b["key"])["KeyMetadata"]
+                b.update(key_manager=meta["KeyManager"], key_state=meta["KeyState"],
+                         deletion_date=str(meta.get("DeletionDate") or "") or None)
+        ok, detail, evidence = evaluate_backups_restorable(backups)
         return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
@@ -1643,6 +1849,178 @@ def evaluate_workflow_state(state: str | None) -> tuple[bool, str]:
     """Only "active" runs. GitHub's other states are all ways of not running:
     disabled_manually, disabled_inactivity, disabled_fork, deleted."""
     return state == "active", f"workflow state {state!r}"
+
+
+_WIDE = ("0.0.0.0/0", "::/0")
+
+
+def evaluate_private_routes(tables: list[dict], private_tiers: list[str]) -> tuple[bool, str, dict]:
+    """Private route tables route only within the VPC and to gateway endpoints.
+
+    "local" and vpce- targets are the only ones allowed: an internet or NAT
+    gateway, a peering, a transit gateway or an instance route all reach
+    outside. Every private tier must have a table, or there is nothing to judge.
+    """
+    results = {}
+    for tier in private_tiers:
+        mine = [t for t in tables if t["tier"] == tier]
+        if not mine:
+            results[f"tier {tier}"] = {"passed": False, "detail": "no route table for this tier"}
+        for t in mine:
+            outside = [f"{r['destination']} via {r['target']}" for r in t["routes"]
+                       if not (r["target"] == "local" or (r["target"] or "").startswith("vpce-"))]
+            results[f"{tier} {t['id']}"] = {"passed": not outside,
+                                            "detail": "routes outside the VPC: " + ", ".join(outside) if outside
+                                            else "local and gateway-endpoint routes only"}
+    return _judged("route tables", results)
+
+
+def evaluate_open_rules(rules: list[dict], allowed: list[dict], direction: str) -> tuple[bool, str, dict]:
+    """No rule open to 0.0.0.0/0 or ::/0, except a declared (group, port).
+
+    An allowance names one port. A rule open to everywhere on all
+    protocols, or a range, never matches one, so it always fails.
+    """
+    ok_pairs = {(a["group"], a["port"]) for a in allowed}
+    results = {}
+    for r in rules:
+        if r["cidr"] not in _WIDE:
+            continue
+        key = f"{r['group']} {r['protocol']} {r['from']}-{r['to']} {r['cidr']}"
+        single = r["protocol"] == "tcp" and r["from"] == r["to"]
+        allowed_here = single and (r["group"], r["from"]) in ok_pairs
+        results[key] = {"passed": allowed_here,
+                        "detail": "declared public-facing" if allowed_here else f"{direction} open to {r['cidr']}"}
+    if not rules:
+        return False, "no rules found -- nothing to judge", {"rules": {}, "failing": []}
+    if not results:
+        return True, f"no {direction} rule open to anywhere", {"rules": {}, "failing": []}
+    return _judged("rules", results)
+
+
+def evaluate_endpoint_policies(endpoints: list[dict]) -> tuple[bool, str, dict]:
+    """Every endpoint carries a policy that restricts both who and what.
+
+    An Allow statement must name its principals or condition them, and must
+    not allow every action. AWS's default endpoint policy -- everyone,
+    everything -- fails both.
+    """
+    results = {}
+    for e in endpoints:
+        problems = []
+        statements = [s for s in e["policy"].get("Statement", []) if s.get("Effect") == "Allow"]
+        if not statements:
+            problems.append("no policy")
+        for s in statements:
+            principal = s.get("Principal")
+            everyone = principal == "*" or (isinstance(principal, dict) and "*" in _as_list(principal.get("AWS", [])))
+            if everyone and not s.get("Condition"):
+                problems.append("any principal, unconditioned")
+            if any(a == "*" or a.endswith(":*") for a in _as_list(s.get("Action", []))):
+                problems.append("every action")
+        results[f"{e['service']} ({e['type']})"] = {"passed": not problems,
+                                                     "detail": "; ".join(problems) or "principals and actions restricted"}
+    return _judged("endpoints", results)
+
+
+def evaluate_load_balancer_tls(listeners: list[dict], groups: list[dict],
+                               allowed_policies: list[str]) -> tuple[bool, str, dict]:
+    results = {}
+    for l in listeners:
+        name = f"listener {l['protocol']}:{l['port']}"
+        if l["protocol"] == "HTTPS":
+            ok = l["policy"] in allowed_policies
+            results[name] = {"passed": ok, "detail": f"policy {l['policy']}"}
+        elif l["protocol"] == "HTTP":
+            redirects = [a for a in l["actions"] if a["type"] == "redirect"]
+            ok = bool(redirects) and all(a.get("protocol") == "HTTPS" and a.get("status") == "HTTP_301" for a in redirects) \
+                and len(redirects) == len(l["actions"])
+            results[name] = {"passed": ok, "detail": "redirects to HTTPS (301)" if ok else f"actions {l['actions']}"}
+        else:
+            results[name] = {"passed": False, "detail": f"unexpected protocol {l['protocol']}"}
+    if not any(l["protocol"] == "HTTPS" for l in listeners):
+        results["https listener"] = {"passed": False, "detail": "none"}
+    for g in groups:
+        ok = g["protocol"] == "HTTPS" and g["health_protocol"] == "HTTPS"
+        results[f"target group {g['name']}"] = {"passed": ok,
+                                                "detail": f"traffic {g['protocol']}, health checks {g['health_protocol']}"}
+    return _judged("settings", results)
+
+
+def evaluate_database_settings(instance: dict, values: dict, required: dict, min_backup_days: int) -> tuple[bool, str, dict]:
+    results = {name: {"passed": values.get(name) == want, "detail": f"{values.get(name)!r}, required {want!r}"}
+               for name, want in required.items()}
+    results["IAM authentication"] = {"passed": bool(instance["iam_auth"]), "detail": str(instance["iam_auth"])}
+    results["backup retention"] = {"passed": instance["backup_days"] >= min_backup_days,
+                                   "detail": f"{instance['backup_days']} days, required {min_backup_days}"}
+    results["storage encrypted"] = {"passed": bool(instance["encrypted"]), "detail": str(instance["encrypted"])}
+    return _judged("settings", results)
+
+
+def _container_problems(c: dict, assertion: str) -> list[str]:
+    linux = c.get("linuxParameters") or {}
+    caps = linux.get("capabilities") or {}
+    if assertion == "hardened":
+        problems = []
+        if not c.get("readonlyRootFilesystem"):
+            problems.append("root filesystem writable")
+        user = str(c.get("user") or "")
+        if not user or user.split(":")[0] in ("root", "0"):
+            problems.append(f"user {user or 'unset'}")
+        if "ALL" not in (caps.get("drop") or []):
+            problems.append("capabilities not dropped")
+        if caps.get("add"):
+            problems.append(f"capabilities added: {caps['add']}")
+        if c.get("privileged"):
+            problems.append("privileged")
+        return problems
+    if assertion == "explicit":
+        return [f"{field} not stated" for field, present in (
+            ("command", bool(c.get("command") or c.get("entryPoint"))),
+            ("user", bool(c.get("user"))),
+            ("capabilities", "capabilities" in linux),
+            ("ports", "portMappings" in c),
+        ) if not present]
+    if assertion == "digest_pinned":
+        return [] if "@sha256:" in c.get("image", "") else [f"image by tag: {c.get('image')}"]
+    raise ValueError(f"unknown assertion {assertion!r}")
+
+
+def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str) -> tuple[bool, str, dict]:
+    """Every container of every running service's task definition. A
+    definition with no containers is one that should exist and does not."""
+    results = {}
+    for service, containers in definitions.items():
+        if not containers:
+            results[service] = {"passed": False, "detail": "no active task definition"}
+        for c in containers:
+            problems = _container_problems(c, assertion)
+            results[f"{service}/{c.get('name')}"] = {"passed": not problems, "detail": "; ".join(problems) or "ok"}
+    return _judged("containers", results)
+
+
+def evaluate_backups_restorable(backups: list[dict]) -> tuple[bool, str, dict]:
+    """Every backup encrypted with a customer key that is enabled.
+
+    A key pending deletion still decrypts until its date and never after,
+    so a backup under it has an expiry nobody chose. No backups at all
+    passes: whether backups exist is CNA-OFA's question, not this row's.
+    """
+    if not backups:
+        return True, "no database backups retained", {"backups": {}, "failing": []}
+    results = {}
+    for b in backups:
+        if not b["encrypted"]:
+            ok, detail = False, "not encrypted"
+        elif b.get("key_manager") != "CUSTOMER":
+            ok, detail = False, f"encrypted with an AWS-managed key ({b.get('key')})"
+        elif b.get("key_state") != "Enabled":
+            ok, detail = False, (f"key {b.get('key_state')}"
+                                 + (f": unrestorable after {b['deletion_date']}" if b.get("deletion_date") else ""))
+        else:
+            ok, detail = True, "customer key, enabled"
+        results[b["id"]] = {"passed": ok, "detail": detail}
+    return _judged("backups", results)
 
 
 def evaluate_state_bucket(versioning: str | None, encryption: str | None) -> tuple[bool, str]:
