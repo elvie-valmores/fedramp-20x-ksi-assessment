@@ -50,12 +50,13 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 63 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 74 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  25 are fully automated, 13 partly, and 342 not yet, across 17 of 40 determinations (2026-10-02).
+  38 are fully automated, 16 partly, and 342 not yet, across 20 of 40 determinations (2026-10-02).
+  14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
@@ -234,8 +235,9 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 25 are fully automated, 13 partly, and 342 not
-yet. 17 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 38 are fully automated, 16 partly, and 326 not
+yet. 20 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
+ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
 1. **More check definitions.** The CFG rows that persistent resources can answer are mostly done.
@@ -251,7 +253,14 @@ by any check at all. In rough priority:
 3. ~~**Negative controls for the older handlers.**~~ Done 2026-10-02: every check's judgement now has
    one (51 assertions), and the SDR lists a control for every check.
 
-**At the next phase 1:**
+**At the next phase 1 and 2:**
+
+- **Prove the gated checks.** Run them with
+  `run_checks.py --only 'cna-rnt-*' --only 'svc-sin-cfg-aws-alb*' --only 'svc-sin-cfg-aws-database*'`,
+  and at phase 2 add `--only '*tasks-*'`.
+  - Each should go from NOT_STANDING to PASS.
+  - A FAIL is either a finding or a check to correct; fix whichever it is in the session.
+  - Their evaluators are tested; their API reads are not yet.
 
 - Confirm `aws_cloudwatch_log_group.rds["postgresql"]` was imported (its `import` block is in
   `database.tf`) and is under the logs key.
@@ -287,6 +296,8 @@ by any check at all. In rough priority:
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
 | Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
+| Retained database backups expire with their key | **Open, for a decision; time-bound.** The database key is ephemeral (7-day deletion), so backups kept between sessions become unrestorable 7 days after each teardown. Today's go on 2026-10-09. `svc-sin-cfg-aws-backups-restorable` fails on it. Options are in DECISIONS.md, "Checks of the ephemeral environment are gated" |
+| Account default VPC | Open, for a decision. It is outside Terraform, and its default security group allows all egress. The network checks are scoped to the project VPC |
 | Analytics image not registry-scanned | Open, for a decision. Artifact Registry has no Container Scanning; the image's OS packages are unscanned, and its Python dependencies are audited in CI (SVC-EIS v1, partial) |
 | Log store does not restrict object reads | Open, for a decision, with the MLA-ALA lane model. The readers would have to be named: the normalizer, the detection query, the collector's run history and the operator (MLA-ALA v5) |
 | ECR lifecycle expires deployable tags | Fixed 2026-10-02: it keeps 10 builds and their signatures, counted per kind, checked by preview and applied. Orphaned buildx attestations are left, since no lifecycle rule reaches them |

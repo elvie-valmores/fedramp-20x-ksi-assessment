@@ -7710,3 +7710,72 @@ emitter looks up for checks with no `assertion` or `resource` parameter. Every c
 listed control.
 
 **Verified:** 51 assertions pass, and all six refactored checks gave the same verdicts live.
+
+## 2026-10-02 — Checks of the ephemeral environment are gated; retained backups cannot outlive their key
+
+**The gate.** The application environment exists only during sessions, so a daily check of a route
+table or task definition has nothing to read on most days. Failing it daily would bury real failures
+under expected ones, and counting a skip as an error would distort SDR-CSX-KMT's metrics.
+
+How it works:
+
+- **Which checks:** a check names the environment it reads in `requires_environment` (`aws-phase1`
+  or `aws-phase2`).
+- **When it doesn't run:** while that environment is not standing, `run_checks.py` records the check
+  `NOT_STANDING`. It is left out of that day's metric counts, not counted as an error.
+- **Two rules keep the gate from hiding a failure** (`collector/environments.py`):
+  - **Any anchor makes the environment standing.** The anchors are the VPC, ECS cluster, load
+    balancer and database for phase 1, and the services for phase 2. A half-torn-down environment
+    therefore runs its checks, and the missing pieces fail.
+  - **A lookup error is an ERROR, never a skip.** Only a clean "not found" from every anchor's API
+    counts as absent.
+- **Where it shows:** the coverage report and the SDR name the environment beside every gated check.
+  The report counts the rows that rest only on such checks (14 today), since those are proven per
+  session, not daily.
+
+**Eleven checks.** All have negative controls (61 assertions).
+
+| Scope | Row | What it checks |
+|---|---|---|
+| Phase 1 | CNA-RNT v4, CNA-ULN v2 | Private route tables, by Tier tag in the project VPC: local and gateway-endpoint routes only |
+| Phase 1 | CNA-RNT v3 | No ingress from anywhere except the load balancer's 443 and 80 |
+| Phase 1 | CNA-RNT v2 (partial) | No egress to anywhere. Partial: the project VPC only, and the GCP job has no VPC |
+| Phase 1 | CNA-RNT v6, CNA-ULN v3, SVC-VCM v4 | Every endpoint policy names or conditions its principals, with no wildcard action |
+| Phase 1 | SVC-SIN v4, SVC-VCM v3 (partial) | The TLS 1.3 listener policy, HTTP 301 redirect to HTTPS, and HTTPS targets and health checks |
+| Phase 1 | SVC-SIN v3, CNA-OFA v2, SVC-VCM v2 (partial) | `rds.force_ssl=1`, IAM authentication, encrypted storage, and backups of at least 7 days |
+| Phase 2 | CNA-MAT v2 | Each container is hardened: read-only root filesystem, non-root user, all capabilities dropped, not privileged |
+| Phase 2 | CNA-DFP v1 | Each container states its command, user, capabilities and ports |
+| Phase 2 | SVC-VRI v1 | Each container's image is pinned by digest |
+| Not gated | SVC-VRI v1 | The Cloud Run job's image is pinned by digest. It passes |
+| Not gated | SVC-SIN v8 | Retained database backups are restorable. It fails (finding 1 below) |
+
+The phase 2 checks read the task definition each service runs, plus the migration family's latest
+active revision.
+
+The three task-definition judgements pass on the last session's revisions of the api, worker and
+migrate tasks. The other gated checks are unproven until the next phase 1.
+
+**Finding 1: retained database backups expire with their key.** The 2026-09-05 cost posture keeps
+database snapshots between sessions for recovery testing (KSI-RPL-TRC). The instance has
+`delete_automated_backups = false`, and today's snapshot and retained automated backups exist.
+
+But the key that encrypts them is `aws_kms_key.database`:
+
+- Its description is "customer data at rest and its backups".
+- It is ephemeral, scheduled for deletion at every teardown with a 7-day window.
+
+So every retained backup becomes permanently unrestorable 7 days after the session that made it.
+Today's backups expire 2026-10-09. The design's persistence is defeated by its own key lifecycle.
+
+`svc-sin-cfg-aws-backups-restorable` fails on it daily, naming the date. **Open, for a decision.**
+The options are:
+
+- keep the database key across sessions, about 1 USD a month, with its policy reconsidered because
+  it names ephemeral roles; or
+- copy each retained snapshot under a persistent key at teardown; or
+- record that backups do not outlive a session, and drop the persistence claim.
+
+**Finding 2: the account's default VPC.** AWS's default VPC in us-east-1 is outside Terraform. Its
+default security group allows all egress, and anything launched without a VPC lands in it with
+public IPs. The network checks are scoped to the project VPC and say so. **Open, for a decision:**
+deleting the default VPC is an account-level change.
