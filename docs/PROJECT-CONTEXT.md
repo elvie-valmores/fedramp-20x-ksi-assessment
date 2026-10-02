@@ -258,14 +258,10 @@ by any check at all. In rough priority:
 3. ~~**Negative controls for the older handlers.**~~ Done 2026-10-02: every check's judgement now has
    one (51 assertions), and the SDR lists a control for every check.
 
-**At the next phase 1 and 2:**
-
-- **Prove the gated checks.** Run them with
-  `run_checks.py --only 'cna-rnt-*' --only 'svc-sin-cfg-aws-alb*' --only 'svc-sin-cfg-aws-database*'`,
-  and at phase 2 add `--only '*tasks-*'`.
-  - Each should go from NOT_STANDING to PASS.
-  - A FAIL is either a finding or a check to correct; fix whichever it is in the session.
-  - Their evaluators are tested; their API reads are not yet.
+**At the next phase 1 and 2:** the gated checks were proven on 2026-10-02, and all eleven pass.
+Run the full collector with `TF_VAR_deploy_services=true` and `TF_VAR_app_image_tag`; that day,
+76 of 77 passed. Confirm the detection query's first daily run under the log-read deny shows no
+AccessDenied.
 
 - Confirm `aws_cloudwatch_log_group.rds["postgresql"]` was imported (its `import` block is in
   `database.tf`) and is under the logs key.
@@ -277,14 +273,10 @@ by any check at all. In rough priority:
 
 **At the next phase 2:**
 
-- Deploy `TF_VAR_app_image_tag=git-70600724abeb` (or newer). That build carries the high-water mark,
-  and it is signed and was tested in CI (run 37042865065). ECR keeps the last 10 builds, so it
-  survives nine more.
-- Confirm the first landing's key carries `-through-<mark>`, and that a cycle with no new rows lands
-  nothing (log line "nothing new since the high-water mark"). Confirm `s3:ListBucket` works through
-  the endpoint. Until then, the fix is proven only by unit tests (2026-10-02 high-water mark entry).
+- Deploy `TF_VAR_app_image_tag=git-0cee46bbabef` (or newer). It carries the worker's high-water
+  mark, proven live on 2026-10-02. `git-70600724abeb` is equivalent for api and worker.
 
-**Phase 2 was last run 2026-10-02:** data crossed end to end (api, RDS, worker, S3 via the endpoint, the GCP job, BigQuery).
+**Phase 2 was last run 2026-10-02 (evening):** data crossed end to end. The worker's mark and the analytics fix were both proven live.
 
 ### Open items
 
@@ -300,7 +292,8 @@ by any check at all. In rough priority:
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
+| Worker drops a batch whose landing fails | **Fixed and proven live 2026-10-02:** marked keys, quiet cycles land nothing, and listing works through the endpoint |
+| Analytics dropped rows whose id an earlier session used | **Fixed and proven live 2026-10-02:** the MERGE matches on (id, recorded_at); the drop was reproduced with the old image and closed with the new |
 | Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
 | Detection query under the log-read deny | Check its first daily run after 2026-10-02 20:40 UTC: no AccessDenied in `/aws/lambda/fedramp-20x-ksi-run-detection-query`. Simulation and every other reader already passed |

@@ -7834,3 +7834,61 @@ directly).
 
 **Also corrected:** the resume block said pre-key log objects "age out (7 days)". They do not, as
 item 2 explains.
+
+## 2026-10-02 (evening) — Session: gated checks proven, the worker's mark proven, and a silent drop in analytics found and fixed
+
+AWS phases 1 and 2 were applied in one plan by the operator: 111 resources added, nothing changed
+or destroyed. The image was `git-70600724abeb`, and the database came up under the persistent key
+(`681c3cba`). One fix was needed first: the `import` block for the RDS `/postgresql` log group had
+already adopted its object, and the last teardown removed that object, so it was deleted (`e32f0d0`).
+
+**The eleven gated checks, first live run:** ten passed as written.
+
+`cna-rnt-cfg-aws-endpoint-policies` failed on the S3 gateway endpoint's `AllowECRLayerPull`
+statement: any principal may `GetObject` from AWS's layer bucket, with no condition. That is
+correct, not a finding:
+
+- ECR serves image layers by pre-signed URL from its own bucket, so the request carries no project
+  principal to name.
+- The statement is bounded to that one bucket and that one action.
+
+The check gained declared exceptions instead of a looser rule. Each exception is an AWS-owned
+resource with its reason, it only waives the principal requirement, and controls show any other
+resource, or a wildcard action, still fails. All eleven pass.
+
+**The full collector against the standing environment: 76 of 77 passed.**
+
+- **Five AWS keys:** all five decrypt models hold. The database key's model was new. The worker was
+  dropped from the artifacts model, since by design it encrypts what it lands and never decrypts.
+- **Stores:** all 24 use their declared keys.
+- **Drift:** zero across 382 resources.
+- **Inventory:** all 70 resources are accounted for.
+- **Backups:** the only failure, expected. The new instance's backup under the persistent key
+  passes; the two under the deleted session key lapse 2026-10-09.
+
+**The worker's high-water mark, proven live:**
+
+- **Listing works through the S3 gateway endpoint.** The 21:02 cycle reached the database step,
+  which comes after the listing, before the migration had run.
+- **21:17 cycle:** 3 rows landed as `measurements-20261002T211723Z-through-20261002T211723Z.ndjson`.
+  Last session's extracts carry no mark, so it read every row.
+- **21:32 cycle:** "nothing new since the high-water mark, nothing landed (mark=21:17:23)".
+- **21:47 cycle:** exactly 1 row landed. The earlier rows are older than the mark less the overlap.
+
+**Finding: the analytics MERGE silently dropped rows whose id an earlier session had used.**
+
+- **The cause:** the AWS database is rebuilt every session, and its ids restart at 1. The MERGE
+  matched on `id` alone, so a new session's row with a used id was taken for a duplicate.
+- **How it came to light:** this session's first rows were ids 1–3 and missed last session's 4–7 by
+  luck. The pipeline's "merged 3 new rows" from 7 records read prompted the question.
+- **Reproduced live:** a row posted as id 4 was landed by the worker. The old image then reported
+  "8 records read, 0 new rows merged" and "pipeline complete": a silent loss.
+- **Fix** (`0cee46b`): match on `(id, recorded_at)`. A re-landed row carries both unchanged; a
+  different row reusing an id does not.
+- **Deployed:** build run 37066486575 signed and verified the image (`git-0cee46bbabef`, digest
+  `6db759e5…`), pinned in `pipeline.tf` and applied.
+- **Proven:** the next run merged exactly 1, and a rerun merged 0. BigQuery holds both id-4 rows,
+  one per session, 8 rows in all.
+- **The contract** is restated in the worker, the analytics job and `app/README.md`.
+- **What the worker's own decision record already said:** "the database is rebuilt every session and
+  its ids restart". The other side of the contract had not been told.
