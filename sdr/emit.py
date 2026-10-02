@@ -21,10 +21,12 @@ What the output does not claim, stated here and in the rendering:
     indicators and not the FRR rules; --frr is a switch so that the omission
     is a stated choice, not a silent one.
 
-    SDR-CSX-KMT's historical metrics do not exist. Since 2026-10-01 the
-    collector runs daily in GitHub Actions (collect.yml), but each run is kept
-    only as that run's artifact; no record store aggregates them, so the
-    evidence in any one record is one run. --runtime says whether this run
+    SDR-CSX-KMT's historical metrics come from the record store: since
+    2026-10-01 each daily run in GitHub Actions (collect.yml) writes its
+    results to the log store under collector-runs/, and --history hands
+    them to this emitter. Without --history a record carries one run and
+    says so. Collection began 2026-10-01, so "up to the past year" is what
+    exists. --runtime says whether this run
     came from that schedule or from a laptop, so the cycle statement is never
     wrong about which. The collection window is stated on every indicator.
 
@@ -42,7 +44,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -201,7 +203,9 @@ def indicator(det: Determination, outcomes: list[dict], context: dict, controls:
         "ksiValidation": validation,
         "ksiAssessment": assessment,
         "ksiTests": tests(det, mine, controls),
-        "ksiEvidence": [evidence(o, context) for o in mine],
+        "ksiEvidence": [evidence(o, context) for o in mine]
+        + [m for m in [metrics_evidence(det.ksi_id, context["history"], date.fromisoformat(context["run_date"]))]
+           if m and context["history"]],
     }
 
 
@@ -215,12 +219,100 @@ def collection_statement(mine: list[dict], context: dict) -> str:
     for o in mine:
         counts[o["status"]] = counts.get(o["status"], 0) + 1
     tally = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+    if context["history"]:
+        first = min(context["history"])
+        return (
+            f"**Automated evidence.** {len(mine)} collector check(s) in the run on "
+            f"{context['run_date']}: {tally}. Historical metrics (SDR-CSX-KMT) cover "
+            f"{len(context['history'])} day(s) of scheduled runs since {first}, in the metrics "
+            "evidence object below; the year is what exists, not a full year."
+        )
     return (
         f"**Automated evidence.** {len(mine)} collector check(s) in one run on "
-        f"{context['run_date']}: {tally}. Collection window: that single run. No historical "
-        "metrics exist: runs are scheduled daily, but no record store aggregates them, so "
-        "SDR-CSX-KMT's 30-day and yearly summaries cannot be produced."
+        f"{context['run_date']}: {tally}. Collection window: that single run. This record was "
+        "emitted without --history, so SDR-CSX-KMT's 30-day and yearly summaries are not included."
     )
+
+
+# --- historical metrics (SDR-CSX-KMT) ---
+#
+# Class C asks, per indicator, for a 30-day summary, a summary up to the past
+# year, and all daily data up to the past year, each "where available". The
+# data is the record store: every scheduled CI run writes its results to the
+# log store under collector-runs/ (Object Locked, evidence key), and
+# collect.yml hands those records to this emitter with --history. One data
+# point per day: the latest scheduled run that day. Workstation runs are never
+# stored, so the history is the schedule's. See DECISIONS.md, 2026-10-01.
+
+
+def load_history(directory: Path) -> dict[date, dict]:
+    """{day: that day's latest CI run record} from a directory of records."""
+    latest: dict[date, dict] = {}
+    for path in sorted(directory.rglob("*.json")):
+        run = json.loads(path.read_text())
+        if (run.get("run") or {}).get("runtime") != "ci":
+            continue
+        day = date.fromisoformat(run["started_at"][:10])
+        if day not in latest or run["started_at"] > latest[day]["started_at"]:
+            latest[day] = run
+    return latest
+
+
+def _day_counts(run: dict, ksi_id: str) -> dict | None:
+    mine = [o for o in run["outcomes"] if o["check"]["indicator"] == ksi_id]
+    if not mine:
+        return None
+    return {
+        "checks": len(mine),
+        "passed": sum(o["status"] == "PASS" for o in mine),
+        "failed": sum(o["status"] == "FAIL" for o in mine),
+        "errored": sum(o["status"] not in ("PASS", "FAIL") for o in mine),
+        "not_passing": sorted(o["check"]["id"] for o in mine if o["status"] != "PASS"),
+    }
+
+
+def _window(days: dict[date, dict], as_of: date, length: int) -> str:
+    start = as_of - timedelta(days=length - 1)
+    within = {d: c for d, c in days.items() if start <= d <= as_of}
+    if not within:
+        return f"no data in the {length} days to {as_of}"
+    clean = sum(c["passed"] == c["checks"] for c in within.values())
+    rate = sum(c["passed"] / c["checks"] for c in within.values()) / len(within)
+    misses: dict[str, int] = {}
+    for c in within.values():
+        for check in c["not_passing"]:
+            misses[check] = misses.get(check, 0) + 1
+    worst = ", ".join(f"{k} on {n} day(s)" for k, n in sorted(misses.items(), key=lambda x: (-x[1], x[0])))
+    return (
+        f"data on {len(within)} of {length} days ({min(within)} to {max(within)}); every check passed on "
+        f"{clean} of {len(within)}; mean daily pass rate {rate:.0%}"
+        + (f"; not passing: {worst}" if worst else "")
+    )
+
+
+def metrics_evidence(ksi_id: str, history: dict[date, dict], as_of: date) -> dict | None:
+    """The SDR-CSX-KMT evidence object for one indicator, or None without data."""
+    days = {d: c for d, run in history.items() if (c := _day_counts(run, ksi_id))}
+    if not days:
+        return None
+    year = {d: c for d, c in days.items() if as_of - timedelta(days=364) <= d <= as_of}
+    daily = "\n".join(
+        f"{d}: {c['passed']}/{c['checks']} passed"
+        + (f" (not passing: {', '.join(c['not_passing'])})" if c["not_passing"] else "")
+        for d, c in sorted(year.items())
+    )
+    return {
+        # The schema's evidenceType is an enumeration; a metrics summary is a
+        # Report, and the description says which kind.
+        "evidenceType": "Report",
+        "evidenceDescription": (
+            f"Historical metrics (SDR-CSX-KMT): daily scheduled collector results for {ksi_id}. Past 30 days: {_window(days, as_of, 30)}. "
+            f"Past year: {_window(days, as_of, 365)}. The record store began {min(days)}, so the year is "
+            "what exists, not a full year."
+        ),
+        "evidenceText": "All daily data, past year (latest scheduled run each day):\n" + daily,
+        "lastUpdated": max(days).isoformat(),
+    }
 
 
 def tests(det: Determination, mine: list[dict], controls: dict) -> list[str]:
@@ -360,8 +452,12 @@ def render(sdr: dict, context: dict) -> str:
         f"from one collector run started {context['started_at']}.",
         "- **No independent assessor is engaged.** Assessment statements are the provider's own reasoning.",
         "- **`fedRampRequirements` is empty.** The project determined the 46 indicators, not the FRR rules.",
-        "- **No historical metrics (SDR-CSX-KMT).** The collector runs daily, but no record store "
-        "aggregates the runs, so the collection window is one run.",
+        (f"- **Historical metrics (SDR-CSX-KMT)** from {len(context['history'])} day(s) of scheduled runs "
+         f"since {min(context['history'])}, per indicator in a metrics evidence object. The year is what "
+         "exists since then, not a full year."
+         if context["history"] else
+         "- **No historical metrics (SDR-CSX-KMT) in this record.** It was emitted without --history, "
+         "so the collection window is one run."),
         f"- **`certificationPackageOverviewUri`** points at the project README. It is not a FedRAMP "
         "Certification Package Overview.",
         "",
@@ -376,8 +472,8 @@ def render(sdr: dict, context: dict) -> str:
         if not k["ksiEvidence"]:
             lines += ["None attached.", ""]
         for e in k["ksiEvidence"]:
-            lines += [f"- *{e['evidenceType']}, {e['lastUpdated']}* — {e['evidenceDescription']} "
-                      f"([definition]({e['evidenceLocation']}))"]
+            link = f" ([definition]({e['evidenceLocation']}))" if e.get("evidenceLocation") else ""
+            lines += [f"- *{e['evidenceType']}, {e['lastUpdated']}* — {e['evidenceDescription']}{link}"]
         lines += [""]
     return "\n".join(lines)
 
@@ -396,6 +492,8 @@ def main() -> int:
                         help="how to emit fedRampRequirements; only 'empty' is possible today")
     parser.add_argument("--runtime", choices=["ci", "local"], required=True,
                         help="where the collector run came from: the scheduled CI job, or a workstation")
+    parser.add_argument("--history", type=Path,
+                        help="directory of stored scheduled-run records, for SDR-CSX-KMT's metrics")
     args = parser.parse_args()
 
     schema, common = load_schemas()
@@ -415,6 +513,7 @@ def main() -> int:
         "started_at": run["started_at"],
         "run_date": run["started_at"][:10],
         "runtime": args.runtime,
+        "history": load_history(args.history) if args.history else {},
     }
 
     sys.path.insert(0, str(REPO / "collector"))

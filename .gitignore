@@ -68,3 +68,7 @@ collector/results*.json
 # to GitHub's short-lived OIDC token, not a key. Ignored so it never leaves
 # the runner and never marks an SDR's version -dirty.
 gha-creds-*.json
+
+# collect.yml downloads the stored run records here to compute the SDR's
+# metrics; the store, not the checkout, is their home.
+history/

@@ -84,10 +84,13 @@ jobs:
               -backend-config="encrypt=true"
           done
 
-      # The negative controls run every day, not only when someone remembers.
+      # The negative controls run every day, not only when someone remembers,
+      # and so do the normalizer's and the metrics' tests.
       - name: self-test the judgements
-        working-directory: collector
-        run: python self_test.py
+        run: |
+          (cd collector && python self_test.py)
+          (cd lambda/normalize_events && python -m unittest test_handler.py)
+          (cd sdr && python -m unittest test_metrics.py)
 
       - name: run the checks
         id: checks
@@ -108,11 +111,40 @@ jobs:
           for g in $SKIP; do args+=(--skip "$g"); done
           python run_checks.py --json results.json "${args[@]}"
 
+      # The record store (SDR-CSX-KMT): this run's results, with what produced
+      # them, written to the log store under collector-runs/. Object Locked
+      # and under the evidence key. Written whatever the checks found.
+      - name: store this run's record
+        if: always() && hashFiles('collector/results.json') != ''
+        env:
+          BUCKET: fedramp-20x-ksi-log-store-437672023758
+        run: |
+          python - <<'PY'
+          import json, os
+          run = json.load(open("collector/results.json"))
+          run["run"] = {
+              "id": os.environ["GITHUB_RUN_ID"],
+              "commit": os.environ["GITHUB_SHA"],
+              "event": os.environ["GITHUB_EVENT_NAME"],
+              "runtime": "ci",
+          }
+          json.dump(run, open("record.json", "w"))
+          PY
+          day=$(python -c 'import json; print(json.load(open("record.json"))["started_at"][:10])')
+          aws s3 cp record.json "s3://$BUCKET/collector-runs/dt=$day/run=$GITHUB_RUN_ID.json" --only-show-errors
+          rm record.json
+
+      - name: fetch the run history
+        if: always() && hashFiles('collector/results.json') != ''
+        env:
+          BUCKET: fedramp-20x-ksi-log-store-437672023758
+        run: aws s3 cp "s3://$BUCKET/collector-runs/" history/ --recursive --only-show-errors
+
       # Emitted whatever the checks found: a failing check is evidence too.
       - name: emit the security decision record
         if: always() && hashFiles('collector/results.json') != ''
         working-directory: sdr
-        run: python emit.py --results ../collector/results.json --frr empty --runtime ci
+        run: python emit.py --results ../collector/results.json --frr empty --runtime ci --history ../history
 
       - name: keep the results and the record
         if: always()

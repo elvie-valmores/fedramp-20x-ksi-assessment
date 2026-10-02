@@ -75,6 +75,19 @@ data "aws_iam_policy_document" "github_collector" {
     resources = [aws_athena_workgroup.log_corpus.arn]
   }
 
+  # The record store for SDR-CSX-KMT's metrics: each scheduled run writes
+  # its results here, and only here, in the log store. Object Lock
+  # (COMPLIANCE) makes each record undeletable for the retention period,
+  # and the bucket default encrypts it with the evidence key, which this
+  # role may use through S3. Writing a key that already exists is a new
+  # version, never an overwrite, because the bucket is versioned.
+  statement {
+    sid       = "WriteRunRecords"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.log_store.arn}/collector-runs/*"]
+  }
+
   # Athena writes results with the caller's credentials.
   statement {
     sid       = "WriteQueryResults"
