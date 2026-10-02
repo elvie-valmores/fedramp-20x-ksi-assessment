@@ -238,9 +238,7 @@ around a refusal.** Refused so far:
 **Evidence coverage is still the bottleneck:** 12 of 46 indicators carry automated evidence, from 35
 of roughly 380 checks. In rough priority:
 
-1. **The ECR lifecycle policy** keeps 10 artifacts including signatures and attestations, so about
-   three builds survive. Count tagged images instead, so a deployable tag is not expired by builds.
-2. **More check definitions**, negative controls for the older handlers, and **links from checks
+1. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
 **At the next phase 1:**
@@ -257,7 +255,7 @@ of roughly 380 checks. In rough priority:
 
 - Deploy `TF_VAR_app_image_tag=git-70600724abeb` (or newer). That build carries the high-water mark,
   and it is signed and was tested in CI (run 37042865065). Use it before ECR's lifecycle expires it
-  (next-thing item 1).
+  (the ECR lifecycle keeps the last 10 builds).
 - Confirm the first landing's key carries `-through-<mark>`, and that a cycle with no new rows lands
   nothing (log line "nothing new since the high-water mark"). Confirm `s3:ListBucket` works through
   the endpoint. Until then, the fix is proven only by unit tests (2026-10-02 high-water mark entry).
@@ -279,7 +277,7 @@ of roughly 380 checks. In rough priority:
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
 | Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
-| ECR lifecycle expires deployable tags | Next thing to do, item 2 |
+| ECR lifecycle expires deployable tags | Fixed 2026-10-02: it keeps 10 builds and their signatures, counted per kind, checked by preview and applied. Orphaned buildx attestations are left, since no lifecycle rule reaches them |
 | `caliper.elvievalmores.com` has no DNS record | The load balancer is new each phase 1. Use `curl --connect-to caliper.elvievalmores.com:443:<alb>:443` |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |

@@ -39,6 +39,15 @@ resource "aws_ecr_repository" "service" {
 
 # KSI-SVC-PRR's build row 3: image retention windows, so old images are
 # residue with an expiry rather than residue that accumulates.
+#
+# Counted per kind since 2026-10-02. Each build pushes four artifacts: the
+# git-* image index, its untagged platform manifest, an untagged buildx
+# attestation, and the cosign signature tagged sha256-<index digest>.sig.
+# A single "keep 10, any tag" rule counted three of them, so it kept about
+# three builds, and git-f9f2c35f8fd1 had expired by the time a session went
+# to deploy it. Each rule below was checked
+# with ECR's lifecycle preview against the real repository before it was
+# applied (DECISIONS.md, 2026-10-02).
 resource "aws_ecr_lifecycle_policy" "service" {
   for_each = aws_ecr_repository.service
 
@@ -48,11 +57,43 @@ resource "aws_ecr_lifecycle_policy" "service" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep the last 10 images; older ones are superseded and unreferenced."
+        description  = "Keep the last 10 builds; older ones are superseded and unreferenced."
         selection = {
-          tagStatus   = "any"
-          countType   = "imageCountMoreThan"
-          countNumber = 10
+          tagStatus      = "tagged"
+          tagPatternList = ["git-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 10
+        }
+        action = { type = "expire" }
+      },
+      # One signature per build, pushed seconds after its image, so the
+      # newest 10 signatures are the 10 kept builds'. Expiring one a kept
+      # build still needs would fail its deploy at signature verification,
+      # loudly, rather than deploy it unverified.
+      {
+        rulePriority = 2
+        description  = "Keep the signatures of the last 10 builds."
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["sha256-*.sig"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 10
+        }
+        action = { type = "expire" }
+      },
+      # Platform manifests left behind by an expired index. The preview
+      # showed ECR does not select a manifest a kept index references, so
+      # this cannot break a kept build. It also does not select buildx
+      # attestations, which carry a subject: those outlive their image, and
+      # no lifecycle rule reaches them.
+      {
+        rulePriority = 3
+        description  = "Expire untagged manifests no kept image references."
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
         }
         action = { type = "expire" }
       },

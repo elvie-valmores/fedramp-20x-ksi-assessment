@@ -7438,3 +7438,52 @@ image.
 - The first cycle lands with a `-through-` key.
 - A cycle with no new rows lands nothing.
 - `s3:ListBucket` works through the endpoint.
+
+## 2026-10-02 — The ECR lifecycle counts builds, not artifacts
+
+**The defect.** The repositories kept "the last 10 images, any tag". Each build pushes four
+artifacts:
+
+- the `git-*` image index
+- its untagged platform manifest
+- an untagged buildx attestation
+- the cosign signature, tagged `sha256-<index digest>.sig`
+
+ECR counted three of these, so about three builds survived. `git-f9f2c35f8fd1` had expired by the
+time a session went to deploy it. A preview of that policy today showed it was about to expire
+`git-0eb149352c41` too.
+
+**What ECR counts was measured, not assumed.** `start-lifecycle-policy-preview` evaluates a
+candidate policy against the real repository without deleting anything. The preview of the old
+policy showed:
+
+- **Counted:** the indexes, their platform manifests, and the signatures.
+- **Neither counted nor expired:** the attestations, which carry a subject. Two from 09-23 have
+  outlived their images by nine days.
+
+**The rules, by priority** (`infra/aws/registry.tf`):
+
+1. **Keep the newest 10 `git-*` images.**
+2. **Keep the newest 10 `sha256-*.sig` signatures.** There is one signature per build, pushed seconds
+   after its image, so these are the kept builds' signatures. If they ever fell out of step, a kept
+   build would fail at signature verification before deploy, loudly, rather than deploy unverified.
+3. **Expire untagged artifacts after a day.**
+
+**Each rule was previewed before applying.** I first ran a preview with both counts at 2, so it
+would select something:
+
+- **Rules 1 and 2** chose the same three builds: each expired signature's tag named an expired
+  index's digest.
+- **Rule 3** left the platform manifests of the kept images alone, because ECR does not select a
+  manifest a kept index references.
+
+The preview of the policy as written, with counts of 10, expired nothing in either repository.
+
+**Applied** as a targeted apply of `aws_ecr_lifecycle_policy.service`. The provider replaces the
+policy rather than updating it, so there were seconds with no policy. The live policies have the
+three rules.
+
+**Left as it is:** buildx attestations whose image has expired. No lifecycle rule selects them,
+they are a few kilobytes each, and removing them would need a scheduled deletion job, which is more
+machinery than the cost justifies. GCP's Artifact Registry has no cleanup policy, so nothing there
+expires and the pipeline's pinned digest is not at risk.
