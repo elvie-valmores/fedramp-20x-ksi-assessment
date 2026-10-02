@@ -1,0 +1,23 @@
+{
+  "id": "svc-sin-cfg-gcp-buckets-prevent-public-access",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No GCS bucket in the project permits public access: public access prevention enforced and uniform bucket-level access on, on every bucket (build row 4)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "buckets_prevent_public_access",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.2",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-account-public-access-block",
+        "svc-sin-cfg-aws-buckets-block-public-access"
+      ]
+    }
+  ]
+}

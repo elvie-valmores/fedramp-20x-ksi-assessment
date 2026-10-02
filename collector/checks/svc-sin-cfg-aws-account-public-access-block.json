@@ -14,8 +14,11 @@
   "matrix_rows": [
     {
       "row": "KSI-SVC-SIN.verify.2",
-      "covers": "partial",
-      "gap": "AWS only. GCS public access prevention is not checked."
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-buckets-block-public-access",
+        "svc-sin-cfg-gcp-buckets-prevent-public-access"
+      ]
     }
   ]
 }

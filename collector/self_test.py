@@ -414,6 +414,7 @@ def _tls(**change) -> dict:
 
 
 PAB_ON = {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}
+GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
 
 ALLOWED = [{"role": "roles/editor", "member": "serviceAccount:tf@p", "reason": "x"}]
@@ -498,6 +499,13 @@ CFG_CASES = [
     ("evaluate_public_access_blocked", cfg.evaluate_public_access_blocked, PAB_ON, {
         "no block": None,
         "one setting off": {**PAB_ON, "RestrictPublicBuckets": False},
+    }),
+    ("evaluate_gcs_public_access", cfg.evaluate_gcs_public_access, GCS_IAM_OK, {
+        "nothing reported": None,
+        # Inherited defers to an organization policy this project does not have.
+        "prevention inherited": {**GCS_IAM_OK, "publicAccessPrevention": "inherited"},
+        "uniform access off": {**GCS_IAM_OK, "uniformBucketLevelAccess": {"enabled": False}},
+        "uniform access unreported": {"publicAccessPrevention": "enforced"},
     }),
     ("evaluate_object_lock", lambda c: cfg.evaluate_object_lock(c, "COMPLIANCE", 7), LOCK_OK, {
         "not enabled": {"error": "ObjectLockConfigurationNotFoundError"},
@@ -592,6 +600,7 @@ def cloud_api_config_read() -> list[str]:
 CFG_RESOURCES = {
     "evaluate_tls_only": "s3_buckets_deny_insecure_transport",
     "evaluate_public_access_blocked": "s3_buckets_block_public_access",
+    "evaluate_gcs_public_access": "buckets_prevent_public_access",
     "evaluate_object_lock": "s3_object_lock",
     "evaluate_trail_validation": "cloudtrail_log_file_validation",
     "evaluate_basic_roles": "basic_roles",

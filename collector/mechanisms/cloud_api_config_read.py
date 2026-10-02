@@ -68,6 +68,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_store_encryption_keys(check)
         if provider == "gcp" and resource == "scheduler_job_runs":
             return self._gcp_scheduler_job_runs(check)
+        if provider == "gcp" and resource == "buckets_prevent_public_access":
+            return self._gcp_buckets_public_access(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -163,21 +165,40 @@ class CloudAPIConfigRead(Mechanism):
         client = boto3.client("s3", region_name=check.params["region"])
         names = sorted(b["Name"] for b in client.list_buckets()["Buckets"])
 
+        return _every_bucket(check, {name: evaluate(fetch(client, name)) for name in names})
+
+    def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
+        """The GCP half of KSI-SVC-SIN verify row 2: no bucket permits public access.
+
+        Requires param: project_id.
+
+        The buckets come from Cloud Asset, as the store-key check's do; the
+        collector role reads each bucket but cannot list them. Each bucket's
+        iamConfiguration then comes from Cloud Storage itself, which is the
+        setting's authority.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        names = sorted(
+            res.name.split("/")[-1]
+            for res in asset_client(project_id).search_all_resources(request={
+                "scope": f"projects/{project_id}",
+                "asset_types": ["storage.googleapis.com/Bucket"],
+            })
+        )
+        session = AuthorizedSession(impersonated_token(project_id))
         results = {}
         for name in names:
-            ok, detail = evaluate(fetch(client, name))
-            results[name] = {"passed": ok, "detail": detail}
-
-        failing = sorted(n for n, r in results.items() if not r["passed"])
-        evidence = {"buckets": results, "failing": failing}
-        if not names:
-            return CheckResult(check.id, False, evidence, "no buckets found -- nothing to judge")
-        if failing:
-            return CheckResult(
-                check.id, False, evidence,
-                f"{len(failing)} of {len(names)} buckets fail: {', '.join(failing)}",
+            response = session.get(
+                f"https://storage.googleapis.com/storage/v1/b/{name}",
+                params={"fields": "name,iamConfiguration"}, timeout=30,
             )
-        return CheckResult(check.id, True, evidence, f"all {len(names)} buckets pass")
+            response.raise_for_status()
+            results[name] = evaluate_gcs_public_access(response.json().get("iamConfiguration"))
+        return _every_bucket(check, results)
 
     def _s3_object_lock(self, check: CheckDefinition) -> CheckResult:
         """Passes if the bucket has Object Lock on with the required default.
@@ -432,6 +453,22 @@ def evaluate_scheduler_job(job: dict, now: datetime, max_age_hours: float) -> tu
     return True, f"last attempt {age:.1f} hours ago succeeded"
 
 
+def _every_bucket(check: CheckDefinition, verdicts: dict[str, tuple[bool, str]]) -> CheckResult:
+    """Passes only if every bucket passes, and fails on none: a claim about
+    every bucket is not supported by zero buckets."""
+    results = {name: {"passed": ok, "detail": detail} for name, (ok, detail) in verdicts.items()}
+    failing = sorted(n for n, r in results.items() if not r["passed"])
+    evidence = {"buckets": results, "failing": failing}
+    if not results:
+        return CheckResult(check.id, False, evidence, "no buckets found -- nothing to judge")
+    if failing:
+        return CheckResult(
+            check.id, False, evidence,
+            f"{len(failing)} of {len(results)} buckets fail: {', '.join(failing)}",
+        )
+    return CheckResult(check.id, True, evidence, f"all {len(results)} buckets pass")
+
+
 def _gcp_log_buckets(project_id: str) -> list[dict]:
     """Every log bucket in every location, from Logging's own API."""
     from google.auth.transport.requests import AuthorizedSession
@@ -648,6 +685,24 @@ def evaluate_public_access_blocked(config: dict | None) -> tuple[bool, str]:
     if off:
         return False, f"off: {', '.join(off)}"
     return True, "all four public access settings on"
+
+
+def evaluate_gcs_public_access(config: dict | None) -> tuple[bool, str]:
+    """Public access prevention enforced, and uniform bucket-level access on.
+
+    "inherited" is not enforced here: it defers to an organization policy,
+    and this project sits outside any organization, so nothing is inherited.
+    Uniform access is build row 4's second half; without it, object ACLs are
+    a second access path that bucket IAM does not show.
+    """
+    if not config:
+        return False, "no iamConfiguration reported"
+    prevention = config.get("publicAccessPrevention")
+    if prevention != "enforced":
+        return False, f"public access prevention is {prevention!r}, expected 'enforced'"
+    if not (config.get("uniformBucketLevelAccess") or {}).get("enabled"):
+        return False, "uniform bucket-level access is off"
+    return True, "public access prevention enforced, uniform bucket-level access on"
 
 
 def evaluate_object_lock(config: dict, mode: str, min_days: int) -> tuple[bool, str]:
