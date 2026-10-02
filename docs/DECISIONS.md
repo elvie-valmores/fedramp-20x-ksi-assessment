@@ -7164,3 +7164,41 @@ phase 1.
   `--require-hashes`, proven in run 36952591062.
 - Both workflows run **Terraform 1.16.3**, the version that writes the state they read. That was
   proven by run 36952592951 (drift, "No changes" over 269) and the same collect run.
+
+---
+
+## 2026-10-02 — The analytics image has a build path; workflow-pinned GCP grants
+
+**Every GCP grant now names its workflow, not just the repository.** The provider maps
+`attribute.workflow` from `job_workflow_ref`, extracting the workflow file name; the provider's
+condition still pins owner, repository and `main`. So:
+
+- **The collector role moved from any workflow on `main` to `collect.yml` only.** It was proven
+  live before the code was committed, by a collect run in which every GCP API check passed under
+  the new grant.
+- **A new `fedrampKsiImagePublisher` role,** six enumerated Artifact Registry permissions, is
+  granted **on the one repository**, to `build-and-push.yml`. `terraform-admin` needed
+  `roles/artifactregistry.admin` to set repository IAM; `roles/editor` cannot. The user granted
+  it, as its other roles were granted.
+
+**The collector caught the gap between applying and committing.** The apply ran from the local
+tree before the code was on `main`, and the next collect run failed `svc-acm-ops-gcp-no-drift`
+on 3 of 42 resources. That was correct: the live project was ahead of the repository. It cleared
+on commit. This is the drift check doing its job on a change of ours.
+
+**`build-and-push.yml` gained `build-analytics`.** It mirrors the ECR build:
+
+- scanned first (analytics joined the `scan-dependencies` matrix)
+- authenticated by direct workload identity federation
+- logged in to Artifact Registry with a short-lived token on stdin
+- built `linux/amd64` for Cloud Run (its manifest was already compiled for x86_64)
+- pushed with provenance and SBOM, signed keylessly, and verified before the digest is recorded
+
+Two new checks cover its signing, as the existing two cover the ECR job's:
+`svc-vri-cfg-image-signed-analytics` and
+`svc-vri-cfg-signature-verified-before-digest-recorded-analytics`. **34 checks now.**
+
+**Proven by run 36954218125, all seven jobs green on the first attempt.** Artifact Registry holds
+`analytics@sha256:19f7fda8771949788a858b389ca0cc83e16536dfbfcd1b133ef9fcf1c4df5d9f` (tag
+`git-193454c1a7b2`), with its cosign signature and attestations, and the log shows the claims
+validated for that digest. **The blocker on GCP phase 2 since 2026-09-22 is gone.**

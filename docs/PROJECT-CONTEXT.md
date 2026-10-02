@@ -232,11 +232,11 @@ around a refusal.** Refused so far:
 
 ### The next thing to do
 
-**Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 32
+**Evidence coverage is still the bottleneck:** 11 of 46 indicators carry automated evidence, from 34
 of roughly 380 checks. In rough priority:
 
-1. **The analytics image build**, now that GitHub can reach GCP: a third image and an Artifact
-   Registry push identity, then GCP phase 2.
+1. **GCP phase 2:** deploy the Cloud Run job pinned to the signed analytics digest
+   (`analytics@sha256:19f7fda8…`, 2026-10-02 entry).
 2. **More check definitions**, negative controls for the older handlers, and **links from checks
    to matrix rows**.
 
@@ -266,7 +266,7 @@ of roughly 380 checks. In rough priority:
 | Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
-| The analytics image has no build path | GitHub-to-GCP federation now exists; the push identity and build entry remain. Next thing to do, item 1 |
+| GCP phase 2 not deployed | The image exists, signed (2026-10-02). Next thing to do, item 1 |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |
 | `security.txt` contact would bounce | No MX on `caliper.elvievalmores.com` |
 | ACM managed renewal under apply-and-destroy | Verify before 2027-02-06 |
