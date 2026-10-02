@@ -1,0 +1,16 @@
+{
+  "id": "svc-vcm-ops-gcp-pipeline-schedule-runs",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "The analytics pipeline's schedule -- the cross-cloud path KSI-SVC-VCM is determined against -- is enabled and its last attempt to start the job succeeded within one period plus margin",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "scheduler_job_runs",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "location": "us-central1",
+    "job": "analytics-pipeline",
+    "max_age_hours": 7
+  }
+}

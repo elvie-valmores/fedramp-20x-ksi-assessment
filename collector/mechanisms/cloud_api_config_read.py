@@ -26,6 +26,7 @@ check would make it "every bucket someone remembered to add".
 from __future__ import annotations
 
 import fnmatch
+from datetime import datetime, timezone
 import json
 
 import boto3
@@ -65,6 +66,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._key_decrypt_principals(check)
         if provider == "gcp" and resource == "store_encryption_keys":
             return self._gcp_store_encryption_keys(check)
+        if provider == "gcp" and resource == "scheduler_job_runs":
+            return self._gcp_scheduler_job_runs(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -259,6 +262,17 @@ class CloudAPIConfigRead(Mechanism):
         return CheckResult(check.id, ok, evidence, detail)
 
 
+    def _gcp_scheduler_job_runs(self, check: CheckDefinition) -> CheckResult:
+        """Passes if the named Cloud Scheduler job is enabled and recently ran.
+
+        Requires params: project_id, location, job, max_age_hours.
+        """
+        p = check.params
+        job = _gcp_scheduler_job(p["project_id"], p["location"], p["job"])
+        ok, detail = evaluate_scheduler_job(job, datetime.now(timezone.utc), p["max_age_hours"])
+        evidence = {k: job.get(k) for k in ("name", "schedule", "state", "lastAttemptTime", "status")}
+        return CheckResult(check.id, ok, evidence, detail)
+
     def _gcp_store_encryption_keys(self, check: CheckDefinition) -> CheckResult:
         """The GCP half of build row 1: every store reports its declared key.
 
@@ -377,6 +391,45 @@ class CloudAPIConfigRead(Mechanism):
 
         ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
         return CheckResult(check.id, ok, evidence, detail)
+
+
+def _gcp_scheduler_job(project_id: str, location: str, job: str) -> dict:
+    from google.auth.transport.requests import AuthorizedSession
+
+    from gcp_auth import impersonated_token
+
+    session = AuthorizedSession(impersonated_token(project_id))
+    url = f"https://cloudscheduler.googleapis.com/v1/projects/{project_id}/locations/{location}/jobs/{job}"
+    response = session.get(url, timeout=30)
+    if response.status_code == 404:
+        return {}
+    response.raise_for_status()
+    return response.json()
+
+
+def evaluate_scheduler_job(job: dict, now: datetime, max_age_hours: float) -> tuple[bool, str]:
+    """Enabled, last attempt succeeded, and that attempt is recent.
+
+    Status is a google.rpc.Status: absent or code 0 is success. On
+    2026-10-02 the analytics schedule had attempted every six hours and been
+    refused each time (code 7, PERMISSION_DENIED), while every configuration
+    check passed -- the job existed, the schedule existed. This asks the
+    question that would have caught it: did the last run actually start?
+    """
+    if not job:
+        return False, "schedule not found"
+    if job.get("state") != "ENABLED":
+        return False, f"schedule is {job.get('state', 'in an unknown state')}"
+    last = job.get("lastAttemptTime")
+    if not last:
+        return False, "schedule has never attempted a run"
+    code = (job.get("status") or {}).get("code", 0)
+    if code:
+        return False, f"last attempt at {last} failed with status code {code}"
+    age = (now - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() / 3600
+    if age > max_age_hours:
+        return False, f"last attempt {age:.1f} hours ago, more than {max_age_hours}"
+    return True, f"last attempt {age:.1f} hours ago succeeded"
 
 
 def _gcp_log_buckets(project_id: str) -> list[dict]:

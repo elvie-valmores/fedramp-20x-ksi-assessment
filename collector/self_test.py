@@ -401,6 +401,7 @@ KEY_RULES = [
     {"type": "log_group", "name": "/aws/rds/*", "expect": "alias/logs"},
     {"type": "s3_bucket", "name": "tfstate-*", "expect": "SSE-S3", "reason": "recorded"},
 ]
+_NOW = __import__("datetime").datetime(2026, 10, 2, 14, 0, tzinfo=__import__("datetime").timezone.utc)
 _GKEY = "projects/p/locations/l/keyRings/r/cryptoKeys/analytics"
 GCP_KEY_RULES = [
     {"type": "bigquery.googleapis.com/Table", "name": "*", "expect": _GKEY},
@@ -520,6 +521,16 @@ CFG_CASES = [
         "required store missing": [_store("bigquery.googleapis.com/Table", "t", "KMS", _GKEY + "/cryptoKeyVersions/3"),
                                    _store("storage.googleapis.com/Bucket", "b", "KMS", _GKEY)],
     }),
+    ("evaluate_scheduler_job", lambda c: cfg.evaluate_scheduler_job(c, _NOW, 7),
+     {"state": "ENABLED", "lastAttemptTime": "2026-10-02T12:00:00Z", "status": {}}, {
+        # The 2026-10-02 failure exactly: attempted on time, refused every time.
+        "last attempt refused": {"state": "ENABLED", "lastAttemptTime": "2026-10-02T12:00:00Z",
+                                 "status": {"code": 7, "message": "PERMISSION_DENIED"}},
+        "paused": {"state": "PAUSED", "lastAttemptTime": "2026-10-02T12:00:00Z", "status": {}},
+        "never attempted": {"state": "ENABLED"},
+        "stale": {"state": "ENABLED", "lastAttemptTime": "2026-10-01T23:00:00Z", "status": {}},
+        "missing": {},
+    }),
     ("evaluate_decrypt_principals", lambda c: _decrypt(*c), (_GOOD_KEY,), {
         "undeclared role named": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"})],),
         "public principal": (_GOOD_KEY + [_st("*")],),
@@ -554,6 +565,7 @@ CFG_RESOURCES = {
     "evaluate_basic_roles": "basic_roles",
     "evaluate_store_keys": "store_encryption_keys",
     "evaluate_decrypt_principals": "key_decrypt_principals",
+    "evaluate_scheduler_job": "scheduler_job_runs",
     "evaluate_store_keys (gcp)": "store_encryption_keys",
 }
 
