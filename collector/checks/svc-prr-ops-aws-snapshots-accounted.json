@@ -1,0 +1,25 @@
+{
+  "id": "svc-prr-ops-aws-snapshots-accounted",
+  "indicator": "KSI-SVC-PRR",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "No database snapshot or retained backup exists without a live source instance or an entry in the retention register",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "snapshots_accounted",
+    "region": "us-east-1",
+    "retained": [
+      {
+        "instance": "fedramp-20x-ksi",
+        "reason": "The application database is destroyed between sessions and its automated backups are kept for recovery testing (DECISIONS.md, 2026-09-05); they expire with the 7-day retention"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-PRR.validate.1",
+      "covers": "full"
+    }
+  ]
+}

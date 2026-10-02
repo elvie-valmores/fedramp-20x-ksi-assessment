@@ -128,6 +128,12 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_run_job_images(check)
         if provider == "gcp" and resource == "services_enabled":
             return self._gcp_services_enabled(check)
+        if provider == "aws" and resource == "store_sources_catalogued":
+            return self._aws_store_sources_catalogued(check)
+        if provider == "aws" and resource == "snapshots_accounted":
+            return self._aws_snapshots_accounted(check)
+        if provider == "aws" and resource == "securityhub_failing_controls":
+            return self._aws_securityhub_failing_controls(check)
         if provider == "aws" and resource == "trail_logs_validate":
             return self._aws_trail_logs_validate(check)
         if provider == "aws" and resource == "function_runs":
@@ -931,6 +937,69 @@ class CloudAPIConfigRead(Mechanism):
             response.raise_for_status()
             states[service] = response.json().get("state")
         ok, detail, evidence = evaluate_services_enabled(states)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_store_sources_catalogued(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-OSM validate 7: every source in the store is queryable through the catalog.
+
+        Requires params: region, bucket, prefix, database, table. The store's
+        sources are its source= partitions; the catalog's are the table's
+        partition-projection values, which is all Athena will read.
+        """
+        region = check.params["region"]
+        s3 = boto3.client("s3", region_name=region)
+        prefixes = [
+            cp["Prefix"]
+            for page in s3.get_paginator("list_objects_v2").paginate(
+                Bucket=check.params["bucket"], Prefix=check.params["prefix"], Delimiter="/")
+            for cp in page.get("CommonPrefixes", [])
+        ]
+        stored = sorted(p.rstrip("/").split("source=")[-1] for p in prefixes if "source=" in p)
+        params = boto3.client("glue", region_name=region).get_table(
+            DatabaseName=check.params["database"], Name=check.params["table"])["Table"].get("Parameters", {})
+        catalogued = sorted(v.strip() for v in params.get("projection.source.values", "").split(",") if v.strip())
+        ok, detail, evidence = evaluate_sources_catalogued(stored, catalogued)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_snapshots_accounted(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-PRR validate 1: no snapshot without a live source or a register entry.
+
+        Requires params: region, retained ([{instance, reason}]), the
+        register of instances whose backups are kept after the instance
+        is gone.
+        """
+        rds = boto3.client("rds", region_name=check.params["region"])
+        live = {i["DBInstanceIdentifier"]
+                for page in rds.get_paginator("describe_db_instances").paginate() for i in page["DBInstances"]}
+        snapshots = [{"id": s["DBSnapshotIdentifier"], "instance": s["DBInstanceIdentifier"]}
+                     for page in rds.get_paginator("describe_db_snapshots").paginate() for s in page["DBSnapshots"]]
+        snapshots += [{"id": f"retained automated backups ({b['DbiResourceId']})", "instance": b["DBInstanceIdentifier"]}
+                      for page in rds.get_paginator("describe_db_instance_automated_backups").paginate()
+                      for b in page["DBInstanceAutomatedBackups"] if b.get("Status") == "retained"]
+        ok, detail, evidence = evaluate_snapshots_accounted(snapshots, live, check.params["retained"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_securityhub_failing_controls(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-IBP validate 1: every failing control is remediated or in the exception record.
+
+        Requires params: region, exceptions ([{control, reason, unless_resources?}]).
+        Reads Security Hub's own control findings, active and not
+        suppressed. Disabled controls produce none: securityhub_controls.tf
+        is the record of those. The pass rate across evaluated controls is
+        recorded, as the row asks.
+        """
+        sh = boto3.client("securityhub", region_name=check.params["region"])
+        findings = []
+        for status in ("FAILED", "PASSED"):
+            filters = {"ComplianceStatus": [{"Value": status, "Comparison": "EQUALS"}],
+                       "RecordState": [{"Value": "ACTIVE", "Comparison": "EQUALS"}],
+                       "ProductName": [{"Value": "Security Hub", "Comparison": "EQUALS"}],
+                       "WorkflowStatus": [{"Value": "SUPPRESSED", "Comparison": "NOT_EQUALS"}]}
+            for page in sh.get_paginator("get_findings").paginate(Filters=filters):
+                for f in page["Findings"]:
+                    findings.append({"control": f["Compliance"].get("SecurityControlId"), "status": status,
+                                     "severity": f["Severity"]["Label"], "resource": f["Resources"][0]["Id"]})
+        ok, detail, evidence = evaluate_failing_controls(findings, check.params["exceptions"])
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_trail_logs_validate(self, check: CheckDefinition) -> CheckResult:
@@ -2129,6 +2198,71 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
 
 def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:
     return _judged("services", {s: {"passed": st == "ENABLED", "detail": str(st)} for s, st in states.items()})
+
+
+def evaluate_sources_catalogued(stored: list[str], catalogued: list[str]) -> tuple[bool, str, dict]:
+    """No source in the store that the catalog cannot read, and the store not empty."""
+    missing = sorted(set(stored) - set(catalogued))
+    evidence = {"stored": stored, "catalogued": catalogued, "not_queryable": missing}
+    if not stored:
+        return False, "no sources in the store -- nothing to judge", evidence
+    if missing:
+        return False, f"in the store but not queryable: {', '.join(missing)}", evidence
+    return True, f"all {len(stored)} stored source(s) queryable", evidence
+
+
+def evaluate_snapshots_accounted(snapshots: list[dict], live: set[str], retained: list[dict]) -> tuple[bool, str, dict]:
+    """Each snapshot's instance is live, or registered as one whose backups are kept."""
+    registered = {r["instance"]: r["reason"] for r in retained}
+    results = {}
+    for s in snapshots:
+        if s["instance"] in live:
+            results[s["id"]] = {"passed": True, "detail": "source instance live"}
+        elif s["instance"] in registered:
+            results[s["id"]] = {"passed": True, "detail": f"registered: {registered[s['instance']]}"}
+        else:
+            results[s["id"]] = {"passed": False, "detail": f"orphaned: {s['instance']} is gone and unregistered"}
+    if not snapshots:
+        return True, "no snapshots", {"snapshots": {}, "failing": []}
+    return _judged("snapshots", results)
+
+
+def evaluate_failing_controls(findings: list[dict], exceptions: list[dict]) -> tuple[bool, str, dict]:
+    """Every failing control finding is covered by an exception with a reason.
+
+    An exception may carve out resources it never covers (unless_resources,
+    glob patterns): KMS.3 is excepted for session keys deleted at teardown,
+    never for the keys meant to persist.
+    """
+    def excepted(f):
+        for e in exceptions:
+            if e["control"] == f["control"] and not any(
+                    fnmatch.fnmatchcase(f["resource"], p) for p in e.get("unless_resources", [])):
+                return e
+        return None
+
+    controls = {}
+    for f in findings:
+        c = controls.setdefault(f["control"], {"passed": 0, "failed": [], "excepted": []})
+        if f["status"] == "PASSED":
+            c["passed"] += 1
+        elif excepted(f):
+            c["excepted"].append(f["resource"])
+        else:
+            c["failed"].append(f["resource"])
+    open_ = {k: v for k, v in controls.items() if v["failed"]}
+    evaluated = len(controls)
+    clean = sum(1 for v in controls.values() if not v["failed"] and not v["excepted"])
+    evidence = {"pass_rate": f"{clean}/{evaluated} controls passing outright",
+                "open": {k: {"resources": v["failed"],
+                             "severity": next((f["severity"] for f in findings if f["control"] == k), None)}
+                         for k, v in sorted(open_.items())},
+                "excepted": {k: v["excepted"] for k, v in sorted(controls.items()) if v["excepted"]}}
+    if not findings:
+        return False, "no control findings -- nothing to judge", evidence
+    if open_:
+        return False, f"{len(open_)} failing control(s) neither remediated nor excepted: {', '.join(sorted(open_))}", evidence
+    return True, f"every failing control is excepted; {evidence['pass_rate']}", evidence
 
 
 def evaluate_validate_logs(output: str, returncode: int) -> tuple[bool, str]:

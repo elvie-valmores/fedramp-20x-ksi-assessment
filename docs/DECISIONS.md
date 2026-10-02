@@ -7892,3 +7892,79 @@ resource, or a wildcard action, still fails. All eleven pass.
 - **The contract** is restated in the worker, the analytics job and `app/README.md`.
 - **What the worker's own decision record already said:** "the database is rebuilt every session and
   its ids restart". The other side of the contract had not been told.
+
+## 2026-10-02 (night) — Operational rows from the corpus; the corpus keeps resources and TLS; Security Hub's open controls
+
+**The normalizer now keeps two more fields** (applied with their Glue columns; events from before
+the change read back null):
+
+- **`resources`:** what a call acted on, for example the key a Decrypt used.
+- **`tls`:** the version and cipher of the request.
+
+Both came from a profile of the corpus. The drift role and the Config recorder showed successful
+Decrypts, which looked like a gap in the decrypt models. They were Lambda reading function
+environment variables under AWS's managed Lambda key. Without the resource, no query could tell
+that from a customer key.
+
+**Fourteen checks, mostly over the corpus.** Each standing query covers 3 days, the rows' cadence,
+so daily runs overlap. Each passing zero-result query was shown to fire on real data with its
+condition loosened or inverted.
+
+| Row | Coverage | What the check proves |
+|---|---|---|
+| IAM-SNU v2 | Full | No IAM-user activity. Fails until 2026-10-03: `terraform-admin`'s last calls on 2026-09-30, the day it was deleted |
+| IAM-ELP v3 | Partial | IAM writes only by the platform engineer's role or AWS services. AWS only |
+| CMT-RMV v2 | Partial | ECR pushes only by the build role. ECR only |
+| SVC-SIN v1 | Partial | Every customer-key decrypt is by a principal its key's declared model names. It shares the configuration check's model list, and AWS-managed keys are skipped by resolving each key through KMS. AWS-service decrypts are counted, not attributed |
+| SVC-VCM v1, IAM-SNU v1 | Full | The GCP pipeline's federated AssumeRoleWithWebIdentity, by numeric ID, in the last day |
+| MLA-OSM v4 | Full | The detection query ran within 26 hours, without error |
+| MLA-OSM v6 | Partial | Timestamps are consistent with their partitions. One source only |
+| SVC-SIN v5, MLA-OSM v2, SVC-VRI v3 | Full | AWS's own `cloudtrail validate-logs` over 26 hours: every digest and log file valid. That day: 25 digests and 866 logs, in CI |
+| MLA-LET v1, v4 | Partial | The AWS source is not silent: an event within 2 hours |
+| SVC-SIN v3 | Partial | S3 requests from an address use TLS 1.2 or 1.3. Shown to select real requests |
+| SVC-VCM v3 | Partial | Task-role API calls use TLS 1.2 or 1.3. Gated on phase 2, since between sessions the result would be vacuous |
+| MLA-OSM v7 | Full | Every stored source is catalogued |
+| SVC-PRR v1 | Full | Every snapshot has a live source or a retention-register entry |
+| CNA-IBP v1 | Full | Security Hub's failing controls are excepted with reasons. Fails; see below |
+
+RPL-ABO v5 is linked to the backup check as partial.
+
+**Container Analysis created four Pub/Sub topics** when Container Scanning was enabled. CI's GCP
+store-key and inventory checks failed on them, rightly. They carry scan notes, not customer data,
+and are excepted by exact id.
+
+**Security Hub: the benchmark's open controls.** 88 of 121 evaluated controls pass outright. Twelve
+failing controls are excepted with reasons the record already holds:
+
+- **`KMS.3`, for session keys only:** the three persistent keys are carved out.
+- **`S3.22` and `S3.23`:** the 2026-09-05 data-event scoping.
+- **The EC2 and EKS plans** of GuardDuty and Inspector: there is no EC2 or EKS.
+- **The EC2 and Systems Manager endpoints:** endpoints are declared per service used.
+
+**21 failing controls have no exception, and each needs a decision:** remediate, or except with a
+reason.
+
+| Control | Severity | What it asks |
+|---|---|---|
+| IAM.6 | Critical | Hardware MFA on root |
+| Config.1 | Critical | The recorder should use the service-linked role, not the custom one |
+| IAM.28 | High | An external access analyzer |
+| GuardDuty.6 | High | Lambda Protection |
+| GuardDuty.11 | High | Runtime Monitoring |
+| Inspector.3 | High | Lambda code scanning |
+| Inspector.4 | High | Lambda standard scanning |
+| GuardDuty.12 | Medium | ECS runtime monitoring |
+| Account.1 | Medium | A security contact |
+| CloudTrail.5 | Medium | Trail to CloudWatch Logs |
+| EC2.7 | Medium | EBS default encryption |
+| IAM.15, IAM.7 | Medium | Password policy |
+| Macie.1 | Medium | Macie |
+| S3.9 | Medium | Server access logging, 5 buckets |
+| SSM.6 | Medium | SSM Automation logging |
+| CloudTrail.7 | Low | Access logging on the trail bucket |
+| IAM.16 | Low | Password reuse |
+| IAM.18 | Low | A support role |
+| S3.13 | Low | Lifecycle rules, 3 buckets |
+| S3.20 | Low | MFA delete, 3 buckets |
+
+`cna-ibp-ops-aws-failing-controls-excepted` fails until each is decided.

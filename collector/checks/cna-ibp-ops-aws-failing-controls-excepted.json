@@ -1,0 +1,74 @@
+{
+  "id": "cna-ibp-ops-aws-failing-controls-excepted",
+  "indicator": "KSI-CNA-IBP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every active Security Hub control failure (CIS 3.0.0 and FSBP) is remediated or in the exception record, each exception with its reason; the pass rate across evaluated controls is recorded. Disabled controls are recorded in securityhub_controls.tf",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "securityhub_failing_controls",
+    "region": "us-east-1",
+    "exceptions": [
+      {
+        "control": "KMS.3",
+        "reason": "Session keys (database until 2026-10-02, secrets, logs) are scheduled for deletion at every teardown by design: they encrypt what the teardown destroys. The persistent keys are carved out, so one of them scheduled for deletion fails.",
+        "unless_resources": [
+          "arn:aws:kms:us-east-1:437672023758:key/402d209c-4e0b-4d63-8170-d61ea215fe76",
+          "arn:aws:kms:us-east-1:437672023758:key/384ac4d6-40dd-4da1-9bbc-771b270b4e6c",
+          "arn:aws:kms:us-east-1:437672023758:key/681c3cba-07c1-4007-b04a-6ed5e0c392f8"
+        ]
+      },
+      {
+        "control": "S3.22",
+        "reason": "Object-level write events are logged for the customer-data store only, by the 2026-09-05 MLA-LET cost decision; the trail's selectors are checked by mla-let-cfg-aws-trail-data-events-scoped."
+      },
+      {
+        "control": "S3.23",
+        "reason": "Object-level read events: as S3.22, the 2026-09-05 MLA-LET decision."
+      },
+      {
+        "control": "GuardDuty.5",
+        "reason": "There are no EC2 instances or EKS clusters: the workloads run on Fargate, and posture.tf records the EC2 and EKS add-ons as deliberately off (EKS audit logs)."
+      },
+      {
+        "control": "GuardDuty.7",
+        "reason": "There are no EC2 instances or EKS clusters: the workloads run on Fargate, and posture.tf records the EC2 and EKS add-ons as deliberately off (EKS runtime)."
+      },
+      {
+        "control": "GuardDuty.8",
+        "reason": "There are no EC2 instances or EKS clusters: the workloads run on Fargate, and posture.tf records the EC2 and EKS add-ons as deliberately off (EC2 malware scanning bills per GB of volumes that do not exist)."
+      },
+      {
+        "control": "GuardDuty.13",
+        "reason": "There are no EC2 instances or EKS clusters: the workloads run on Fargate, and posture.tf records the EC2 and EKS add-ons as deliberately off (EC2 runtime)."
+      },
+      {
+        "control": "Inspector.1",
+        "reason": "There are no EC2 instances or EKS clusters: the workloads run on Fargate, and posture.tf records the EC2 and EKS add-ons as deliberately off (Inspector EC2 scanning has nothing to scan)."
+      },
+      {
+        "control": "EC2.10",
+        "reason": "Endpoints are declared per service the tasks call (network.tf, endpoint_actions); nothing calls the EC2 API from the VPC."
+      },
+      {
+        "control": "EC2.57",
+        "reason": "Endpoints are declared per service the tasks call; Systems Manager is not used."
+      },
+      {
+        "control": "EC2.58",
+        "reason": "Endpoints are declared per service the tasks call; Systems Manager Incident Manager Contacts is not used."
+      },
+      {
+        "control": "EC2.60",
+        "reason": "Endpoints are declared per service the tasks call; Systems Manager Incident Manager is not used."
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-IBP.validate.1",
+      "covers": "full"
+    }
+  ]
+}

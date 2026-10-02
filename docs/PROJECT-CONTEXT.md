@@ -304,6 +304,7 @@ AccessDenied.
 | Analytics dropped rows whose id an earlier session used | **Fixed and proven live 2026-10-02:** the MERGE matches on (id, recorded_at); the drop was reproduced with the old image and closed with the new |
 | Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
+| Security Hub: 21 failing controls with no exception | **Open, for decisions.** The list is in DECISIONS.md, "Operational rows from the corpus". `cna-ibp-ops-aws-failing-controls-excepted` fails until each is remediated or excepted with a reason |
 | Detection query under the log-read deny | Check its first daily run after 2026-10-02 20:40 UTC: no AccessDenied in `/aws/lambda/fedramp-20x-ksi-run-detection-query`. Simulation and every other reader already passed |
 | Analytics image not registry-scanned | **Fixed 2026-10-02:** Container Scanning is enabled. The running image is scanned at its next push |
 | Log store does not restrict object reads | **Fixed 2026-10-02:** a deny confines reads to the evidence key's four readers. The MLA-ALA lane model itself is still unbuilt |

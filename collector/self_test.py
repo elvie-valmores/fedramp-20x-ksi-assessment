@@ -485,6 +485,9 @@ _DENY = {"Sid": "DenyReads", "Effect": "Deny", "Principal": "*", "Action": ["s3:
          "Resource": "arn:aws:s3:::logs/*", "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS}}}
 _TLS_DENY = {"Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": ["arn:aws:s3:::logs", "arn:aws:s3:::logs/*"],
              "Condition": {"Bool": {"aws:SecureTransport": "false"}}}
+SH_EXCEPT = [{"control": "KMS.3", "reason": "session keys", "unless_resources": ["arn:aws:kms:r:1:key/persistent"]}]
+SH_OK = [{"control": "KMS.3", "status": "FAILED", "severity": "CRITICAL", "resource": "arn:aws:kms:r:1:key/session"},
+         {"control": "S3.1", "status": "PASSED", "severity": "MEDIUM", "resource": "acct"}]
 VALIDATE_OK = "Results found for ...:\n\n24/24 digest files valid\n831/831 log files valid\n"
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
@@ -804,6 +807,21 @@ CFG_CASES = [
         "unknown": {"a": None},
         "none named": {},
     }),
+    ("evaluate_sources_catalogued", lambda c: cfg.evaluate_sources_catalogued(*c), (["aws"], ["aws", "gcp"]), {
+        "stored, not catalogued": (["aws", "gcp"], ["aws"]),
+        "empty store": ([], ["aws"]),
+    }),
+    ("evaluate_snapshots_accounted", lambda c: cfg.evaluate_snapshots_accounted(*c, [{"instance": "db", "reason": "kept"}]),
+     ([{"id": "s1", "instance": "db"}, {"id": "s2", "instance": "live"}], {"live"}), {
+        "orphaned": ([{"id": "s3", "instance": "old"}], {"live"}),
+    }),
+    ("evaluate_failing_controls", lambda c: cfg.evaluate_failing_controls(c, SH_EXCEPT), SH_OK, {
+        "unexcepted failure": SH_OK + [{"control": "IAM.6", "status": "FAILED", "severity": "CRITICAL", "resource": "acct"}],
+        # The carve-out holds: a persistent key scheduled for deletion is a finding.
+        "excepted control, carved-out resource": SH_OK + [{"control": "KMS.3", "status": "FAILED", "severity": "CRITICAL",
+                                                           "resource": "arn:aws:kms:r:1:key/persistent"}],
+        "no findings": [],
+    }),
     ("evaluate_validate_logs", lambda c: cfg.evaluate_validate_logs(*c), (VALIDATE_OK, 0), {
         "tampered log": (VALIDATE_OK.replace("831/831 log", "830/831 log") +
                          "Log file s3://b/k.json.gz INVALID: hash value doesn't match\n", 0),
@@ -982,6 +1000,9 @@ CFG_RESOURCES = {
     "evaluate_vpcs_declared": "vpcs_declared",
     "evaluate_function_runs": "function_runs",
     "evaluate_validate_logs": "trail_logs_validate",
+    "evaluate_failing_controls": "securityhub_failing_controls",
+    "evaluate_sources_catalogued": "store_sources_catalogued",
+    "evaluate_snapshots_accounted": "snapshots_accounted",
     "evaluate_services_enabled": "services_enabled",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",

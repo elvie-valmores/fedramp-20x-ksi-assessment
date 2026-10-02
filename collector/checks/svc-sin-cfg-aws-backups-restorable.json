@@ -14,6 +14,11 @@
     {
       "row": "KSI-SVC-SIN.verify.8",
       "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ABO.validate.5",
+      "covers": "partial",
+      "gap": "Database backups only, judged per backup. Object stores are judged by their bucket's default encryption (svc-sin-cfg-aws-stores-use-declared-keys), not object by object."
     }
   ]
 }

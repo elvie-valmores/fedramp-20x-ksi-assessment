@@ -1,0 +1,23 @@
+{
+  "id": "mla-osm-ops-aws-store-sources-catalogued",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every source partition in the log store is a value the catalog's partition projection reads, so nothing delivered is invisible to queries",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "store_sources_catalogued",
+    "region": "us-east-1",
+    "bucket": "fedramp-20x-ksi-log-store-437672023758",
+    "prefix": "normalized-raw/",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "table": "normalized_events"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.validate.7",
+      "covers": "full"
+    }
+  ]
+}
