@@ -803,6 +803,11 @@ CFG_CASES = [
         "unknown": {"a": None},
         "none named": {},
     }),
+    ("evaluate_function_runs", cfg.evaluate_function_runs, {"f": {"invocations": 1, "errors": 0, "within_hours": 26}}, {
+        "did not run": {"f": {"invocations": 0, "errors": 0, "within_hours": 26}},
+        "ran with errors": {"f": {"invocations": 1, "errors": 1, "within_hours": 26}},
+        "none named": {},
+    }),
     ("evaluate_vpcs_declared", lambda c: cfg.evaluate_vpcs_declared(c, [{"region": "us-east-1", "name": "proj"}]),
      [{"region": "us-east-1", "id": "vpc-1", "name": "proj", "default": False}], {
         "a default VPC": [{"region": "eu-west-1", "id": "vpc-2", "name": None, "default": True}],
@@ -966,6 +971,7 @@ CFG_RESOURCES = {
     "evaluate_backups_restorable": "database_backups_restorable",
     "evaluate_read_deny": "bucket_read_restricted",
     "evaluate_vpcs_declared": "vpcs_declared",
+    "evaluate_function_runs": "function_runs",
     "evaluate_services_enabled": "services_enabled",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",

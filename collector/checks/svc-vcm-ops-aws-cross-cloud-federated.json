@@ -1,0 +1,25 @@
+{
+  "id": "svc-vcm-ops-aws-cross-cloud-federated",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "The cross-cloud path was observed authenticating by federation in the last day: the GCP pipeline's service account, by its immutable numeric ID, exchanged a Google-signed token for the pipeline role through AssumeRoleWithWebIdentity. The pipeline runs every six hours",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "any_rows",
+    "query": "SELECT dt, actor.user.uid AS federated_identity, count(*) AS exchanges FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -1, current_date), '%Y-%m-%d') AND actor.user.type = 'WebIdentityUser' AND actor.user.name = '104894493962317106056' AND api.operation = 'AssumeRoleWithWebIdentity' AND status = 'Success' AND time > (to_unixtime(now()) - 86400) * 1000 GROUP BY 1,2"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VCM.validate.1",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-IAM-SNU.validate.1",
+      "covers": "full"
+    }
+  ]
+}

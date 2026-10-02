@@ -128,6 +128,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_run_job_images(check)
         if provider == "gcp" and resource == "services_enabled":
             return self._gcp_services_enabled(check)
+        if provider == "aws" and resource == "function_runs":
+            return self._aws_function_runs(check)
         if provider == "aws" and resource == "vpcs_declared":
             return self._aws_vpcs_declared(check)
         if provider == "aws" and resource == "bucket_read_restricted":
@@ -927,6 +929,31 @@ class CloudAPIConfigRead(Mechanism):
             response.raise_for_status()
             states[service] = response.json().get("state")
         ok, detail, evidence = evaluate_services_enabled(states)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_function_runs(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-OSM validate 4: each scheduled function ran within its cadence, without error.
+
+        Requires params: region, functions ([{name, within_hours}]). From
+        Lambda's own CloudWatch metrics, which count invocations the
+        function's log might not show if it never started.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cw = boto3.client("cloudwatch", region_name=check.params["region"])
+        now = datetime.now(timezone.utc)
+        found = {}
+        for f in check.params["functions"]:
+            def total(metric):
+                points = cw.get_metric_statistics(
+                    Namespace="AWS/Lambda", MetricName=metric,
+                    Dimensions=[{"Name": "FunctionName", "Value": f["name"]}],
+                    StartTime=now - timedelta(hours=f["within_hours"]), EndTime=now,
+                    Period=3600, Statistics=["Sum"])["Datapoints"]
+                return sum(p["Sum"] for p in points)
+            found[f["name"]] = {"invocations": total("Invocations"), "errors": total("Errors"),
+                                "within_hours": f["within_hours"]}
+        ok, detail, evidence = evaluate_function_runs(found)
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_vpcs_declared(self, check: CheckDefinition) -> CheckResult:
@@ -2076,6 +2103,14 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
 
 def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:
     return _judged("services", {s: {"passed": st == "ENABLED", "detail": str(st)} for s, st in states.items()})
+
+
+def evaluate_function_runs(found: dict[str, dict]) -> tuple[bool, str, dict]:
+    return _judged("functions", {
+        name: {"passed": f["invocations"] >= 1 and f["errors"] == 0,
+               "detail": f"{f['invocations']:g} run(s), {f['errors']:g} error(s) in {f['within_hours']}h"}
+        for name, f in found.items()
+    })
 
 
 def evaluate_vpcs_declared(vpcs: list[dict], allowed: list[dict]) -> tuple[bool, str, dict]:

@@ -1,0 +1,25 @@
+{
+  "id": "mla-osm-ops-aws-detection-query-ran",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "The scheduled detection query ran at least once in the last 26 hours, a day plus margin, without an error",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "function_runs",
+    "region": "us-east-1",
+    "functions": [
+      {
+        "name": "fedramp-20x-ksi-run-detection-query",
+        "within_hours": 26
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.validate.4",
+      "covers": "full"
+    }
+  ]
+}

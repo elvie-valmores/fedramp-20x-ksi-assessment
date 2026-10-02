@@ -1,0 +1,22 @@
+{
+  "id": "mla-osm-ops-aws-timestamps-consistent",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no normalized event in the last three days without a timestamp, or with one more than a day from the partition it was filed under",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND (time IS NULL OR from_unixtime(time / 1000) < date_parse(dt, '%Y-%m-%d') - INTERVAL '1' DAY OR from_unixtime(time / 1000) > date_parse(dt, '%Y-%m-%d') + INTERVAL '2' DAY) GROUP BY 1"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.validate.6",
+      "covers": "partial",
+      "gap": "One source: only AWS events are in the corpus, so consistency across clouds cannot be judged yet."
+    }
+  ]
+}
