@@ -454,14 +454,18 @@ method.
 
 ## Known limitations carried into the build
 
-- **The 3-day cadence has no schedule behind it yet.** This bullet used to say the collector
-  framework "runs on a real 3-day schedule via EventBridge and Cloud Scheduler". That was never
-  built. No collector schedule, and no runtime for the collectors, exists in either root (checked
-  2026-09-23). The collectors are run by hand. Until a schedule exists, the cadence column is a
-  requirement, not a property. Once one is built, whether it persists is the same question
-  `posture.tf` raised.
-- **SDR-CSX-KMT wants a year of daily metrics at Class C.** An apply-and-destroy environment cannot
-  produce that. The "where available" qualifier makes it survivable; state the collection window.
+- **The cadence has a schedule behind it since 2026-10-01.** Until then this bullet said, wrongly for
+  weeks, that the collectors "run on a real 3-day schedule via EventBridge and Cloud Scheduler";
+  nothing ran them but a person. Now `collect.yml` runs every check daily from GitHub Actions, as
+  read-only identities in both clouds that persist with the rest of the persistent set. Daily is
+  stricter than every determination's cadence.
+- **SDR-CSX-KMT wants a year of daily metrics at Class C.** Since 2026-10-02 every CI run is kept in
+  the log store (`collector-runs/`, Object Locked, evidence key), and the SDR carries per-indicator
+  30-day and up-to-a-year summaries plus each day's data. The "where available" qualifier still
+  matters twice: the store began on 2026-10-02, so a year is what exists; and the daily runs measure
+  what is standing, which is the persistent set. The application environment is up only during
+  sessions, so for the indicators whose checks need it, the daily data will mostly record its
+  absence. Every window states how many days it covers.
 - **The schema requires `fedRampRequirements`**, the ruleset half this project did not determine.
   Make it an emitter switch, not a silent empty array.
 - **No assessor is engaged.** Independent verification and validation fields stay empty with a stated
