@@ -1,0 +1,25 @@
+{
+  "id": "cna-rnt-cfg-aws-no-undeclared-vpcs",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No VPC exists in any region except the project VPC in us-east-1, and no default VPC exists anywhere",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "vpcs_declared",
+    "allowed": [
+      {
+        "region": "us-east-1",
+        "name": "fedramp-20x-ksi"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.2",
+      "covers": "partial",
+      "gap": "The network population half: no VPC beyond the project's, so the egress rules judged by cna-rnt-cfg-aws-no-open-egress are all of them. GCP's Cloud Run job has no VPC, so no egress firewall applies; it reaches AWS over the internet by design."
+    }
+  ]
+}

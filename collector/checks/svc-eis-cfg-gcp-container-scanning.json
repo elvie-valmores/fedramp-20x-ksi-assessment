@@ -1,0 +1,27 @@
+{
+  "id": "svc-eis-cfg-gcp-container-scanning",
+  "indicator": "KSI-SVC-EIS",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Container Scanning and Container Analysis are enabled, so Artifact Registry images are scanned on push and re-analysed for 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "services_enabled",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "services": [
+      "containerscanning.googleapis.com",
+      "containeranalysis.googleapis.com"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-EIS.verify.1",
+      "covers": "full",
+      "with": [
+        "svc-eis-cfg-aws-registry-scanning",
+        "scr-mon-cfg-dependencies-audited"
+      ]
+    }
+  ]
+}

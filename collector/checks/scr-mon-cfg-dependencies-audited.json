@@ -19,8 +19,11 @@
     },
     {
       "row": "KSI-SVC-EIS.verify.1",
-      "covers": "partial",
-      "gap": "The CI half only: dependencies are audited before each image build. Registry scanning is svc-eis-cfg-aws-registry-scanning's, and Artifact Registry has none."
+      "covers": "full",
+      "with": [
+        "svc-eis-cfg-aws-registry-scanning",
+        "svc-eis-cfg-gcp-container-scanning"
+      ]
     }
   ]
 }

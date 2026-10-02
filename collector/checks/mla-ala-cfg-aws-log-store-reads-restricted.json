@@ -1,0 +1,27 @@
+{
+  "id": "mla-ala-cfg-aws-log-store-reads-restricted",
+  "indicator": "KSI-MLA-ALA",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The log store's bucket policy denies object reads, current and prior versions, to every principal but the declared readers: the normalizer, the detection query, the collector, and the operator. The same four the evidence key lets decrypt",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "bucket_read_restricted",
+    "region": "us-east-1",
+    "bucket": "fedramp-20x-ksi-log-store-437672023758",
+    "readers": [
+      "arn:aws:iam::437672023758:role/fedramp-20x-ksi-normalize-events",
+      "arn:aws:iam::437672023758:role/fedramp-20x-ksi-run-detection-query",
+      "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-collector",
+      "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-ALA.verify.5",
+      "covers": "partial",
+      "gap": "The row names the query engine role alone; the normalizer, the collector and the operator also read, by need, and are the same four the evidence key admits. The tiered lane model the row belongs to is not built."
+    }
+  ]
+}

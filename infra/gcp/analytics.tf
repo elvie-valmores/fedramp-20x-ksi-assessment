@@ -29,6 +29,14 @@ resource "google_project_service" "analytics" {
     "artifactregistry.googleapis.com",
     "cloudkms.googleapis.com",
     "cloudscheduler.googleapis.com",
+    # Vulnerability scanning of Artifact Registry images on push, and their
+    # continuous re-analysis for 30 days after (KSI-SVC-EIS verify row 1,
+    # 2026-10-02). Until then the analytics image's OS packages were scanned
+    # nowhere; its Python dependencies are audited in CI. Container Analysis
+    # holds the results and is a dependency of Container Scanning, declared
+    # so drift sees both. About 0.26 USD per image pushed.
+    "containeranalysis.googleapis.com",
+    "containerscanning.googleapis.com",
     "run.googleapis.com",
     "securitycenter.googleapis.com",
     "sts.googleapis.com",

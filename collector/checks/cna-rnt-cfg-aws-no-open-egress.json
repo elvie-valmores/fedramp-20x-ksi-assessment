@@ -17,7 +17,7 @@
     {
       "row": "KSI-CNA-RNT.verify.2",
       "covers": "partial",
-      "gap": "The project VPC only. The account's default VPC, outside Terraform, keeps AWS's allow-all default group (an open item). GCP: the Cloud Run job has no VPC, so no egress firewall applies to it; it reaches AWS over the internet by design."
+      "gap": "The project VPC's rules; that no other VPC exists is cna-rnt-cfg-aws-no-undeclared-vpcs's. GCP's Cloud Run job has no VPC, so no egress firewall applies; it reaches AWS over the internet by design."
     }
   ],
   "requires_environment": "aws-phase1"

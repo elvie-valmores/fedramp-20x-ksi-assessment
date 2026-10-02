@@ -126,6 +126,12 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_settings(check)
         if provider == "gcp" and resource == "run_job_images":
             return self._gcp_run_job_images(check)
+        if provider == "gcp" and resource == "services_enabled":
+            return self._gcp_services_enabled(check)
+        if provider == "aws" and resource == "vpcs_declared":
+            return self._aws_vpcs_declared(check)
+        if provider == "aws" and resource == "bucket_read_restricted":
+            return self._aws_bucket_read_restricted(check)
         if provider == "aws" and resource == "task_definitions":
             return self._aws_task_definitions(check)
         if provider == "aws" and resource == "database_backups_restorable":
@@ -901,6 +907,59 @@ class CloudAPIConfigRead(Mechanism):
         ok, detail, evidence = evaluate_task_definitions(definitions, check.params["assertion"])
         return CheckResult(check.id, ok, evidence, detail)
 
+    def _gcp_services_enabled(self, check: CheckDefinition) -> CheckResult:
+        """The named Google APIs are enabled in the project.
+
+        Requires params: project_id, services. From Service Usage, which is
+        the authority on whether an API is on.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        p = check.params
+        session = AuthorizedSession(impersonated_token(p["project_id"]))
+        states = {}
+        for service in p["services"]:
+            response = session.get(
+                f"https://serviceusage.googleapis.com/v1/projects/{p['project_id']}/services/{service}", timeout=30)
+            response.raise_for_status()
+            states[service] = response.json().get("state")
+        ok, detail, evidence = evaluate_services_enabled(states)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_vpcs_declared(self, check: CheckDefinition) -> CheckResult:
+        """Every VPC in every region is a declared one.
+
+        Requires params: allowed ([{region, name}]). Every enabled region is
+        read, not only the recorded one: a network the inventory cannot see
+        is the one to find.
+        """
+        regions = [r["RegionName"] for r in boto3.client("ec2", region_name="us-east-1").describe_regions()["Regions"]]
+        vpcs = []
+        for region in regions:
+            for v in boto3.client("ec2", region_name=region).describe_vpcs()["Vpcs"]:
+                name = next((t["Value"] for t in v.get("Tags", []) if t["Key"] == "Name"), None)
+                vpcs.append({"region": region, "id": v["VpcId"], "name": name, "default": v["IsDefault"]})
+        ok, detail, evidence = evaluate_vpcs_declared(vpcs, check.params["allowed"])
+        evidence["regions_read"] = len(regions)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_bucket_read_restricted(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-ALA verify 5: the bucket denies object reads to all but its declared readers.
+
+        Requires params: region, bucket, readers (the principal ARNs or ARN
+        patterns exempted, exactly).
+        """
+        s3 = boto3.client("s3", region_name=check.params["region"])
+        bucket = check.params["bucket"]
+        try:
+            policy = json.loads(s3.get_bucket_policy(Bucket=bucket)["Policy"])
+        except s3.exceptions.ClientError:
+            policy = None
+        ok, detail = evaluate_read_deny(policy, bucket, check.params["readers"])
+        return CheckResult(check.id, ok, {"policy": policy}, detail)
+
     def _gcp_run_job_images(self, check: CheckDefinition) -> CheckResult:
         """KSI-SVC-VRI verify 1, GCP: every Cloud Run job's containers are pinned by digest.
 
@@ -947,7 +1006,12 @@ class CloudAPIConfigRead(Mechanism):
                                     "encrypted": b.get("Encrypted", False), "key": b.get("KmsKeyId")})
         for b in backups:
             if b["key"]:
-                meta = kms.describe_key(KeyId=b["key"])["KeyMetadata"]
+                try:
+                    meta = kms.describe_key(KeyId=b["key"])["KeyMetadata"]
+                except kms.exceptions.NotFoundException:
+                    # Deleted: the backup can never be decrypted again.
+                    b.update(key_manager="CUSTOMER", key_state="Deleted", deletion_date=None)
+                    continue
                 b.update(key_manager=meta["KeyManager"], key_state=meta["KeyState"],
                          deletion_date=str(meta.get("DeletionDate") or "") or None)
         ok, detail, evidence = evaluate_backups_restorable(backups)
@@ -1997,6 +2061,73 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
             problems = _container_problems(c, assertion)
             results[f"{service}/{c.get('name')}"] = {"passed": not problems, "detail": "; ".join(problems) or "ok"}
     return _judged("containers", results)
+
+
+def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:
+    return _judged("services", {s: {"passed": st == "ENABLED", "detail": str(st)} for s, st in states.items()})
+
+
+def evaluate_vpcs_declared(vpcs: list[dict], allowed: list[dict]) -> tuple[bool, str, dict]:
+    """No VPC outside the declared list; a default VPC is never declared.
+
+    None at all passes: between sessions the project VPC is torn down, and
+    an account with no networks has none undeclared.
+    """
+    ok_pairs = {(a["region"], a["name"]) for a in allowed}
+    results = {
+        f"{v['region']} {v['id']}": {
+            "passed": not v["default"] and (v["region"], v["name"]) in ok_pairs,
+            "detail": "default VPC" if v["default"] else
+                      ("declared" if (v["region"], v["name"]) in ok_pairs else f"undeclared ({v['name']})"),
+        }
+        for v in vpcs
+    }
+    if not results:
+        return True, "no VPCs in any region", {"vpcs": {}, "failing": []}
+    return _judged("vpcs", results)
+
+
+_READ_ACTIONS = ("s3:GetObject", "s3:GetObjectVersion")
+
+
+def _covers(action_patterns: list[str], action: str) -> bool:
+    return any(fnmatch.fnmatchcase(action, p) for p in action_patterns)
+
+
+def evaluate_read_deny(policy: dict | None, bucket: str, readers: list[str]) -> tuple[bool, str]:
+    """A Deny on every principal reading the bucket's objects, unless its
+    aws:PrincipalArn is one of exactly the declared readers.
+
+    Exactly: an extra exemption is an undeclared reader, and a missing one a
+    declared reader locked out. Both GetObject and GetObjectVersion must be
+    covered, or a reader takes the old version instead.
+    """
+    if not policy:
+        return False, "no bucket policy"
+    objects = f"arn:aws:s3:::{bucket}/*"
+    for st in policy.get("Statement", []):
+        principal = st.get("Principal")
+        everyone = principal == "*" or (isinstance(principal, dict) and _as_list(principal.get("AWS", [])) == ["*"])
+        if st.get("Effect") != "Deny" or not everyone:
+            continue
+        if objects not in _as_list(st.get("Resource", [])) and "*" not in _as_list(st.get("Resource", [])):
+            continue
+        actions = _as_list(st.get("Action", []))
+        if not all(_covers(actions, a) for a in _READ_ACTIONS):
+            continue
+        condition = st.get("Condition") or {}
+        exempt = None
+        for op in ("ArnNotLike", "ArnNotEquals", "StringNotLike", "StringNotEquals"):
+            if "aws:PrincipalArn" in condition.get(op, {}):
+                exempt = set(_as_list(condition[op]["aws:PrincipalArn"]))
+        if exempt is None or set(condition) - {"ArnNotLike", "ArnNotEquals", "StringNotLike", "StringNotEquals"}:
+            continue
+        extra, missing = sorted(exempt - set(readers)), sorted(set(readers) - exempt)
+        if extra or missing:
+            return False, (f"read deny exempts undeclared {extra}" if extra else "") + \
+                (f"; declared readers not exempted {missing}" if missing else "")
+        return True, f"object reads denied to all but the {len(readers)} declared readers"
+    return False, "no statement denies object reads outside a declared reader list"
 
 
 def evaluate_backups_restorable(backups: list[dict]) -> tuple[bool, str, dict]:

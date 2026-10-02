@@ -477,6 +477,11 @@ CONTAINER_OK = {"name": "api", "image": "r/api@sha256:" + "a" * 64, "command": [
                 "readonlyRootFilesystem": True, "privileged": False, "portMappings": [],
                 "linuxParameters": {"capabilities": {"add": [], "drop": ["ALL"]}}}
 BACKUP_OK = {"id": "b", "encrypted": True, "key": "k", "key_manager": "CUSTOMER", "key_state": "Enabled"}
+_READERS = ["arn:aws:iam::1:role/normalize", "arn:aws:iam::1:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Op_*"]
+_DENY = {"Sid": "DenyReads", "Effect": "Deny", "Principal": "*", "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+         "Resource": "arn:aws:s3:::logs/*", "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS}}}
+_TLS_DENY = {"Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": ["arn:aws:s3:::logs", "arn:aws:s3:::logs/*"],
+             "Condition": {"Bool": {"aws:SecureTransport": "false"}}}
 CORPUS_OK = ([{"table": "t", "projection": "true"}], [{"workgroup": "w", "enforced": True, "cutoff": 1 << 30}])
 GCS_IAM_OK = {"publicAccessPrevention": "enforced", "uniformBucketLevelAccess": {"enabled": True}}
 LOCK_OK = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 7}}}
@@ -784,7 +789,30 @@ CFG_CASES = [
     ("evaluate_task_definitions (digest)", lambda c: cfg.evaluate_task_definitions(c, "digest_pinned"), {"api": [CONTAINER_OK]}, {
         "by tag": {"api": [{**CONTAINER_OK, "image": "r/api:git-abc"}]},
     }),
+    ("evaluate_services_enabled", cfg.evaluate_services_enabled, {"a": "ENABLED", "b": "ENABLED"}, {
+        "one disabled": {"a": "ENABLED", "b": "DISABLED"},
+        "unknown": {"a": None},
+        "none named": {},
+    }),
+    ("evaluate_vpcs_declared", lambda c: cfg.evaluate_vpcs_declared(c, [{"region": "us-east-1", "name": "proj"}]),
+     [{"region": "us-east-1", "id": "vpc-1", "name": "proj", "default": False}], {
+        "a default VPC": [{"region": "eu-west-1", "id": "vpc-2", "name": None, "default": True}],
+        "undeclared VPC": [{"region": "us-east-1", "id": "vpc-3", "name": "other", "default": False}],
+        "declared name, other region": [{"region": "us-west-2", "id": "vpc-4", "name": "proj", "default": False}],
+    }),
+    ("evaluate_read_deny", lambda c: cfg.evaluate_read_deny(c, "logs", _READERS),
+     {"Statement": [_TLS_DENY, _DENY]}, {
+        "no policy": None,
+        # The TLS deny covers s3:* on the objects, but it is not a reader list.
+        "only the TLS deny": {"Statement": [_TLS_DENY]},
+        "undeclared reader exempted": {"Statement": [{**_DENY, "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS + ["arn:aws:iam::1:role/drift"]}}}]},
+        "declared reader locked out": {"Statement": [{**_DENY, "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS[:1]}}}]},
+        "old versions readable": {"Statement": [{**_DENY, "Action": "s3:GetObject"}]},
+        "another bucket": {"Statement": [{**_DENY, "Resource": "arn:aws:s3:::other/*"}]},
+        "allow, not deny": {"Statement": [{**_DENY, "Effect": "Allow"}]},
+    }),
     ("evaluate_backups_restorable", cfg.evaluate_backups_restorable, [BACKUP_OK], {
+        "key deleted": [{**BACKUP_OK, "key_state": "Deleted"}],
         # 2026-10-02 exactly: the database key scheduled for deletion at teardown.
         "key pending deletion": [{**BACKUP_OK, "key_state": "PendingDeletion", "deletion_date": "2026-10-09"}],
         "AWS-managed key": [{**BACKUP_OK, "key_manager": "AWS"}],
@@ -927,6 +955,9 @@ CFG_RESOURCES = {
     "evaluate_task_definitions (explicit)": "task_definitions",
     "evaluate_task_definitions (digest)": "task_definitions",
     "evaluate_backups_restorable": "database_backups_restorable",
+    "evaluate_read_deny": "bucket_read_restricted",
+    "evaluate_vpcs_declared": "vpcs_declared",
+    "evaluate_services_enabled": "services_enabled",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",
     "evaluate_workflow_state": "workflow_active",

@@ -13,8 +13,11 @@
   "matrix_rows": [
     {
       "row": "KSI-SVC-EIS.verify.1",
-      "covers": "partial",
-      "gap": "Artifact Registry is not scanned: the Container Scanning API is not enabled, so the analytics image's OS packages are unscanned. Build row 1 predates the analytics image (2026-10-02) and names AWS only. Its Python dependencies are audited in CI (scr-mon-cfg-dependencies-audited)."
+      "covers": "full",
+      "with": [
+        "svc-eis-cfg-gcp-container-scanning",
+        "scr-mon-cfg-dependencies-audited"
+      ]
     }
   ]
 }
