@@ -7652,7 +7652,8 @@ check passed under the collector's own identities, except the finding below.
      S3 object data events, reads and writes, under the extract bucket.
    - **Cost:** under 1 USD a month at the current volume.
    - **The normalizer** maps any CloudTrail record generically, so data events will normalize.
-   - **Status:** the plan was handed to the operator to apply, because it is an audit-log change.
+   - **Status:** applied by the operator on 2026-10-02. The trail shows both selectors, is logging
+     with no delivery error, and plans clean. `mla-let-cfg-aws-trail-data-events-scoped` passes.
 2. **The analytics image is not registry-scanned.** Build row 1 names AWS only; it predates the
    analytics image, which lives in Artifact Registry. The Container Scanning API is not enabled. The
    image's Python dependencies are audited in CI, but its OS packages are not scanned anywhere.

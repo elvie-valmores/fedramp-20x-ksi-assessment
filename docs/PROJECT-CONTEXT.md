@@ -238,11 +238,6 @@ around a refusal.** Refused so far:
 yet. 17 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
-0. **Pending the operator: the trail's data events.** `infra/aws/log_corpus.tf` declares two advanced
-   selectors: all management events, and S3 object data events on the extract bucket. The plan was
-   handed over as `infra/aws/trail-data-events.tfplan`. Until it is applied,
-   `mla-let-cfg-aws-trail-data-events-scoped` fails, which is correct. **Commit `log_corpus.tf`
-   only after the apply**, then confirm the check passes (DECISIONS.md, "Eighteen more checks").
 1. **More check definitions.** The CFG rows that persistent resources can answer are mostly done.
    What remains is in three groups:
    - **Phase 1 rows:** route tables, security groups, the ALB, task definitions and RDS. Write

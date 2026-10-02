@@ -167,6 +167,45 @@ resource "aws_cloudtrail" "main" {
   # silently stopping delivery.
   kms_key_id = aws_kms_key.evidence.arn
 
+  # Advanced selectors replace the default selection entirely, so
+  # management events are declared here too: all of them, read and write,
+  # as the default recorded until 2026-10-02.
+  advanced_event_selector {
+    name = "Management events"
+
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
+
+  # Data events for the customer-data stores, and only those: the
+  # 2026-09-05 MLA-LET decision. That decision was never implemented. Until
+  # 2026-10-02 the trail recorded no data events at all, so no read or write
+  # of a customer-data object was logged, which
+  # mla-let-cfg-aws-trail-data-events-scoped found. The extract bucket is
+  # the AWS store holding customer data; RDS has no CloudTrail data events,
+  # and GCP's stores are covered by Data Access audit logs (audit.tf).
+  # Reads and writes both: an exfiltration is a read.
+  advanced_event_selector {
+    name = "Customer-data object access"
+
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["${aws_s3_bucket.extracts.arn}/"]
+    }
+  }
+
   depends_on = [aws_s3_bucket_policy.log_store]
 }
 
