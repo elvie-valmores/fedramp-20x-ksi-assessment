@@ -347,6 +347,38 @@ PATH_CASES = [
 ]
 
 
+class _StubSecrets:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def describe_secret(self, SecretId: str) -> dict:
+        return {"Name": SecretId, **({"OwningService": self.owner} if self.owner else {})}
+
+
+# (secret name, OwningService, should excuse). The name alone must never
+# excuse: anyone can name a secret rds!db-anything.
+SECRET_CASES = [
+    ("rds!db-1234", "rds", True),
+    ("rds!db-1234", None, False),
+    ("rds!db-1234", "appflow", False),
+    ("fedramp-20x-ksi/task-tls", None, False),
+]
+
+
+def service_owned_secret_predicate() -> list[str]:
+    wrong = []
+    for name, owner, expected in SECRET_CASES:
+        p = object.__new__(dvl.AwsPredicates)
+        p.secretsmanager = _StubSecrets(owner)
+        if p._service_owned_secret({"resource_id": name, "name": name}) != expected:
+            wrong.append(f"{name} owned by {owner}")
+    print(f"[service_owned_secret] {'PASS' if not wrong else 'BROKEN'} -- "
+          f"{len(SECRET_CASES)} secrets, excused only when RDS owns them")
+    if wrong:
+        print(f"    wrong verdict on: {'; '.join(wrong)}")
+    return ["service_owned_secret"] if wrong else []
+
+
 def reserved_path_predicates() -> list[str]:
     broken = []
     for predicate in dict.fromkeys(p for p, *_ in PATH_CASES):
@@ -626,10 +658,11 @@ def main() -> int:
     broken += declared_versus_live_comparison()
     broken += live_is_declared()
     broken += reserved_path_predicates()
+    broken += service_owned_secret_predicate()
     print()
     broken += cloud_api_config_read()
     total = (1 + len(CASES) + len(DVL_CASES) + 1 + len(LID_CASES)
-             + len({c[0] for c in PATH_CASES}) + len(CFG_CASES))
+             + len({c[0] for c in PATH_CASES}) + 1 + len(CFG_CASES))
 
     print()
     if broken:

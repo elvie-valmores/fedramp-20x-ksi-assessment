@@ -27,6 +27,21 @@
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-task-execution",
         "arn:aws:iam::437672023758:role/fedramp-20x-ksi-worker-task",
         "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+      ],
+      "alias/fedramp-20x-ksi-database": [
+        "service:rds.amazonaws.com",
+        "service:rds.us-east-1.amazonaws.com",
+        "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+      ],
+      "alias/fedramp-20x-ksi-logs": [
+        "service:logs.us-east-1.amazonaws.com",
+        "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+      ],
+      "alias/fedramp-20x-ksi-secrets": [
+        "arn:aws:iam::437672023758:role/fedramp-20x-ksi-api-task",
+        "arn:aws:iam::437672023758:role/fedramp-20x-ksi-migrate-task",
+        "service:secretsmanager.amazonaws.com",
+        "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
       ]
     }
   }

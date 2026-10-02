@@ -62,6 +62,13 @@
           "predicate": "kms_pending_deletion"
         },
         "reason": "A customer key a teardown destroyed. KMS holds it in PendingDeletion for its waiting period before removing it; it left state when Terraform scheduled the deletion."
+      },
+      {
+        "resource_type": "AWS::SecretsManager::Secret",
+        "rule": {
+          "predicate": "service_owned_secret"
+        },
+        "reason": "Created and managed by RDS for the database's master user (manage_master_user_password in database.tf), encrypted with the secrets key, and deleted with the database. Declared through its owner. Verified by the secret's OwningService, not its rds! name."
       }
     ]
   }

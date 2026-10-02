@@ -10,23 +10,103 @@
     "resource": "store_encryption_keys",
     "region": "us-east-1",
     "rules": [
-      {"type": "s3_bucket", "name": "fedramp-20x-ksi-log-store-*", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "s3_bucket", "name": "fedramp-20x-ksi-config-*", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "s3_bucket", "name": "fedramp-20x-ksi-athena-results-*", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "s3_bucket", "name": "fedramp-20x-ksi-extracts-*", "expect": "alias/fedramp-20x-ksi-artifacts"},
-      {"type": "s3_bucket", "name": "fedramp-20x-ksi-tfstate-*", "expect": "SSE-S3", "reason": "state bucket, recorded exception (DECISIONS.md, 2026-09-23)"},
-      {"type": "log_group", "name": "/aws/lambda/fedramp-20x-ksi-*", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "log_group", "name": "/fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-logs"},
-      {"type": "log_group", "name": "aws-waf-logs-fedramp-20x-ksi", "expect": "alias/fedramp-20x-ksi-logs"},
-      {"type": "log_group", "name": "/aws/rds/instance/fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-logs"},
-      {"type": "sns_topic", "name": "fedramp-20x-ksi-detection-interim", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "ecr_repository", "name": "fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-artifacts"},
-      {"type": "cloudtrail", "name": "fedramp-20x-ksi-trail", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "athena_workgroup", "name": "fedramp-20x-ksi-log-corpus", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "athena_workgroup", "name": "primary", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "config_delivery_channel", "name": "fedramp-20x-ksi-delivery", "expect": "alias/fedramp-20x-ksi-evidence"},
-      {"type": "secret", "name": "fedramp-20x-ksi/*", "expect": "alias/fedramp-20x-ksi-secrets"},
-      {"type": "rds_instance", "name": "fedramp-20x-ksi", "expect": "alias/fedramp-20x-ksi-database"}
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-log-store-*",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-config-*",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-athena-results-*",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-extracts-*",
+        "expect": "alias/fedramp-20x-ksi-artifacts"
+      },
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-tfstate-*",
+        "expect": "SSE-S3",
+        "reason": "state bucket, recorded exception (DECISIONS.md, 2026-09-23)"
+      },
+      {
+        "type": "s3_bucket",
+        "name": "fedramp-20x-ksi-alb-logs-*",
+        "expect": "SSE-S3",
+        "reason": "platform limit: ALB access log delivery supports only SSE-S3 ('The only server-side encryption option that's supported is Amazon S3-managed keys (SSE-S3)', AWS ELB docs; DECISIONS.md, 2026-10-02)"
+      },
+      {
+        "type": "log_group",
+        "name": "/aws/lambda/fedramp-20x-ksi-*",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "log_group",
+        "name": "/fedramp-20x-ksi/*",
+        "expect": "alias/fedramp-20x-ksi-logs"
+      },
+      {
+        "type": "log_group",
+        "name": "aws-waf-logs-fedramp-20x-ksi",
+        "expect": "alias/fedramp-20x-ksi-logs"
+      },
+      {
+        "type": "log_group",
+        "name": "/aws/rds/instance/fedramp-20x-ksi/*",
+        "expect": "alias/fedramp-20x-ksi-logs"
+      },
+      {
+        "type": "sns_topic",
+        "name": "fedramp-20x-ksi-detection-interim",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "ecr_repository",
+        "name": "fedramp-20x-ksi/*",
+        "expect": "alias/fedramp-20x-ksi-artifacts"
+      },
+      {
+        "type": "cloudtrail",
+        "name": "fedramp-20x-ksi-trail",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "athena_workgroup",
+        "name": "fedramp-20x-ksi-log-corpus",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "athena_workgroup",
+        "name": "primary",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "config_delivery_channel",
+        "name": "fedramp-20x-ksi-delivery",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "secret",
+        "name": "fedramp-20x-ksi/*",
+        "expect": "alias/fedramp-20x-ksi-secrets"
+      },
+      {
+        "type": "secret",
+        "name": "rds!db-*",
+        "expect": "alias/fedramp-20x-ksi-secrets"
+      },
+      {
+        "type": "rds_instance",
+        "name": "fedramp-20x-ksi",
+        "expect": "alias/fedramp-20x-ksi-database"
+      }
     ]
   }
 }

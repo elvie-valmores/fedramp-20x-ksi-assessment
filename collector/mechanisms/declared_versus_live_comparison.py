@@ -505,6 +505,7 @@ class AwsPredicates:
         self.elbv2 = boto3.client("elbv2", region_name=region)
         self.ecr = boto3.client("ecr", region_name=region)
         self.cloudtrail = boto3.client("cloudtrail", region_name=region)
+        self.secretsmanager = boto3.client("secretsmanager", region_name=region)
         self.region = region
         self._permission_sets = None
 
@@ -587,6 +588,15 @@ class AwsPredicates:
         # AWS services create; anyone can name a role AWSServiceRoleForX.
         role = self.iam.get_role(RoleName=resource["name"])["Role"]
         return role["Path"].startswith("/aws-service-role/")
+
+    def _service_owned_secret(self, resource: dict) -> bool:
+        # A secret another AWS service created and manages -- RDS's master
+        # user secret, named rds!db-... -- answered by the secret's own
+        # OwningService, not its name: anyone can name a secret rds!x.
+        # Created and deleted with its owner, so it is declared through the
+        # owner (manage_master_user_password on the database), not itself.
+        meta = self.secretsmanager.describe_secret(SecretId=resource["resource_id"])
+        return meta.get("OwningService") == "rds"
 
     def _identity_center_role(self, resource: dict) -> bool:
         # The role Identity Center creates in an account when it provisions a
