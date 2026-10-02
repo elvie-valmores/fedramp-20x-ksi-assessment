@@ -3,13 +3,19 @@
   "indicator": "KSI-CNA-RNT",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "Every VPC endpoint carries a policy naming or conditioning its principals and allowing no wildcard action",
+  "description": "Every VPC endpoint carries a policy naming or conditioning its principals and allowing no wildcard action; the one open-principal statement is ECR's layer bucket, a declared exception scoped to that bucket and GetObject",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
     "resource": "endpoint_policies",
     "region": "us-east-1",
-    "vpc_name": "fedramp-20x-ksi"
+    "vpc_name": "fedramp-20x-ksi",
+    "principal_exceptions": [
+      {
+        "resource": "arn:aws:s3:::prod-us-east-1-starport-layer-bucket/*",
+        "reason": "ECR's image-layer bucket. Pulls fetch layers by pre-signed URL from ECR's own bucket, so the request carries no project principal to name; the statement is bounded to this one AWS-owned bucket and s3:GetObject (network.tf, AllowECRLayerPull)"
+      }
+    ]
   },
   "matrix_rows": [
     {

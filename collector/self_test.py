@@ -468,6 +468,9 @@ EP_OK = [{"service": "logs", "type": "Interface", "policy": {"Statement": [
          {"service": "s3", "type": "Gateway", "policy": {"Statement": [
     {"Effect": "Allow", "Principal": "*", "Action": ["s3:GetObject"], "Resource": "*",
      "Condition": {"ArnEquals": {"aws:PrincipalArn": ["arn:aws:iam::1:role/api"]}}}]}}]
+EP_EXCEPT = [{"resource": "arn:aws:s3:::layers/*", "reason": "ECR layer bucket"}]
+EP_LAYERS = {"service": "s3", "type": "Gateway", "policy": {"Statement": [
+    {"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::layers/*"}]}}
 LB_LISTENERS = [{"port": 443, "protocol": "HTTPS", "policy": "ELBSecurityPolicy-TLS13-1-2-2021-06", "actions": [{"type": "forward"}]},
                 {"port": 80, "protocol": "HTTP", "policy": None,
                  "actions": [{"type": "redirect", "protocol": "HTTPS", "status": "HTTP_301"}]}]
@@ -746,7 +749,13 @@ CFG_CASES = [
         "IPv6 everywhere": SG_OK + [{"group": "api", "protocol": "tcp", "from": 443, "to": 443, "cidr": "::/0"}],
         "no rules": [],
     }),
-    ("evaluate_endpoint_policies", cfg.evaluate_endpoint_policies, EP_OK, {
+    ("evaluate_endpoint_policies", lambda c: cfg.evaluate_endpoint_policies(c, EP_EXCEPT), EP_OK + [EP_LAYERS], {
+        # The exception covers only its listed resource: the same open
+        # principal on any other resource still fails.
+        "open principal beyond the excepted resource": [{**EP_LAYERS, "policy": {"Statement": [
+            {**EP_LAYERS["policy"]["Statement"][0], "Resource": ["arn:aws:s3:::layers/*", "arn:aws:s3:::other/*"]}]}}],
+        "excepted resource, every action": [{**EP_LAYERS, "policy": {"Statement": [
+            {**EP_LAYERS["policy"]["Statement"][0], "Action": "s3:*"}]}}],
         "AWS default policy": [{"service": "logs", "type": "Interface", "policy": {"Statement": [
             {"Effect": "Allow", "Principal": "*", "Action": "*", "Resource": "*"}]}}],
         "service wildcard": [{"service": "logs", "type": "Interface", "policy": {"Statement": [

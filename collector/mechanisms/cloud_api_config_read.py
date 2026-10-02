@@ -823,7 +823,8 @@ class CloudAPIConfigRead(Mechanism):
     def _aws_endpoint_policies(self, check: CheckDefinition) -> CheckResult:
         """KSI-CNA-RNT verify 6, CNA-ULN verify 3, SVC-VCM verify 4: endpoint policies restrict.
 
-        Requires params: region, vpc_name.
+        Requires params: region, vpc_name, principal_exceptions
+        ([{resource, reason}]).
         """
         ec2 = boto3.client("ec2", region_name=check.params["region"])
         vpc = self._project_vpc(ec2, check.params["vpc_name"])
@@ -834,7 +835,7 @@ class CloudAPIConfigRead(Mechanism):
                 Filters=[{"Name": "vpc-id", "Values": [vpc]}])
             for e in page["VpcEndpoints"]
         ]
-        ok, detail, evidence = evaluate_endpoint_policies(endpoints)
+        ok, detail, evidence = evaluate_endpoint_policies(endpoints, check.params.get("principal_exceptions", []))
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_load_balancer_tls(self, check: CheckDefinition) -> CheckResult:
@@ -1962,13 +1963,22 @@ def evaluate_open_rules(rules: list[dict], allowed: list[dict], direction: str) 
     return _judged("rules", results)
 
 
-def evaluate_endpoint_policies(endpoints: list[dict]) -> tuple[bool, str, dict]:
+def evaluate_endpoint_policies(endpoints: list[dict], principal_exceptions: list[dict] = ()) -> tuple[bool, str, dict]:
     """Every endpoint carries a policy that restricts both who and what.
 
     An Allow statement must name its principals or condition them, and must
     not allow every action. AWS's default endpoint policy -- everyone,
     everything -- fails both.
+
+    One exception shape, declared with its reason: a statement whose every
+    resource is a listed AWS-owned resource may leave the principal open,
+    where AWS serves the access in a way no principal can be named for. ECR
+    image layers are that case: pulls fetch them from ECR's own S3 bucket by
+    pre-signed URL, so the request does not carry the task's role. The
+    resource scoping is then the restriction, and the rule against wildcard
+    actions still applies.
     """
+    excepted = {e["resource"] for e in principal_exceptions}
     results = {}
     for e in endpoints:
         problems = []
@@ -1978,7 +1988,8 @@ def evaluate_endpoint_policies(endpoints: list[dict]) -> tuple[bool, str, dict]:
         for s in statements:
             principal = s.get("Principal")
             everyone = principal == "*" or (isinstance(principal, dict) and "*" in _as_list(principal.get("AWS", [])))
-            if everyone and not s.get("Condition"):
+            resources = set(_as_list(s.get("Resource", [])))
+            if everyone and not s.get("Condition") and not (resources and resources <= excepted):
                 problems.append("any principal, unconditioned")
             if any(a == "*" or a.endswith(":*") for a in _as_list(s.get("Action", []))):
                 problems.append("every action")

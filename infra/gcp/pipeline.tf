@@ -67,10 +67,11 @@ variable "pipeline_image" {
   description = "Fully qualified image reference for the pipeline job, pinned by digest (repo@sha256:...)."
   type        = string
   # The deployed image, by digest, as a reviewed declaration: changing what
-  # runs is a commit. This digest is build run 36954218125's, tag
-  # git-193454c1a7b2, signed and verified in that run (DECISIONS.md,
-  # 2026-10-02).
-  default = "us-central1-docker.pkg.dev/fedramp-20x-ksi-assessment/fedramp-20x-ksi/analytics@sha256:19f7fda8771949788a858b389ca0cc83e16536dfbfcd1b133ef9fcf1c4df5d9f"
+  # runs is a commit. This digest is build run 37066486575's, tag
+  # git-0cee46bbabef, signed and verified in that run: the MERGE on
+  # (id, recorded_at) (DECISIONS.md, 2026-10-02). It replaced build run
+  # 36954218125's (git-193454c1a7b2), which merged on id alone.
+  default = "us-central1-docker.pkg.dev/fedramp-20x-ksi-assessment/fedramp-20x-ksi/analytics@sha256:6db759e5a6afc66c1059896ec64b8706434b5f034856e56406887568cf63e79e"
 
   validation {
     # A tag reference is the mutable pointer KSI-SVC-VRI exists to reject.
