@@ -7265,3 +7265,93 @@ evidence**, so 12 of 46 indicators now have some. There are 35 checks; the self-
 
 **State:** the collector is 34 of 35, the one failure being the RDS orphan log group, which waits for
 AWS phase 1. GCP drift covers 46 resources, including the job.
+
+---
+
+## 2026-10-02 — Data crossed the clouds for the first time, after a ninth non-functional control
+
+**AWS phases 1 and 2 were applied, the full chain run, and the environment torn down** (14:30 to
+about 17:30 UTC).
+
+**With the environment up, the checks found three gaps in their own rules, all real:**
+
+- **RDS's master user secret** (`rds!db-…`) was undeclared, because RDS creates it. It is now excused
+  by a predicate that asks Secrets Manager for the secret's `OwningService` rather than trusting
+  the `rds!` name. A negative control catches a name-trusting version.
+- **The ALB access-log bucket is SSE-S3,** and that is a platform limit. AWS's ELB documentation:
+  "The only server-side encryption option that's supported is Amazon S3-managed keys (SSE-S3)." It
+  is a declared exception with that quote.
+- **The database, logs and secrets keys had no decrypt models.** Each key's resolved set matched the
+  design: RDS, Logs, and the api and migrate roles with Secrets Manager, plus the operator. They
+  are now declared.
+
+Then, with phase 1 up, all of SVC-SIN, inventory-is-declared (68 of 68) and drift (372) passed. The
+project VPC's default security group had no rules, and the RDS log group was adopted and encrypted.
+
+**`git-f9f2c35f8fd1` had expired.** The ECR lifecycle policy keeps "the last 10 images" counting
+every artifact, signatures and attestations included, so about three builds survive. Three builds
+since 2026-10-01 had removed the tag the resume block said to deploy. Deployed instead:
+`git-193454c1a7b2`, after confirming no change to `app/api`, `app/worker` or `app/common` since
+`f9f2c35`.
+
+**The extract path had never worked: the ninth configured, applied, non-functional control.** The
+worker's first landing failed with `AccessDenied`. Each layer was ruled out by evidence:
+
+- **KMS:** CloudTrail showed the worker's `GenerateDataKey` succeeding, and it was the only call on
+  the key.
+- **The role and the bucket policy:** the IAM simulator, run with the real context (the endpoint, the
+  KMS header, TLS), said allowed.
+- **Routing:** both worker subnets send S3 traffic to the endpoint, and there is no NAT route.
+
+A one-off task with the worker's own task definition then printed S3's message: *"because no VPC
+endpoint policy allows the s3:PutObject action."* The S3 gateway endpoint's `AllowProjectBuckets`
+named the two task roles as principals, and AWS's PrivateLink documentation says: "With gateway
+endpoints, the Principal element must be set to *. To specify a principal, use the aws:PrincipalArn
+condition key." So the statement had **never allowed anything**. ECR pulls worked only because their
+statement uses `*`. The record had deferred this test on 2026-09-23 ("verify at the next phase 2:
+an extract written by the worker must still land"), and no extract ever had. **Fixed** with
+`Principal "*"` and `aws:PrincipalArn` naming the same two roles: the probe then succeeded, and the
+worker landed.
+
+**Then the chain ran, end to end:**
+
+| Step | Evidence |
+|---|---|
+| api → RDS, IAM auth | 4 measurements written at 16:00:18 |
+| worker → S3, through the endpoint | 16:06:38: "landed 4 records", under the artifacts key. The worker role denies `PutObject` unless `aws:SourceVpce` is the endpoint, so it could only have come that way |
+| GCP job → AWS → GCS | 16:12:20: "read 4 records from 1 objects", landed under the analytics key |
+| BigQuery | "merged 4 new rows". Queried as `terraform-admin`: the four values exactly as written |
+
+The migration task had run first (exit 0). Its 16-second lag behind the worker's first cycle meant
+that cycle could not connect.
+
+**Found along the way, recorded as open:**
+
+- **A failed landing loses its batch.** The worker logs "will retry next cycle", but each cycle
+  extracts a fixed window behind now, so the records from the failed cycle had left the window
+  before the next one. The three measurements from 14:53 were never extracted. This is data loss on
+  any transient failure.
+- **`caliper.elvievalmores.com` has no DNS record.** The load balancer is new on every phase 1.
+  Requests were made with `--connect-to` and the real hostname, so TLS validated against the real
+  certificate.
+- **The operator's own Google account is not on the BigQuery dataset's access list.** That is
+  correct for least privilege, but means a reviewer queries as `terraform-admin`.
+
+**Fixed in code:**
+
+- **The task definitions' perpetual diff.** ECS stores defaults the code did not state, so every plan
+  with the services up "replaced" all three task definitions. That would be false drift. Stating
+  them (`systemControls`, `volumesFrom`, `capabilities.add`, `hostPort`) made the full plan "No
+  changes".
+- **The collector with phase 2 up needs `TF_VAR_deploy_services=true` and `TF_VAR_app_image_tag`.**
+  Without them, its plan reads the services as things to delete. With them: no drift across 382, and
+  all checks pass.
+
+**After teardown:**
+
+- 269 persistent and 0 ephemeral; the API sweep is all zeros.
+- The collector is 34 of 35. The failure is `inventory_current` on the project VPC's default security
+  group, deleted with the VPC, which Config has not recorded yet: the known implicit-deletion lag,
+  which clears.
+- **The RDS orphan finding is resolved:** its log groups were declared with the database and left
+  with it.
