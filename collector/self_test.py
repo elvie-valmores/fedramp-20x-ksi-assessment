@@ -23,6 +23,7 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import sys
 import tempfile
 from pathlib import Path
@@ -487,6 +488,36 @@ def _decrypt(statements, grants=()):
     return cfg.evaluate_decrypt_principals(resolved, DECRYPT_DECLARED)[:2]
 
 
+_GKR = "//cloudkms.googleapis.com/projects/p/locations/us-central1/keyRings/r"
+_GK = _GKR + "/cryptoKeys/k"
+_GPROJ = "//cloudresourcemanager.googleapis.com/projects/p"
+_GPERMS = {"roles/cloudkms.cryptoKeyEncrypterDecrypter": {cfg.GCP_DECRYPT, "cloudkms.cryptoKeyVersions.useToEncrypt"},
+           "roles/owner": {cfg.GCP_DECRYPT, "resourcemanager.projects.get"},
+           "roles/editor": {"resourcemanager.projects.get"},
+           "projects/p/roles/custom": {cfg.GCP_DECRYPT},
+           "roles/unreadable": None}
+GCP_DECRYPT_DECLARED = {"us-central1/r/k": ["serviceAccount:service-1@gs-project-accounts.iam.gserviceaccount.com",
+                                            "user:owner@example.com"]}
+_GOOD_GCP_POLICIES = {
+    _GK: [{"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+           "members": ["serviceAccount:service-1@gs-project-accounts.iam.gserviceaccount.com"]}],
+    _GPROJ: [{"role": "roles/owner", "members": ["user:owner@example.com"]},
+             # Editor does not carry decrypt, so its member is not a decrypter.
+             {"role": "roles/editor", "members": ["serviceAccount:tf@p.iam.gserviceaccount.com"]}],
+}
+
+
+def _gcp_decrypt(policies):
+    resolved = {"us-central1/r/k": cfg.resolve_gcp_decrypt_principals(_GK, policies, _GPERMS)}
+    return cfg.evaluate_decrypt_principals(resolved, GCP_DECRYPT_DECLARED)[:2]
+
+
+def _with(resource, role, member):
+    out = copy.deepcopy(_GOOD_GCP_POLICIES)
+    out.setdefault(resource, []).append({"role": role, "members": [member]})
+    return out
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -571,6 +602,18 @@ CFG_CASES = [
         "stale": {"state": "ENABLED", "lastAttemptTime": "2026-10-01T23:00:00Z", "status": {}},
         "missing": {},
     }),
+    ("evaluate_decrypt_principals (gcp)", _gcp_decrypt, _GOOD_GCP_POLICIES, {
+        "undeclared member on the key": _with(_GK, "roles/cloudkms.cryptoKeyEncrypterDecrypter", "user:other@example.com"),
+        "granted on the key ring": _with(_GKR, "roles/cloudkms.cryptoKeyEncrypterDecrypter", "user:other@example.com"),
+        "granted on the project": _with(_GPROJ, "roles/cloudkms.cryptoKeyEncrypterDecrypter", "user:other@example.com"),
+        "custom role carrying decrypt": _with(_GK, "projects/p/roles/custom", "user:other@example.com"),
+        "role that cannot be read": _with(_GK, "roles/unreadable", "user:other@example.com"),
+        "public": _with(_GK, "roles/cloudkms.cryptoKeyEncrypterDecrypter", "allUsers"),
+        # A condition narrows when, not whether.
+        "conditional grant": {**_GOOD_GCP_POLICIES, _GK: _GOOD_GCP_POLICIES[_GK] + [{
+            "role": "roles/cloudkms.cryptoKeyEncrypterDecrypter", "members": ["user:other@example.com"],
+            "condition": "request.time < timestamp('2027-01-01T00:00:00Z')"}]},
+    }),
     ("evaluate_decrypt_principals", lambda c: _decrypt(*c), (_GOOD_KEY,), {
         "undeclared role named": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"})],),
         "public principal": (_GOOD_KEY + [_st("*")],),
@@ -606,6 +649,7 @@ CFG_RESOURCES = {
     "evaluate_basic_roles": "basic_roles",
     "evaluate_store_keys": "store_encryption_keys",
     "evaluate_decrypt_principals": "key_decrypt_principals",
+    "evaluate_decrypt_principals (gcp)": "key_decrypt_principals",
     "evaluate_scheduler_job": "scheduler_job_runs",
     "evaluate_store_keys (gcp)": "store_encryption_keys",
 }

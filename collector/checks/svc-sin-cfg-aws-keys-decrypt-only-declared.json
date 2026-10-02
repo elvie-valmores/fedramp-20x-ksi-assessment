@@ -48,8 +48,10 @@
   "matrix_rows": [
     {
       "row": "KSI-SVC-SIN.verify.6",
-      "covers": "partial",
-      "gap": "AWS keys only. Cloud KMS IAM on the GCP keys is not resolved."
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-gcp-keys-decrypt-only-declared"
+      ]
     }
   ]
 }

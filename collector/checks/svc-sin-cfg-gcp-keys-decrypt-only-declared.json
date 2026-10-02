@@ -1,0 +1,39 @@
+{
+  "id": "svc-sin-cfg-gcp-keys-decrypt-only-declared",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every Cloud KMS key decrypts only for the members its declared model names, resolved through the key's, key ring's and project's bindings and each role's expanded permissions (build row 6). The owner appears on every key through roles/owner: the account that created the project, its only human and break-glass path, the allowance recorded under KSI-IAM-ELP",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "key_decrypt_principals",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "declared": {
+      "us-central1/fedramp-20x-ksi/analytics": [
+        "serviceAccount:analytics-pipeline@fedramp-20x-ksi-assessment.iam.gserviceaccount.com",
+        "serviceAccount:bq-921906217926@bigquery-encryption.iam.gserviceaccount.com",
+        "serviceAccount:service-921906217926@gs-project-accounts.iam.gserviceaccount.com",
+        "user:gcp.elvievalmores@gmail.com"
+      ],
+      "us-central1/fedramp-20x-ksi/artifacts": [
+        "serviceAccount:service-921906217926@gcp-sa-artifactregistry.iam.gserviceaccount.com",
+        "user:gcp.elvievalmores@gmail.com"
+      ],
+      "us-central1/fedramp-20x-ksi/evidence": [
+        "serviceAccount:service-921906217926@gcp-sa-logging.iam.gserviceaccount.com",
+        "serviceAccount:service-921906217926@gcp-sa-pubsub.iam.gserviceaccount.com",
+        "user:gcp.elvievalmores@gmail.com"
+      ]
+    }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.verify.6",
+      "covers": "full",
+      "with": [
+        "svc-sin-cfg-aws-keys-decrypt-only-declared"
+      ]
+    }
+  ]
+}

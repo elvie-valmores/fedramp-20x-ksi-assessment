@@ -70,6 +70,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_scheduler_job_runs(check)
         if provider == "gcp" and resource == "buckets_prevent_public_access":
             return self._gcp_buckets_public_access(check)
+        if provider == "gcp" and resource == "key_decrypt_principals":
+            return self._gcp_key_decrypt_principals(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -166,6 +168,65 @@ class CloudAPIConfigRead(Mechanism):
         names = sorted(b["Name"] for b in client.list_buckets()["Buckets"])
 
         return _every_bucket(check, {name: evaluate(fetch(client, name)) for name in names})
+
+    def _gcp_key_decrypt_principals(self, check: CheckDefinition) -> CheckResult:
+        """The GCP half of KSI-SVC-SIN verify row 6: who can decrypt with each key.
+
+        Requires params: project_id, declared ({"location/keyRing/key":
+        [member globs]}).
+
+        Resolved, not read from the key alone. A Cloud KMS key's decrypters
+        are everyone bound, on the key, its key ring or the project, to a
+        role whose permissions include useToDecrypt. The project has no
+        folder or organization above it, so those three levels are the
+        whole inheritance chain. A role is judged by its expanded
+        permissions, so a custom role carrying decrypt is found as surely
+        as the predefined decrypter role, and so is a basic role that
+        carries it (roles/owner does).
+
+        Policies come from Cloud Asset's IAM search, as the basic-roles
+        check's do. The collector role can read key and project policies
+        directly but not key ring ones, and one source for all three levels
+        cannot disagree with itself. Checked against direct reads on
+        2026-10-02.
+        """
+        from google.auth.transport.requests import AuthorizedSession
+
+        from gcp_auth import impersonated_token
+
+        project_id = check.params["project_id"]
+        client = asset_client(project_id)
+        keys = [res.name for res in client.search_all_resources(request={
+            "scope": f"projects/{project_id}",
+            "asset_types": ["cloudkms.googleapis.com/CryptoKey"],
+        })]
+        policies = {
+            p.resource: [
+                {"role": b.role, "members": list(b.members),
+                 "condition": b.condition.expression if b.condition and b.condition.expression else None}
+                for b in p.policy.bindings
+            ]
+            for p in client.search_all_iam_policies(request={
+                "scope": f"projects/{project_id}",
+                "asset_types": ["cloudkms.googleapis.com/CryptoKey", "cloudkms.googleapis.com/KeyRing",
+                                "cloudresourcemanager.googleapis.com/Project"],
+            })
+        }
+        session = AuthorizedSession(impersonated_token(project_id))
+        permissions = {}
+        for role in sorted({b["role"] for bindings in policies.values() for b in bindings}):
+            response = session.get(f"https://iam.googleapis.com/v1/{role}", timeout=30)
+            # An unreadable role is kept as None, and the resolver treats it
+            # as able to decrypt: not knowing must not read as "cannot".
+            permissions[role] = set(response.json().get("includedPermissions", [])) if response.ok else None
+
+        resolved = {
+            gcp_key_short_name(key): resolve_gcp_decrypt_principals(key, policies, permissions)
+            for key in keys
+        }
+        ok, detail, evidence = evaluate_decrypt_principals(resolved, check.params["declared"])
+        evidence["unreadable_roles"] = sorted(r for r, p in permissions.items() if p is None)
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_buckets_public_access(self, check: CheckDefinition) -> CheckResult:
         """The GCP half of KSI-SVC-SIN verify row 2: no bucket permits public access.
@@ -873,6 +934,53 @@ def resolve_decrypt_principals(policy: dict, grants: list[dict], iam_capable: se
             grantee = g["GranteePrincipal"]
             label = grantee if grantee.startswith("arn:") else f"service:{grantee}"
             found.append({"principal": label, "route": "grant", "sid": g.get("GrantId")})
+    return found
+
+
+GCP_DECRYPT = "cloudkms.cryptoKeyVersions.useToDecrypt"
+GCP_PUBLIC_MEMBERS = ("allUsers", "allAuthenticatedUsers")
+
+
+def gcp_key_short_name(key: str) -> str:
+    """"location/keyRing/key" from a key's full resource name."""
+    parts = key.split("/")
+    return f"{parts[parts.index('locations') + 1]}/{parts[parts.index('keyRings') + 1]}/{parts[-1]}"
+
+
+def resolve_gcp_decrypt_principals(key: str, policies: dict[str, list[dict]],
+                                   permissions: dict[str, set | None]) -> list[dict]:
+    """Every member able to decrypt with `key`, and the level that grants it.
+
+    `policies` maps full resource names to bindings; the key's own, its key
+    ring's (the key's name up to /cryptoKeys/) and any project's apply.
+    Every project policy in scope is the key's project: the search is
+    scoped to one project. A conditional binding counts: a condition
+    narrows when, not whether, and the declared model has to own the grant.
+    A role whose permissions are unknown (None) counts as able to decrypt.
+    """
+    ring = key.split("/cryptoKeys/")[0]
+    found = []
+    for resource, bindings in sorted(policies.items()):
+        if resource == key:
+            level = "key"
+        elif resource == ring:
+            level = "keyring"
+        elif resource.startswith("//cloudresourcemanager.googleapis.com/projects/"):
+            level = "project"
+        else:
+            continue
+        for binding in bindings:
+            perms = permissions.get(binding["role"])
+            if perms is not None and GCP_DECRYPT not in perms:
+                continue
+            for member in binding["members"]:
+                found.append({
+                    "principal": member,
+                    "route": "public" if member in GCP_PUBLIC_MEMBERS else level,
+                    "role": binding["role"],
+                    **({"condition": binding["condition"]} if binding.get("condition") else {}),
+                    **({"role_unresolved": True} if perms is None else {}),
+                })
     return found
 
 
