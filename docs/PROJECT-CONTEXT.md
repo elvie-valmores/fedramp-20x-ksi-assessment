@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 45 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 63 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  14 are fully automated, 9 partly, and 357 not yet (2026-10-02).
+  25 are fully automated, 13 partly, and 342 not yet, across 17 of 40 determinations (2026-10-02).
 - **Not started**: the three workflows and policy-as-code.
 
 **The two phase gates, both real and both the indicators working correctly.** The AWS root and the
@@ -234,13 +234,22 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 14 are fully automated, 9 partly, and 357 not
-yet. 11 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 25 are fully automated, 13 partly, and 342 not
+yet. 17 of 40 determinations have any. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
-1. **More check definitions,** taken row by row from the report. CFG rows on persistent resources
-   come first, because they can be proven live without standing anything up. Rows on the ephemeral
-   network (route tables, security groups, the ALB, task definitions) wait for a phase 1.
+0. **Pending the operator: the trail's data events.** `infra/aws/log_corpus.tf` declares two advanced
+   selectors: all management events, and S3 object data events on the extract bucket. The plan was
+   handed over as `infra/aws/trail-data-events.tfplan`. Until it is applied,
+   `mla-let-cfg-aws-trail-data-events-scoped` fails, which is correct. **Commit `log_corpus.tf`
+   only after the apply**, then confirm the check passes (DECISIONS.md, "Eighteen more checks").
+1. **More check definitions.** The CFG rows that persistent resources can answer are mostly done.
+   What remains is in three groups:
+   - **Phase 1 rows:** route tables, security groups, the ALB, task definitions and RDS. Write
+     these at the next phase 1, when they can be proven live.
+   - **Register rows:** "repository file, checked in CI". The registers themselves don't exist yet,
+     and writing them is design work.
+   - **OPS rows:** these need the log-query and deliberate-test mechanisms.
 2. **The remaining partial rows mostly need design work, not a check.** Examples are deploy-time
    signature verification, GCP events in the corpus, and the second direction of inventory
    reconciliation. Each gap is stated in the report.
@@ -282,6 +291,8 @@ by any check at all. In rough priority:
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
 | Worker drops a batch whose landing fails | Fixed in code with a landed high-water mark, proven by unit tests; to verify at the next phase 2 |
+| Analytics image not registry-scanned | Open, for a decision. Artifact Registry has no Container Scanning; the image's OS packages are unscanned, and its Python dependencies are audited in CI (SVC-EIS v1, partial) |
+| Log store does not restrict object reads | Open, for a decision, with the MLA-ALA lane model. The readers would have to be named: the normalizer, the detection query, the collector's run history and the operator (MLA-ALA v5) |
 | ECR lifecycle expires deployable tags | Fixed 2026-10-02: it keeps 10 builds and their signatures, counted per kind, checked by preview and applied. Orphaned buildx attestations are left, since no lifecycle rule reaches them |
 | `caliper.elvievalmores.com` has no DNS record | The load balancer is new each phase 1. Use `curl --connect-to caliper.elvievalmores.com:443:<alb>:443` |
 | Cloud Identity Premium for SCIM | Deferred until KSI-IAM-AAM's evidence is built |

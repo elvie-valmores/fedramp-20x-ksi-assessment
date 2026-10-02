@@ -7615,3 +7615,61 @@ so.
 
 **Coverage:** 14 of 380 rows are full and 9 partial, up from 7 and 11. The collector has 45 checks
 and 30 self-test assertions.
+
+## 2026-10-02 — Eighteen more checks, and four findings they surfaced
+
+Rows were taken from the coverage report, choosing CFG rows on resources that persist so each check
+could be proven live. Every judgement is a pure function with negative controls; the self-test now
+has 46 assertions, and each check ran live before it was linked. In CI (run 37050858574) every new
+check passed under the collector's own identities, except the finding below.
+
+**Rows covered:**
+
+| Rows | Coverage | What the checks prove |
+|---|---|---|
+| IAM-SNU v4, SVC-VCM v1 | Full | Every role trust pins its principals. Web identity needs subject and audience by `StringEquals` with no wildcard; SAML needs its audience. Service-linked roles are exempt by AWS's reserved path prefix. For SVC-VCM v1, together with the GCP provider check |
+| IAM-SNU v5 | Full | The AWS OIDC providers are exactly GitHub's, with exactly the STS audience. The GCP provider is active, trusts GitHub's issuer, and its condition pins owner, repository (by numeric ID) and branch |
+| IAM-ELP v4 | Full | No user holds an inline policy, an attached policy, or a group |
+| CNA-IBP v1 | Full | CIS 3.0.0 and FSBP are subscribed and ready |
+| SVC-SIN v7 | Full | Every BigQuery dataset's access list is exactly its declared one, and an undeclared dataset fails |
+| SVC-ACM v1 | Full | The state bucket is versioned and encrypted, and every `terraform init` in `drift.yml` and `collect.yml` sets `use_lockfile=true` and `encrypt=true`. With the S3 backend, locking is a client setting, so it is evidenced where Terraform runs |
+| SVC-ACM v2 | Full | `drift.yml` declares a schedule, and GitHub's API reports it `active`. GitHub disables scheduled workflows after 60 days without activity, which the file cannot show. The collector gained `actions: read` for that one call |
+| MLA-OSM v5 | Full | The detection rule is enabled, scheduled, and invokes its Lambda. With the AWS drift check, which proves the deployed query is the one in the repository |
+| SVC-ASM v3 | Full | Certificates are ACM-issued and DNS-validated, renewal-eligible while in use, and at least 30 days from expiry while idle. ACM reports an idle certificate `INELIGIBLE` by definition, so eligibility can only be required in use |
+| MLA-LET v4 | Full when passing | Trail data events cover exactly the declared customer-data stores. It fails today (finding 1) |
+| CNA-ULN v6 | Partial | Web-identity sessions are at most 1 hour, and Identity Center sessions at most 4, read from the permission set rather than the reserved role's 12-hour setting. GCP's federated tokens last Google's fixed hour, and there is no setting to read |
+| IAM-SUS v1 | Partial | GuardDuty's plans exactly match the declared set, including the S3 and RDS Protection plans the 2026-09-30 decision kept on, where the row says optional plans off. GCP Security Command Center needs an organization |
+| MLA-OSM v4 | Partial | The store-growth and normalizer-error alarms act and notify the detection topic. CloudTrail's own delivery has no alarm, because it publishes no metric |
+| SVC-EIS v1 | Partial | ECR has enhanced continuous scanning on every repository, with Inspector on, and dependencies are audited in CI. Artifact Registry is not scanned (finding 2) |
+
+**Findings:**
+
+1. **The trail recorded no data events at all.** The 2026-09-05 MLA-LET decision chose data access
+   logging for the stores holding customer data, but no selector was ever declared. So no read or
+   write of an extract object was logged, including the GCP pipeline's cross-cloud reads.
+   - **Fix:** two advanced selectors on `aws_cloudtrail.main`. One covers all management events,
+     because advanced selectors replace the default and would otherwise drop them. The other covers
+     S3 object data events, reads and writes, under the extract bucket.
+   - **Cost:** under 1 USD a month at the current volume.
+   - **The normalizer** maps any CloudTrail record generically, so data events will normalize.
+   - **Status:** the plan was handed to the operator to apply, because it is an audit-log change.
+2. **The analytics image is not registry-scanned.** Build row 1 names AWS only; it predates the
+   analytics image, which lives in Artifact Registry. The Container Scanning API is not enabled. The
+   image's Python dependencies are audited in CI, but its OS packages are not scanned anywhere.
+   **Open, for a decision:** enabling Container Scanning is cheap, but it is a design change.
+3. **The log store does not restrict object reads.** MLA-ALA verify 5 expects a bucket policy denying
+   object reads to everyone but the query engine role. The policy has only CloudTrail's writes and
+   the TLS deny. Closing it means choosing the readers:
+   - the normalizer
+   - the detection query
+   - the collector's run history (`collect.yml` fetches `collector-runs/`)
+   - the operator
+
+   A wrong list breaks the pipeline or locks out break-glass. **Open, for a decision,** with the
+   MLA-ALA lane model it belongs to.
+4. **IAM-SNU verify 2 could not be read from Cloud Asset.** Cloud Asset's key search does not say
+   which keys are Google's own. Resolved earlier today by `iam.serviceAccountKeys.list`, which the
+   operator applied.
+
+**Coverage:** 25 of 380 rows are full and 13 partial, across 17 of 40 determinations, from 63
+checks. That is up from 7 full and 11 partial in 9 determinations this morning.
