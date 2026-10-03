@@ -1,0 +1,33 @@
+{
+  "id": "scr-mon-ops-third-parties-monitoring-position",
+  "indicator": "KSI-SCR-MON",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every third party in use has a register entry recording how its upstream vulnerabilities are monitored and whether that is automatic, partial or unavailable",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/third-parties.yaml",
+    "assertion": "third_parties_cover",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "also_used": [
+      {
+        "code_host": "github"
+      },
+      {
+        "identity_provider": "google"
+      }
+    ],
+    "position": "monitoring"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SCR-MON.verify.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SCR-MON.validate.4",
+      "covers": "full"
+    }
+  ]
+}

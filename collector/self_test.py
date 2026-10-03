@@ -486,7 +486,8 @@ _DENY = {"Sid": "DenyReads", "Effect": "Deny", "Principal": "*", "Action": ["s3:
          "Resource": "arn:aws:s3:::logs/*", "Condition": {"ArnNotLike": {"aws:PrincipalArn": _READERS}}}
 _TLS_DENY = {"Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": ["arn:aws:s3:::logs", "arn:aws:s3:::logs/*"],
              "Condition": {"Bool": {"aws:SecureTransport": "false"}}}
-SH_EXCEPT = [{"control": "KMS.3", "reason": "session keys", "unless_resources": ["arn:aws:kms:r:1:key/persistent"]}]
+SH_EXCEPT = [{"control": "KMS.3", "reason": "session keys", "review_by": "2999-01-01",
+              "unless_resources": ["arn:aws:kms:r:1:key/persistent"]}]
 SH_OK = [{"control": "KMS.3", "status": "FAILED", "severity": "CRITICAL", "resource": "arn:aws:kms:r:1:key/session"},
          {"control": "S3.1", "status": "PASSED", "severity": "MEDIUM", "resource": "acct"}]
 VALIDATE_OK = "Results found for ...:\n\n24/24 digest files valid\n831/831 log files valid\n"
@@ -823,7 +824,10 @@ CFG_CASES = [
      ([{"id": "s1", "instance": "db"}, {"id": "s2", "instance": "live"}], {"live"}), {
         "orphaned": ([{"id": "s3", "instance": "old"}], {"live"}),
     }),
-    ("evaluate_failing_controls", lambda c: cfg.evaluate_failing_controls(c, SH_EXCEPT), SH_OK, {
+    ("evaluate_failing_controls", lambda c: cfg.evaluate_failing_controls(*c) if isinstance(c, tuple) else cfg.evaluate_failing_controls(c, SH_EXCEPT), SH_OK, {
+        # A lapsed review date reopens the control.
+        "exception past its review date": (SH_OK, [{**SH_EXCEPT[0], "review_by": "2000-01-01"}]),
+        "exception without a review date": (SH_OK, [{k: v for k, v in SH_EXCEPT[0].items() if k != "review_by"}]),
         "unexcepted failure": SH_OK + [{"control": "IAM.6", "status": "FAILED", "severity": "CRITICAL", "resource": "acct"}],
         # The carve-out holds: a persistent key scheduled for deletion is a finding.
         "excepted control, carved-out resource": SH_OK + [{"control": "KMS.3", "status": "FAILED", "severity": "CRITICAL",
@@ -1085,11 +1089,25 @@ def _plan_without(name, field):
     return p
 
 
+TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison": {"basis": "pins", "automated": True},
+                     "monitoring": {"mechanism": "none", "status": "unavailable"}},
+              "img": {"matches": [{"base_image": "python:*"}], "comparison": {"basis": "scans", "automated": True},
+                      "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
+
 SINGLE_CASES = [
     ("register_read (plan_covers_classes)", lambda c: rr.evaluate_plan_classes(c, ["key", "token", "secret"]), _PLAN, {
         "class missing": {"classes": {k: v for k, v in _PLAN["classes"].items() if k != "secret"}},
         "no interval and no deferral": _plan_without("token", "deferred"),
         "no mechanism": _plan_without("key", "mechanism"),
+    }),
+    ("register_read (third_parties_cover)", lambda c: rr.evaluate_third_parties(c[0], c[1], "monitoring"),
+     ([{"action_owner": "aws-actions"}, {"base_image": "python:3.12"}], TP_ENTRIES), {
+        "an unregistered action owner": ([{"action_owner": "someone-else"}], TP_ENTRIES),
+        # A key must match by name too: a value alone is not a match.
+        "same value, other kind": ([{"inventory_cloud": "aws-actions"}], TP_ENTRIES),
+        "entry without a monitoring status": ([{"base_image": "python:3.12"}],
+                                              {**TP_ENTRIES, "img": {**TP_ENTRIES["img"], "monitoring": {"mechanism": "x"}}}),
+        "nothing in use": ([], TP_ENTRIES),
     }),
     ("register_read (entries_complete)", rr.evaluate_entries_complete,
      [{"what": "a", "reason": "r", "expiry_days": 30}, {"what": "b", "reason": "r", "expires_with": "the next build"},

@@ -50,6 +50,9 @@ class RegisterRead(Mechanism):
             ok, detail, evidence = evaluate_register_coverage(counts, register, p["dimension"], existing)
         elif p["assertion"] == "plan_covers_classes":
             ok, detail, evidence = evaluate_plan_classes(register, p["required_classes"])
+        elif p["assertion"] == "third_parties_cover":
+            used = _third_parties_used(p["region"], p["project_id"], p.get("also_used", []))
+            ok, detail, evidence = evaluate_third_parties(used, register.get("entries") or {}, p["position"])
         elif p["assertion"] == "entries_complete":
             ok, detail, evidence = evaluate_entries_complete(register.get("entries") or [])
         elif p["assertion"] == "secrets_owned":
@@ -72,6 +75,58 @@ def _class_counts(region: str, project_id: str) -> dict[str, int]:
     for r in _inventory(region, project_id):
         counts[r["resource_type"]] = counts.get(r["resource_type"], 0) + 1
     return counts
+
+
+def _third_parties_used(region: str, project_id: str, also_used: list[dict]) -> list[dict]:
+    """Every third party actually in use, from the places that declare it."""
+    import re
+
+    used = [{"inventory_cloud": c} for c in sorted({r["cloud"] for r in _inventory(region, project_id)})]
+    for wf in sorted((REPO / ".github" / "workflows").glob("*.yml")):
+        for job in (yaml.safe_load(wf.read_text()) or {}).get("jobs", {}).values():
+            for ref in [job.get("uses")] + [s.get("uses") for s in job.get("steps") or []]:
+                if ref and not ref.startswith("./"):
+                    used.append({"action_owner": ref.split("/", 1)[0]})
+    for dockerfile in sorted(REPO.glob("app/*/Dockerfile")):
+        for m in re.finditer(r"^FROM\s+(\S+)", dockerfile.read_text(), re.M):
+            used.append({"base_image": m.group(1).split("@", 1)[0]})
+    for lock in sorted(REPO.glob("infra/*/.terraform.lock.hcl")):
+        for m in re.finditer(r'^provider "([^"]+)"', lock.read_text(), re.M):
+            used.append({"terraform_provider": m.group(1)})
+    if list(REPO.glob("**/requirements.txt")):
+        used.append({"package_index": "pypi"})
+    unique = {tuple(sorted(u.items())) for u in used + list(also_used)}
+    return [dict(u) for u in sorted(unique)]
+
+
+def evaluate_third_parties(used: list[dict], entries: dict, position: str) -> tuple[bool, str, dict]:
+    """Every third party in use matches an entry, and that entry carries the position.
+
+    position: "comparison" (basis, automated) or "monitoring" (mechanism,
+    status of automatic, partial or unavailable).
+    """
+    def matches(u, m):
+        return set(u) == set(m) and all(fnmatch.fnmatchcase(str(u[k]), str(m[k])) for k in u)
+
+    problems, covered = [], {}
+    for u in used:
+        owner = next((name for name, e in entries.items() if any(matches(u, m) for m in e.get("matches", []))), None)
+        if owner is None:
+            problems.append(f"no entry for {u}")
+            continue
+        covered.setdefault(owner, []).append(u)
+    for name, e in entries.items():
+        pos = e.get(position) or {}
+        if position == "comparison" and (not pos.get("basis") or pos.get("automated") not in (True, False, "partial")):
+            problems.append(f"{name}: comparison needs a basis and whether it is automated")
+        if position == "monitoring" and (not pos.get("mechanism") or pos.get("status") not in ("automatic", "partial", "unavailable")):
+            problems.append(f"{name}: monitoring needs a mechanism and a status")
+    evidence = {"used": used, "covered_by": {k: len(v) for k, v in covered.items()}, "problems": problems}
+    if not used:
+        return False, "found no third party in use -- nothing to judge", evidence
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
+    return True, f"all {len(used)} third parties in use registered with a {position} position", evidence
 
 
 def evaluate_entries_complete(entries: list[dict]) -> tuple[bool, str, dict]:

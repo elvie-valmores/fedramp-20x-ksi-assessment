@@ -1,0 +1,73 @@
+# The third-party register: KSI-CNA-IBP build row 4 and KSI-SCR-MON build row 5.
+#
+# Started 2026-10-03. A third-party information resource is anything not
+# entirely inside the Minimum Assessment Scope (KSI-CNA-IBP), which makes
+# both clouds third parties along with the code host, the identity
+# provider, base images, packages, providers and pipeline actions. Each
+# entry records two positions:
+#
+#   comparison  KSI-CNA-IBP: the vendor guidance its configuration is
+#               compared against, and whether the comparison is automated
+#   monitoring  KSI-SCR-MON: how upstream vulnerabilities -- advisories, and
+#               changed defaults or deprecations -- are noticed, and whether
+#               that is automatic, partial or unavailable
+#
+# register_read's third_parties_cover reconciles this against what is
+# actually used: the clouds in the inventory, every action owner the
+# workflows name, every Dockerfile base image and every provider in the
+# Terraform lock files. A third party in use with no entry fails.
+
+entries:
+  aws:
+    what: Amazon Web Services -- every AWS service the environment uses
+    matches: [{inventory_cloud: aws}]
+    comparison: {basis: "CIS AWS Foundations Benchmark v3.0.0 and AWS FSBP through Security Hub; failing controls remediated or excepted with reasons and review dates (cna-ibp-ops-aws-failing-controls-excepted)", automated: true}
+    monitoring: {mechanism: "Security Hub, GuardDuty and Inspector findings for configuration and vulnerabilities. Provider change and deprecation notices are not ingested: the Health API's programmatic access needs a paid support plan", status: partial}
+
+  gcp:
+    what: Google Cloud -- every GCP service the pipeline uses
+    matches: [{inventory_cloud: gcp}]
+    comparison: {basis: "The collector's GCP checks, written from Google's own guidance (public access prevention, CMEK, key IAM, basic roles). Security Command Center's detectors and benchmark mapping need an organization, which this project has not", automated: partial}
+    monitoring: {mechanism: "Container Scanning on Artifact Registry images. Google Cloud security bulletins and service change notices are not ingested", status: partial}
+
+  github:
+    what: GitHub -- code hosting and Actions runners
+    matches: [{code_host: github}]
+    comparison: {basis: "GitHub's published hardening guidance for Actions; workflow assertions (pinned actions, declared permissions, no static credentials, branch-limited triggers) check what can be checked", automated: partial}
+    monitoring: {mechanism: "None automated: GitHub's changelog and security advisories are read by hand", status: unavailable}
+
+  google_cloud_identity:
+    what: Google Cloud Identity -- the workforce identity provider behind Identity Center
+    matches: [{identity_provider: google}]
+    comparison: {basis: "Google's SAML and 2-step verification guidance, compared by hand", automated: false}
+    monitoring: {mechanism: "None automated", status: unavailable}
+
+  docker_official_python:
+    what: Docker's official python images, the base of all three application images
+    matches: [{base_image: "python:*"}]
+    comparison: {basis: "The maintainer's advisories, through image scanning; pinned by digest", automated: true}
+    monitoring: {mechanism: "Inspector enhanced scanning on ECR, continuously; Container Scanning on Artifact Registry at push and for 30 days", status: automatic}
+
+  pypi:
+    what: Python packages from PyPI, pinned and hashed in each manifest
+    matches: [{package_index: pypi}]
+    comparison: {basis: "OSV advisories through pip-audit", automated: true}
+    monitoring: {mechanism: "pip-audit against OSV at every build, failing it on a finding; images re-scanned continuously after", status: partial}
+
+  hashicorp_providers:
+    what: Terraform and its providers from the HashiCorp registry, pinned in the lock files
+    matches: [{terraform_provider: "registry.terraform.io/hashicorp/*"}]
+    comparison: {basis: "Lock-file hashes verify what is installed; no vendor configuration guidance applies to a provider", automated: partial}
+    monitoring: {mechanism: "None automated: provider advisories are not ingested", status: unavailable}
+
+  github_actions:
+    what: Actions used by the workflows, by owner
+    matches:
+      - {action_owner: actions}
+      - {action_owner: aws-actions}
+      - {action_owner: docker}
+      - {action_owner: google-github-actions}
+      - {action_owner: hashicorp}
+      - {action_owner: sigstore}
+    comparison: {basis: "Every action pinned to a commit SHA (cna-dfp-cfg-actions-pinned-*)", automated: true}
+    monitoring: {mechanism: "None automated: a pinned SHA cannot drift, but an advisory against it would go unnoticed", status: unavailable}

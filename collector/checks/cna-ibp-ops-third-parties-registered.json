@@ -1,0 +1,33 @@
+{
+  "id": "cna-ibp-ops-third-parties-registered",
+  "indicator": "KSI-CNA-IBP",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every third party in use -- both clouds, the code host, the identity provider, every workflow action owner, every base image, every Terraform provider and the package index -- has a register entry naming the vendor guidance it is compared against and whether that comparison is automated",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/third-parties.yaml",
+    "assertion": "third_parties_cover",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "also_used": [
+      {
+        "code_host": "github"
+      },
+      {
+        "identity_provider": "google"
+      }
+    ],
+    "position": "comparison"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-IBP.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-IBP.validate.3",
+      "covers": "full"
+    }
+  ]
+}

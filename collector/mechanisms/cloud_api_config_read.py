@@ -2260,15 +2260,23 @@ def evaluate_snapshots_accounted(snapshots: list[dict], live: set[str], retained
     return _judged("snapshots", results)
 
 
-def evaluate_failing_controls(findings: list[dict], exceptions: list[dict]) -> tuple[bool, str, dict]:
-    """Every failing control finding is covered by an exception with a reason.
+def evaluate_failing_controls(findings: list[dict], exceptions: list[dict], today: str | None = None) -> tuple[bool, str, dict]:
+    """Every failing control finding is covered by a current exception with a reason.
 
     An exception may carve out resources it never covers (unless_resources,
     glob patterns): KMS.3 is excepted for session keys deleted at teardown,
-    never for the keys meant to persist.
+    never for the keys meant to persist. An exception counts only with a
+    reason and a review date not yet passed (KSI-CNA-IBP verify 4): one
+    past its date has lapsed, and its control is open again.
     """
+    from datetime import date
+
+    today = today or date.today().isoformat()
+    current = [e for e in exceptions if (e.get("reason") or "").strip() and (e.get("review_by") or "") >= today]
+    lapsed = sorted({e["control"] for e in exceptions} - {e["control"] for e in current})
+
     def excepted(f):
-        for e in exceptions:
+        for e in current:
             if e["control"] == f["control"] and not any(
                     fnmatch.fnmatchcase(f["resource"], p) for p in e.get("unless_resources", [])):
                 return e
@@ -2286,7 +2294,7 @@ def evaluate_failing_controls(findings: list[dict], exceptions: list[dict]) -> t
     open_ = {k: v for k, v in controls.items() if v["failed"]}
     evaluated = len(controls)
     clean = sum(1 for v in controls.values() if not v["failed"] and not v["excepted"])
-    evidence = {"pass_rate": f"{clean}/{evaluated} controls passing outright",
+    evidence = {"pass_rate": f"{clean}/{evaluated} controls passing outright", "lapsed_exceptions": lapsed,
                 "open": {k: {"resources": v["failed"],
                              "severity": next((f["severity"] for f in findings if f["control"] == k), None)}
                          for k, v in sorted(open_.items())},
