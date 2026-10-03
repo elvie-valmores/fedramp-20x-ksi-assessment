@@ -405,25 +405,26 @@ resource "aws_athena_workgroup" "log_corpus" {
   }
 }
 
-# Retention of the store itself: twelve months (Security Hub S3.13,
-# 2026-10-03). Until then nothing expired, and the store grew by thousands
-# of objects a day with no end. Twelve months is OMB M-21-31's active
-# retention for logs, and it is also the year SDR-CSX-KMT's metrics reach
-# back over, from collector-runs/. Object Lock is untouched: an object is
-# locked for 7 days and expires at 365, so the lock always runs out first.
+# Retention of the store itself: 90 days (Security Hub S3.13; set to twelve
+# months, then to 90 the same day in the lean retention set, 2026-10-03).
+# Until then nothing expired. Twelve months is OMB M-21-31's active
+# retention; this project ends before 90 days pass, so the shorter window
+# loses nothing it will use, and SDR-CSX-KMT's metrics read back over what
+# exists. Object Lock is untouched: an object is locked for 7 days and
+# expires at 90, so the lock always runs out first.
 # On this versioned bucket expiry adds a delete marker; the version it
 # hides is removed 30 days later.
 resource "aws_s3_bucket_lifecycle_configuration" "log_store" {
   bucket = aws_s3_bucket.log_store.id
 
   rule {
-    id     = "retain-twelve-months"
+    id     = "retain-ninety-days"
     status = "Enabled"
 
     filter {}
 
     expiration {
-      days = 365
+      days = 90
     }
 
     noncurrent_version_expiration {

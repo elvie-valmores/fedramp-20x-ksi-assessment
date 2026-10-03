@@ -66,6 +66,26 @@ read -r -p "apply this teardown? [y/N] " reply
 terraform apply -input=false .teardown.tfplan
 rm -f .teardown.args .teardown.tfplan
 
+# Inactive task definition revisions older than 30 days (2026-10-03, the
+# lean retention set, registers/retention.yaml). ECS keeps every revision it
+# ever registered; the recent ones are the prior baseline KSI-RPL-ABO counts
+# on, the old ones are residue. Only INACTIVE revisions can be deleted, so
+# nothing a service could still run is touched.
+echo "==> deleting inactive task definition revisions older than 30 days"
+cutoff=$(( $(date +%s) - 30 * 86400 ))
+old=()
+for arn in $(aws ecs list-task-definitions --status INACTIVE --query 'taskDefinitionArns' --output text); do
+  registered=$(aws ecs describe-task-definition --task-definition "$arn" \
+               --query 'taskDefinition.registeredAt' --output text | cut -d. -f1)
+  registered=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${registered%%[+-]??:??}" +%s 2>/dev/null \
+               || date -d "$registered" +%s)
+  [[ "$registered" -lt "$cutoff" ]] && old+=("$arn")
+done
+for ((i = 0; i < ${#old[@]}; i += 10)); do
+  aws ecs delete-task-definitions --task-definitions "${old[@]:i:10}" --query 'failures' --output text
+done
+echo "    ${#old[@]} deleted"
+
 echo
 # Generated, not written out: a hand-kept list here named seven things
 # after the persistent set had grown to sixty-eight (found 2026-09-25, the

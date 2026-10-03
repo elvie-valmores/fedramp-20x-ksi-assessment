@@ -10,8 +10,8 @@
 entries:
   - what: Log store objects (CloudTrail, normalized events, collector run records)
     where: fedramp-20x-ksi-log-store (S3)
-    reason: Audit evidence; twelve months is OMB M-21-31's active retention and SDR-CSX-KMT's year of metrics
-    expiry_days: 365
+    reason: Audit evidence. 90 days, the lean retention set (2026-10-03) -- shorter than OMB M-21-31's twelve months, chosen because the project ends first; SDR-CSX-KMT's metrics read back over what exists
+    expiry_days: 90
   - what: Superseded log store versions
     where: fedramp-20x-ksi-log-store (S3)
     reason: Object Lock keeps each version 7 days; the version hidden by expiry is kept 30 days more
@@ -19,7 +19,7 @@ entries:
   - what: Config configuration history files
     where: fedramp-20x-ksi-config (S3)
     reason: The record of how resources were configured; same window as the log store
-    expiry_days: 365
+    expiry_days: 90
   - what: Superseded Terraform state versions
     where: fedramp-20x-ksi-tfstate (S3)
     reason: The depth a state rollback can reach (KSI-RPL-ABO's prior baseline)
@@ -69,20 +69,20 @@ entries:
     reason: The SDR and run outputs per run; the durable copy is the record in the log store
     expiry_days: 90
 
-  # Open: retained with no expiry. Each needs a decision.
+  # Decided 2026-10-03 (the lean retention set); each had no expiry before.
   - what: Inactive ECS task definition revisions
     where: ECS, per session
-    reason: ECS keeps deregistered revisions indefinitely; they are the prior configuration baseline KSI-RPL-ABO counts on, but nothing bounds them
-    expiry_days: null
+    reason: The recent ones are the prior configuration baseline KSI-RPL-ABO counts on; teardown.sh deletes inactive revisions older than this
+    expiry_days: 30
   - what: Analytics images in Artifact Registry
     where: fedramp-20x-ksi (Artifact Registry)
-    reason: No cleanup policy; every build since 2026-10-01 is kept. The pinned digest must survive any policy chosen
-    expiry_days: null
+    reason: The five most recent are kept; older images go once 30 days old. The pinned digest is checked daily (svc-vri-ops-gcp-pinned-image-present)
+    expires_with: Being outside the five most recent and 30 days old (cleanup policy, in dry run until reviewed)
   - what: The measurements warehouse rows
     where: measurements.measurements (BigQuery)
-    reason: Derived customer data, rebuilt from extracts but kept with no table or partition expiration
-    expiry_days: null
+    reason: The only copy of a measurement past 30 days -- extracts expire then and the database is rebuilt every session -- so this is how long customer data is kept
+    expiry_days: 90
   - what: AWS Config's own configuration item history
     where: AWS Config service (not the S3 delivery files)
-    reason: No retention configuration is set, so AWS keeps the default of seven years
-    expiry_days: null
+    reason: Was AWS's seven-year default; now as the delivered files
+    expiry_days: 90

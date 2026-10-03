@@ -330,8 +330,8 @@ classes:
     flow_control: Dataset access list, held to its declaration (svc-sin-cfg-gcp-bigquery-access-declared)
     surface: Two declared entries, no public or domain-wide grant
     availability: {posture: "Regional, multi-zone by design", recovery: "None needed"}
-    backup: {coverage: "None", reason: "Derived data: re-running the pipeline over the extracts rebuilds it (KSI-RPL-RRO)"}
-    objective: {not_applicable: "Derived; reconstructed by re-running the pipeline"}
+    backup: {coverage: "None", reason: "Rebuildable from the extracts for 30 days; past that the warehouse is the only copy, kept 90 days by partition expiry (corrected 2026-10-03)"}
+    objective: {rto: "Minutes, re-running the pipeline, for data within 30 days", rpo: "Within 30 days, none; older data has no second copy and is not recoverable"}
     integrity: Customer key; the MERGE on (id, recorded_at) keeps re-landing idempotent
     evaluation: {by: "Access and store-key checks daily", interval_days: 1}
     change_surface: *gcp_change
@@ -345,8 +345,8 @@ classes:
     flow_control: The dataset's access list
     surface: As its dataset
     availability: {posture: "Regional, multi-zone by design", recovery: "None needed"}
-    backup: {coverage: "BigQuery time travel, 7 days", reason: "Derived data; time travel is the provider's default, not a backup design"}
-    objective: {not_applicable: "Derived; reconstructed by re-running the pipeline"}
+    backup: {coverage: "BigQuery time travel, 7 days", reason: "Time travel is the provider's default, not a backup design; the extracts rebuild 30 days of rows"}
+    objective: {rto: "Minutes, re-running the pipeline, for data within 30 days", rpo: "Within 30 days, none; older data has no second copy and is not recoverable"}
     integrity: Customer key; idempotent MERGE
     evaluation: {by: "Store-key check daily", interval_days: 1}
     change_surface: *gcp_change

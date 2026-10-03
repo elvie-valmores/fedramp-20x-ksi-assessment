@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-10-02:
 
-- **Persisting between sessions**: 276 AWS resource instances (90 resources plus 186 disabled
+- **Persisting between sessions**: 277 AWS resource instances (91 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -96,7 +96,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
      expected to be red **only** on the one known finding below. Open its log: the self-test says
      22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
      `evidence-<run id>` holds `results.json` and the SDR.
-   - `infra/aws/boundary.py --persistent | wc -l` gives **276**, and `--ephemeral` gives 0.
+   - `infra/aws/boundary.py --persistent | wc -l` gives **277**, and `--ephemeral` gives 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
@@ -113,9 +113,9 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
 
 ### What is standing
 
-**AWS: 276 persistent resource instances** (90 resources plus 186 disabled Security Hub
+**AWS: 277 persistent resource instances** (91 resources plus 186 disabled Security Hub
 controls). Nothing ephemeral is in state, and nothing expensive is running (verified 2026-10-01).
-`terraform state list` prints more lines than 276; the rest are data sources.
+`terraform state list` prints more lines than 277; the rest are data sources.
 
 The persistent set, by file (`boundary.py --files`, 17 files):
 
@@ -239,6 +239,27 @@ around a refusal.** Refused so far:
 
 ### The next thing to do
 
+**The plan to the end of October** (DECISIONS.md, 2026-10-03, "The finish line"). Done means every
+row is automated, or recorded as manual or descoped with its risk, and every failing check is fixed
+or a recorded finding.
+
+1. **Week 1:** more checks using the existing collectors, and the remaining registers: the change
+   exception register, the flow register, change surfaces, recovery paths and control positions.
+2. **Week 2:**
+   - **JIT elevation (build).** It needs one batched IAM apply from the operator, and retires the
+     standing InterimOperatorAdmin role.
+   - **Policy-as-code on every push (build).**
+   - **The signal-report generator.**
+3. **Week 3:**
+   - **Two batched AWS sessions:** the deliberate tests, a timed restore that measures the database
+     recovery objective, and the runtime-monitoring trial for GuardDuty.11 and .12 (review due
+     2026-11-03).
+   - **Review queries.**
+4. **Week 4:**
+   - **Descoping rationales for the responder and SCIM.**
+   - **Review the Artifact Registry cleanup dry-run log, then set the policy live.**
+   - **Freeze the final SDR.**
+
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
 (`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 78 are fully automated, 27 partly, and 275 not
 yet. 27 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
@@ -306,7 +327,7 @@ AccessDenied.
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
 | Security Hub: 21 failing controls with no exception | **Decided 2026-10-03:** 8 remediated, 2 done by the operator in the console, 11 excepted. Ten still show as failing until Security Hub re-evaluates them within a day; confirm `cna-ibp-ops-aws-failing-controls-excepted` then passes |
 | `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). Investigate it if it still fails after that date |
-| Retention with no expiry (4 entries) | **Open, for decisions.** Inactive task definitions, Artifact Registry images, the warehouse rows, and Config's 7-year history. `svc-prr-cfg-retention-register-complete` fails until each is decided (registers/retention.yaml) |
+| Retention with no expiry (4 entries) | **Decided 2026-10-03** (lean set): 30 or 90 days each. The Artifact Registry cleanup policy is in dry run until reviewed |
 | Recovery objectives declared from the design | **For the operator's review.** Database RTO 60 minutes and RPO 5 minutes, among others (registers/resources.yaml). Unmeasured until RPL-TRC |
 | Log sources outside the central store, mostly unmonitored; sensitive tier without elevation | **Design gaps the event type list exposed** (DECISIONS.md, 2026-10-03). Larger work: shipping CloudWatch and GCP logs into the corpus, alerting, and MLA-ALA elevation |
 | Detection query under the log-read deny | **Closed 2026-10-03:** the 00:20 UTC run succeeded; the handler raises on any failed query |

@@ -174,24 +174,31 @@ resource "aws_config_configuration_recorder_status" "main" {
   depends_on = [aws_config_delivery_channel.main]
 }
 
-# Configuration history kept twelve months, as the log store (Security Hub
-# S3.13, 2026-10-03). The inventory generator queries Config's API, not
-# these files, so expiring them changes nothing it reads.
+# Configuration history kept 90 days, as the log store (Security Hub S3.13
+# and the lean retention set, 2026-10-03). The inventory generator queries
+# Config's API, not these files, so expiring them changes nothing it reads.
 resource "aws_s3_bucket_lifecycle_configuration" "config_delivery" {
   bucket = aws_s3_bucket.config_delivery.id
 
   rule {
-    id     = "retain-twelve-months"
+    id     = "retain-ninety-days"
     status = "Enabled"
 
     filter {}
 
     expiration {
-      days = 365
+      days = 90
     }
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
     }
   }
+}
+
+# Config's own configuration item history, which it keeps seven years by
+# default (2026-10-03, the lean retention set). 90 days, as the delivered
+# files and the log store.
+resource "aws_config_retention_configuration" "main" {
+  retention_period_in_days = 90
 }

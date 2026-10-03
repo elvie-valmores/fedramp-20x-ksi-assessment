@@ -302,6 +302,11 @@ resource "google_bigquery_table" "measurements" {
   time_partitioning {
     type  = "DAY"
     field = "recorded_at"
+    # 90 days (2026-10-03, the lean retention set). The warehouse is the
+    # only copy of a measurement past 30 days -- extracts expire then and
+    # the database is rebuilt every session -- so this is a retention
+    # decision, not housekeeping.
+    expiration_ms = 7776000000
   }
 
   clustering = ["customer"]
@@ -358,6 +363,32 @@ resource "google_artifact_registry_repository" "pipeline" {
     # KSI-SVC-VRI build row 4, the GCP half. Once a tag points at a digest
     # it cannot be moved.
     immutable_tags = true
+  }
+
+  # Keep the five most recent images; delete others once 30 days old
+  # (2026-10-03, the lean retention set). The pinned digest in pipeline.tf
+  # must survive, which a recent build always does; svc-vri-ops-gcp-pinned-
+  # image-present fails the same day if it ever does not. Dry run first:
+  # Artifact Registry logs what it would delete without deleting.
+  cleanup_policy_dry_run = true
+
+  cleanup_policies {
+    id     = "keep-five-most-recent"
+    action = "KEEP"
+
+    most_recent_versions {
+      keep_count = 5
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-older-than-30-days"
+    action = "DELETE"
+
+    condition {
+      tag_state  = "ANY"
+      older_than = "2592000s"
+    }
   }
 
   depends_on = [

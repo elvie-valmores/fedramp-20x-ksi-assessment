@@ -8101,3 +8101,48 @@ falls short of the design:
    by the operator role without any grant (MLA-ALA build rows 3–4, not built).
 5. **Provider change monitoring is unavailable**, as are advisory feeds for GitHub, the providers and
    the actions (SCR-MON build rows 2 and 4).
+
+## 2026-10-03 — The finish line: done means accounted for; two systems built, two descoped; lean retention
+
+**Target: complete by the end of October 2026.** About 300 rows were not fully covered, and four
+designed systems did not exist. At this pace the build is about two weeks of work. The limits are the
+operator's applies, AWS sessions, and clocks such as Security Hub re-evaluation and query windows,
+not writing checks.
+
+**Definition of done** (operator's decision):
+
+- Every evidence row is automated, or recorded in the SDR as manual or descoped with its risk stated.
+- Every failing check is fixed or is a recorded finding with a decision.
+- The final SDR is emitted by CI and validates against the schema.
+
+**The four unbuilt systems:**
+
+| System | Decision | Rows | Reason |
+|---|---|---|---|
+| JIT elevation (KSI-IAM-JIT) | **Build** | 13 | Retires the standing InterimOperatorAdmin role and its exception, the largest residual risk |
+| Policy-as-code (KSI-MLA-EVC) | **Build** | 11 | Cheap and strong. It evaluates plans on every push; the merge-gate rows are recorded partial, because the project pushes to main rather than merging pull requests |
+| Responder (KSI-IAM-SUS) | **Descope** | 16 | Automated containment is the riskiest automation under a deadline; a bug could lock out the operator. Detection and alerting stand, and response is manual, documented as the position |
+| SCIM (KSI-IAM-AAM) | **Descope** | 11 | It needs Cloud Identity Premium, and mostly proves group sync for a two-person setup |
+
+The descoped determinations become partially satisfied, with their risk written down.
+
+**Lean retention** (applied, apart from the teardown step, which runs at the next teardown):
+
+| What | Was | Now |
+|---|---|---|
+| Log store, Config bucket, Config's own history | 12 months and 7-year default | 90 days |
+| Warehouse partitions | No expiry | 90 days |
+| Inactive task definitions | No expiry | 30 days, deleted by `teardown.sh` |
+| Artifact Registry | No expiry | The 5 most recent kept, older ones deleted once 30 days old. The policy is in dry run until its log is reviewed |
+
+- **Cost was not the reason.** Measured, everything retained totals about 2 GB, and 12 months of logs
+  would cost about $0.04 a month. The project simply ends first. AWS Config, billed per change
+  recorded, is the real cost driver at about $0.37 a day.
+- **SDR-CSX-KMT's year of metrics becomes 90 days,** which covers the whole project.
+- **A new safety net:** `svc-vri-ops-gcp-pinned-image-present` reads the pipeline's pin from
+  `pipeline.tf` and fails if cleanup ever removes that image.
+
+**A correction to the record.** The registers called the warehouse "derived, rebuilt by re-running
+the pipeline". That holds for 30 days only. Extracts expire after 30 days and the database is rebuilt
+every session, so past 30 days the warehouse is the only copy. Its register entries now say so, and
+its recovery objective states that older data is not recoverable.

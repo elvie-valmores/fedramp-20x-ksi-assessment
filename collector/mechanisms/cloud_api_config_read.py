@@ -124,6 +124,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_load_balancer_tls(check)
         if provider == "aws" and resource == "database_settings":
             return self._aws_database_settings(check)
+        if provider == "gcp" and resource == "pinned_image_present":
+            return self._gcp_pinned_image_present(check)
         if provider == "gcp" and resource == "run_job_images":
             return self._gcp_run_job_images(check)
         if provider == "gcp" and resource == "services_enabled":
@@ -1103,6 +1105,28 @@ class CloudAPIConfigRead(Mechanism):
             policy = None
         ok, detail = evaluate_read_deny(policy, bucket, check.params["readers"])
         return CheckResult(check.id, ok, {"policy": policy}, detail)
+
+    def _gcp_pinned_image_present(self, check: CheckDefinition) -> CheckResult:
+        """The image the pipeline is pinned to still exists in its registry.
+
+        Requires params: project_id, declaration (the file declaring the
+        pin), variable. The pin is read from the declaration, so the check
+        and the deployment cannot disagree about which digest matters. The
+        registry's images come from Cloud Asset. The safety net for the
+        registry's cleanup policy (2026-10-03).
+        """
+        import re
+        from pathlib import Path
+
+        p = check.params
+        text = (Path(__file__).resolve().parents[2] / p["declaration"]).read_text()
+        block = text.split(f'variable "{p["variable"]}"', 1)[-1]
+        match = re.search(r'default\s*=\s*"[^"@]+@(sha256:[0-9a-f]{64})"', block)
+        pinned = match.group(1) if match else None
+        present = [res.name.rsplit("@", 1)[-1] for res in asset_client(p["project_id"]).search_all_resources(
+            request={"scope": f"projects/{p['project_id']}", "asset_types": ["artifactregistry.googleapis.com/DockerImage"]})]
+        ok, detail = evaluate_pinned_present(pinned, present)
+        return CheckResult(check.id, ok, {"pinned": pinned, "images": len(present)}, detail)
 
     def _gcp_run_job_images(self, check: CheckDefinition) -> CheckResult:
         """KSI-SVC-VRI verify 1, GCP: every Cloud Run job's containers are pinned by digest.
@@ -2215,6 +2239,14 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
             problems = _container_problems(c, assertion)
             results[f"{service}/{c.get('name')}"] = {"passed": not problems, "detail": "; ".join(problems) or "ok"}
     return _judged("containers", results)
+
+
+def evaluate_pinned_present(pinned: str | None, present: list[str]) -> tuple[bool, str]:
+    if not pinned:
+        return False, "no digest pin found in the declaration"
+    if pinned not in present:
+        return False, f"pinned {pinned[:19]}... is gone from the registry; the next run cannot start"
+    return True, f"pinned {pinned[:19]}... present among {len(present)} images"
 
 
 def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:

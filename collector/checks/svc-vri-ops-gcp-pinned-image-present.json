@@ -1,0 +1,16 @@
+{
+  "id": "svc-vri-ops-gcp-pinned-image-present",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "The digest the analytics pipeline is pinned to, read from infra/gcp/pipeline.tf, still exists in Artifact Registry: the registry's cleanup policy has not removed the image the next run needs",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "gcp",
+    "resource": "pinned_image_present",
+    "project_id": "fedramp-20x-ksi-assessment",
+    "declaration": "infra/gcp/pipeline.tf",
+    "variable": "pipeline_image"
+  },
+  "unlinked_reason": "A safety net for the retention decision (registers/retention.yaml), not a matrix row: it keeps the Artifact Registry cleanup policy from silently breaking the pipeline that SVC-VCM and SVC-VRI are judged against."
+}

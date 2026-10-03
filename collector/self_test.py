@@ -804,6 +804,10 @@ CFG_CASES = [
     ("evaluate_task_definitions (digest)", lambda c: cfg.evaluate_task_definitions(c, "digest_pinned"), {"api": [CONTAINER_OK]}, {
         "by tag": {"api": [{**CONTAINER_OK, "image": "r/api:git-abc"}]},
     }),
+    ("evaluate_pinned_present", lambda c: cfg.evaluate_pinned_present(*c), ("sha256:a", ["sha256:a", "sha256:b"]), {
+        "pinned image deleted": ("sha256:a", ["sha256:b"]),
+        "no pin found": (None, ["sha256:a"]),
+    }),
     ("evaluate_services_enabled", cfg.evaluate_services_enabled, {"a": "ENABLED", "b": "ENABLED"}, {
         "one disabled": {"a": "ENABLED", "b": "DISABLED"},
         "unknown": {"a": None},
@@ -1017,6 +1021,7 @@ CFG_RESOURCES = {
     "evaluate_external_access": "external_access",
     "evaluate_snapshots_accounted": "snapshots_accounted",
     "evaluate_services_enabled": "services_enabled",
+    "evaluate_pinned_present": "pinned_image_present",
     "evaluate_config_recorder": "config_recorder",
     "evaluate_asset_feed": "cloud_asset_feed",
     "evaluate_workflow_state": "workflow_active",
