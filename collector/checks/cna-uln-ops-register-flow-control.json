@@ -1,0 +1,21 @@
+{
+  "id": "cna-uln-ops-register-flow-control",
+  "indicator": "KSI-CNA-ULN",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording the layer that enforces its flows; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "flow_control",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-ULN.validate.6",
+      "covers": "full"
+    }
+  ]
+}

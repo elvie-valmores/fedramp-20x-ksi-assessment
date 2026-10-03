@@ -1,0 +1,21 @@
+{
+  "id": "cmt-lmc-ops-register-change-surface",
+  "indicator": "KSI-CMT-LMC",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording an identified change surface; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "change_surface",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-LMC.validate.6",
+      "covers": "full"
+    }
+  ]
+}

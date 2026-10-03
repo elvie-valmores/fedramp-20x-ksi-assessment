@@ -1,0 +1,25 @@
+{
+  "id": "rpl-abo-ops-register-backup",
+  "indicator": "KSI-RPL-ABO",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording backup coverage, or the recorded decision that none is needed; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "backup",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-ABO.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ABO.validate.2",
+      "covers": "full"
+    }
+  ]
+}

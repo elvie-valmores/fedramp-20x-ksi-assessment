@@ -25,13 +25,6 @@ class _NotYetBuilt(Mechanism):
         )
 
 
-class RegisterRead(_NotYetBuilt):
-    """Would read values from the project's register of tracked decisions."""
-
-    name = "register_read"
-    depends_on = "the consolidated resource register"
-
-
 class DeliberateTest(_NotYetBuilt):
     """Would break something on purpose and confirm the control catches it."""
 

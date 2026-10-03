@@ -1,0 +1,25 @@
+{
+  "id": "cna-dfp-ops-register-definition",
+  "indicator": "KSI-CNA-DFP",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording its definition: where it is declared, or the rule that excuses a provider-created resource; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "definition",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-DFP.verify.5",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-DFP.validate.4",
+      "covers": "full"
+    }
+  ]
+}

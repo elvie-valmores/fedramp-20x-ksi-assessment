@@ -1,0 +1,25 @@
+{
+  "id": "cna-ofa-ops-register-availability",
+  "indicator": "KSI-CNA-OFA",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording an availability position, with the reason where it is deliberately reduced; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "availability",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-OFA.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-OFA.validate.5",
+      "covers": "full"
+    }
+  ]
+}

@@ -14,9 +14,9 @@ from mechanisms.not_yet_built import (
     DeliberateTest,
     EffectiveAccessAnalysis,
     RecordStore,
-    RegisterRead,
 )
 from mechanisms.pipeline_config_read import PipelineConfigRead
+from mechanisms.register_read import RegisterRead
 
 MECHANISMS = {
     # Implemented.
@@ -25,9 +25,9 @@ MECHANISMS = {
     "inventory_reconciliation": InventoryReconciliation(),
     "log_query": LogQuery(),
     "pipeline_config_read": PipelineConfigRead(),
+    "register_read": RegisterRead(),  # since 2026-10-03
     # Registered, not yet implemented -- each waits on infrastructure
     # that does not exist yet. See mechanisms/not_yet_built.py.
-    "register_read": RegisterRead(),
     "deliberate_test": DeliberateTest(),
     "record_store": RecordStore(),
     "effective_access_analysis": EffectiveAccessAnalysis(),

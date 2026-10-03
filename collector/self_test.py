@@ -33,6 +33,7 @@ import environments as env
 import mechanisms.cloud_api_config_read as cfg
 import mechanisms.inventory_reconciliation as inv
 import mechanisms.log_query as lq
+import mechanisms.register_read as rr
 import mechanisms.declared_versus_live_comparison as dvl
 import mechanisms.pipeline_config_read as pcr
 
@@ -1057,7 +1058,32 @@ def _dec(actor, key=_DK, kind="AssumedRole"):
 _DEC_OK = [_dec("arn:aws:sts::1:assumed-role/reader/s"), _dec("arn:aws:sts::1:assumed-role/AWSReservedSSO_Op_abc/me"),
            _dec("", kind="AWSService"), _dec("arn:aws:sts::1:assumed-role/anyone/s", key="arn:aws:kms:us-east-1:1:key/aws")]
 
+_REG = {"evaluation_plan": {"sample_max_days": 3}, "classes": {"A::B": {
+    "network": "private tier", "availability": {"posture": "single-AZ, deliberately reduced", "recovery": "restore", "reason": "cost"},
+    "backup": {"coverage": "None", "reason": "derived"}, "objective": {"rto": "1h", "rpo": "5m"},
+    "evaluation": {"by": "collector", "interval_days": 1}, "data_store": {"holds_data": True, "encryption_check": "keys"}}}}
+
+
+def _reg_with(dimension, value):
+    import copy as _c
+    r = _c.deepcopy(_REG)
+    r["classes"]["A::B"][dimension] = value
+    return r
+
+
 SINGLE_CASES = [
+    ("register_read (covers_inventory)", lambda c: rr.evaluate_register_coverage(c[0], c[1], c[2], {"keys"}),
+     ({"A::B": 2}, _REG, "availability"), {
+        "inventoried class without an entry": ({"A::B": 2, "C::D": 1}, _REG, "network"),
+        "entry without the dimension": ({"A::B": 2}, _REG, "surface"),
+        "reduced availability without a reason": ({"A::B": 2}, _reg_with("availability", {"posture": "single-AZ, deliberately reduced", "recovery": "restore"}), "availability"),
+        "no backup without a reason": ({"A::B": 2}, _reg_with("backup", {"coverage": "None"}), "backup"),
+        "objective half-declared": ({"A::B": 2}, _reg_with("objective", {"rto": "1h"}), "objective"),
+        "evaluated less often than the plan": ({"A::B": 2}, _reg_with("evaluation", {"by": "x", "interval_days": 14}), "evaluation"),
+        "data store naming a missing check": ({"A::B": 2}, _reg_with("data_store", {"holds_data": True, "encryption_check": "gone"}), "data_store"),
+        "empty statement": ({"A::B": 2}, _reg_with("network", " "), "network"),
+        "empty inventory": ({}, _REG, "network"),
+    }),
     ("log_query (decrypt_model)", lambda c: lq.judge_decrypt_events(*c), (_DEC_OK, _DKEYS, _DMODEL), {
         "undeclared role": (_DEC_OK + [_dec("arn:aws:sts::1:assumed-role/drift/s")], _DKEYS, _DMODEL),
         # A service pattern must not admit a role of the same name.

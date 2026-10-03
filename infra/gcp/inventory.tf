@@ -20,6 +20,13 @@ locals {
   asset_feed_types = [
     "storage.googleapis.com/Bucket",
     "run.googleapis.com/Service",
+    # The analytics pipeline is a Cloud Run job, not a service, and was not
+    # watched until 2026-10-03, so the inventory held no trace of it. Found
+    # writing the resource register. Its Cloud Scheduler job is not here:
+    # Cloud Asset cannot search that type, though a feed accepts it, so the
+    # schedule is evidenced by its declaration, the drift check and
+    # svc-vcm-ops-gcp-pipeline-schedule-runs instead.
+    "run.googleapis.com/Job",
     "bigquery.googleapis.com/Dataset",
     "bigquery.googleapis.com/Table",
     "cloudkms.googleapis.com/CryptoKey",

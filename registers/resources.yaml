@@ -1,0 +1,490 @@
+# The resource register: one entry per resource class, one position per dimension.
+#
+# Started 2026-10-03. The matrix asks, in a dozen determinations, that every
+# resource in the inventory carry a recorded position on some dimension --
+# its network position (CNA-RNT), its availability (CNA-OFA), its backup
+# coverage (RPL-ABO), its recovery objective (RPL-RRO) and so on. Positions
+# are per class: every resource of a class shares its design, and where one
+# resource differs the class entry says so. The collector's register_read
+# mechanism reconciles the live inventory against this file, so a class the
+# inventory reports with no entry, or an entry missing a dimension, fails.
+#
+# Each position states the design and where it is enforced or evidenced.
+# A reduced position carries its reason. Nothing here is aspirational: a
+# position the architecture does not hold would be the failure the
+# determinations are written against.
+#
+# Dimensions, and the rows they answer:
+#   definition      where the class is declared         CNA-DFP verify 5, validate 4
+#   network         where it sits and how it is reached CNA-RNT validate 5
+#   flow_control    the layer that enforces its flows   CNA-ULN validate 6
+#   surface         its exposure                        CNA-MAT validate 5
+#   availability    zone posture and recovery           CNA-OFA verify 3, validate 5
+#   backup          backup coverage or why none         RPL-ABO verify 3, validate 2
+#   objective       recovery time and point, or N/A     RPL-RRO verify 1, validate 1
+#   integrity       how its integrity is held           SVC-VRI verify 5
+#   evaluation      what evaluates it, how often        SVC-EIS verify 3, validate 6
+#   change_surface  where a change to it is recorded    CMT-LMC validate 6
+#   logging         what it logs, or why nothing        MLA-LET validate 3
+#   assessment      which assessment service covers it  CNA-EIS validate 4
+#   data_store      whether it holds data at rest       SVC-SIN validate 6
+#
+# Recovery objectives were declared on 2026-10-03 from KSI-RPL-RRO's
+# determination ("tens of minutes" for the database, "minutes" for compute)
+# and are unmeasured until KSI-RPL-TRC's restore test runs.
+
+evaluation_plan:
+  # KSI-SVC-EIS build row 6. The intervals adopt the Class C vulnerability
+  # response recommendations as a declared choice: drift-prone resources at
+  # least every 14 days, representative samples of similar resources at
+  # least every 3. Everything here is evaluated more often than both.
+  drift_prone_max_days: 14
+  sample_max_days: 3
+  severity_thresholds: Remediation timeframes follow the Potential Agency Impact model already adopted, not a clock invented here.
+
+shared:
+  aws_control_plane_change: &aws_change CloudTrail management events, multi-region trail into the Object Locked log store, normalized into the corpus
+  gcp_control_plane_change: &gcp_change Cloud Audit Logs Admin Activity, always on and immutable at Google
+  aws_assessment: &aws_assessment AWS Config records the class (inventory.tf) and Security Hub evaluates it against CIS 3.0.0 and FSBP
+  gcp_assessment: &gcp_assessment Cloud Asset Inventory and its feed (inventory.tf, GCP); there is no Security Command Center without an organization, so the collector's GCP checks are the assessment
+  provider_regional: &provider_regional Regional managed service, replicated across zones by the provider; nothing to fail over
+  no_data: &no_data Holds no data; recovery is re-applying declared state
+  reapply: &reapply {rto: "15 minutes, re-applying declared state", rpo: "none: the declaration in git is the recovery point"}
+  daily_collector: &daily_collector Collector checks run daily from CI; Security Hub's controls evaluate it on change and periodically
+
+classes:
+
+  AWS::S3::Bucket:
+    definition: Terraform -- infra/aws (log_corpus.tf, inventory.tf, registry.tf, edge.tf) and infra/bootstrap (the state bucket)
+    network: Regional S3 endpoints. The tasks reach the extract bucket only through the S3 gateway endpoint; account and bucket public access blocks are on
+    flow_control: Bucket policies (TLS-only deny on every bucket, reads confined to declared readers on the log store, writes only through the endpoint for the worker) and IAM
+    surface: No public access at account or bucket level; TLS only; Access Analyzer finds no external access
+    availability: {posture: "Multi-AZ by S3's design", recovery: "None needed for a zone loss"}
+    backup: {coverage: "Versioning on the state, log, extract and Config-adjacent stores; Object Lock COMPLIANCE on the log store", reason: "Version history is the recovery path; a second copy would protect against nothing S3 is not already designed for"}
+    objective: {rto: "Immediate: prior versions are read in place", rpo: "Zero for committed objects; deletions recoverable within the noncurrent retention (30 days logs, 90 days state)"}
+    integrity: Object Lock and CloudTrail digest validation on the log store; versioning on state; customer keys by data class
+    evaluation: {by: "svc-sin bucket checks (keys, public access, TLS), Security Hub S3 controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: Management events for every bucket; object-level data events for the extract bucket, the customer-data store (2026-09-05)
+    assessment: *aws_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-aws-stores-use-declared-keys}
+
+  AWS::RDS::DBInstance:
+    definition: Terraform -- infra/aws/database.tf (application environment, per session)
+    network: Data-tier subnets with no internet or NAT route; reachable only from the api, worker and migrate security groups on 5432
+    flow_control: Security groups, IAM database authentication (rds-db:connect per user), rds.force_ssl
+    surface: Not publicly accessible; one port to three declared callers
+    availability: {posture: "Single-AZ, deliberately reduced", recovery: "Point-in-time restore from automated backups", reason: "Multi-AZ roughly doubles the instance charge; a tested restore is the stronger claim for a two-person pre-certification team (KSI-CNA-OFA)"}
+    backup: {coverage: "Automated backups, 7-day retention, point-in-time recovery, retained after deletion under the persistent database key", reason: ""}
+    objective: {rto: "60 minutes, restore into a new instance (declared; unmeasured)", rpo: "5 minutes, point-in-time recovery's transaction log interval"}
+    integrity: Storage encrypted with the database key; IAM authentication, no password for the application users; DDL logged
+    evaluation: {by: "svc-sin-cfg-aws-database-settings while the environment stands, Security Hub RDS controls", interval_days: 1}
+    change_surface: CloudTrail RDS management events; DDL in the postgresql log export
+    logging: postgresql and upgrade logs exported to CloudWatch under the logs key, 30 days
+    assessment: *aws_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-aws-stores-use-declared-keys}
+
+  AWS::SecretsManager::Secret:
+    definition: Terraform -- infra/aws/secrets.tf (task certificate) and the RDS-managed master secret (database.tf), per session
+    network: Regional Secrets Manager, reached by the tasks through its interface endpoint
+    flow_control: Endpoint policy naming the task roles, IAM, and the secrets key's policy
+    surface: No resource policy; readable only by the roles that use each secret
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: "Regenerated each session: the certificate is re-issued and RDS creates its master secret; a backup would preserve a credential for an environment that no longer exists"}
+    objective: {not_applicable: "Regenerated with the environment; nothing to recover"}
+    integrity: Encrypted with the secrets key; Secrets Manager versions each change
+    evaluation: {by: "svc-sin-cfg-aws-stores-use-declared-keys, Security Hub Secrets Manager controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: CloudTrail records every secret read and change as management events
+    assessment: *aws_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-aws-stores-use-declared-keys}
+
+  AWS::KMS::Key:
+    definition: Terraform -- evidence_key.tf, artifacts_key.tf, database_key.tf (persistent); kms.tf secrets and logs keys (per session)
+    network: Regional KMS, reached by the tasks through its interface endpoint
+    flow_control: Key policies and IAM, with ViaService conditions where a key serves one service
+    surface: No principal outside the account; decrypt confined to declared models (checked by configuration and by observed calls)
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: "Key material never leaves KMS. Session keys have a 7-day deletion window; persistent keys can be disabled or deleted only by root, and an attempt alerts"}
+    objective: {not_applicable: "Provider-held key material; the deletion window is the only recovery path and is deliberate"}
+    integrity: Annual automatic rotation; deletion guarded on the persistent keys
+    evaluation: {by: "svc-sin decrypt-model, rotation and observed-decrypt checks; Security Hub KMS controls", interval_days: 1}
+    change_surface: CloudTrail KMS events, all management events; the evidence key's threat rule alerts on disable and delete attempts
+    logging: Every KMS call is a CloudTrail management event, now with the key it used
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::IAM::Role:
+    definition: Terraform across infra/aws; service-linked roles and Identity Center's reserved role are provider-created and excused by rule in the inventory check
+    network: Global control plane; no network position
+    flow_control: IAM itself is the enforcing layer; trust policies pin federated subjects
+    surface: Trusts pinned to declared subjects and audiences; Access Analyzer finds five declared external trusts and nothing else
+    availability: {posture: "Global provider service", recovery: "None needed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state with daily drift detection; no managed policy on workload identities (CNA-DFP)
+    evaluation: {by: "Role-trust, session-bound, user and drift checks; Access Analyzer; Security Hub IAM controls", interval_days: 1}
+    change_surface: CloudTrail IAM writes, held to the platform engineer by a standing query
+    logging: CloudTrail management events
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::IAM::Policy:
+    definition: Terraform -- customer-managed policies declared with the roles that use them
+    network: Global control plane; no network position
+    flow_control: IAM itself
+    surface: Attached only to declared roles; no user holds a policy
+    availability: {posture: "Global provider service", recovery: "None needed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state with daily drift detection
+    evaluation: {by: "Drift and user-policy checks; Security Hub IAM controls", interval_days: 1}
+    change_surface: CloudTrail IAM writes, held to the platform engineer by a standing query
+    logging: CloudTrail management events
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::IAM::User:
+    definition: None may exist. Humans sign in through Identity Center; workloads federate
+    network: Global control plane; no network position
+    flow_control: IAM itself
+    surface: None exist (iam-snu-cfg-aws-no-user-access-keys); a user would be the static-credential path the design removed
+    availability: {posture: "Not applicable: none exist", recovery: "Not applicable"}
+    backup: {coverage: "None", reason: "None exist"}
+    objective: {not_applicable: "None exist"}
+    integrity: The account password policy is the floor a user created by mistake would meet
+    evaluation: {by: "User key, user policy and long-lived-credential checks", interval_days: 1}
+    change_surface: *aws_change
+    logging: CloudTrail; any IAM-user activity fails a standing query
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::EC2::VPC:
+    definition: Terraform -- infra/aws/network.tf (per session). No other VPC may exist in any region (cna-rnt-cfg-aws-no-undeclared-vpcs)
+    network: The project VPC, us-east-1, three tiers across two zones
+    flow_control: Route tables, security groups and endpoint policies; flow logs record every flow
+    surface: Internet reachable only through the load balancer in the public tier
+    availability: {posture: "Subnets in two availability zones", recovery: "Re-apply"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state, drift-checked; per-session network checks
+    evaluation: {by: "Route, security group, endpoint and VPC-population checks while the environment stands; Security Hub EC2 controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: VPC flow logs, all traffic, to CloudWatch
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::EC2::Subnet:
+    definition: Terraform -- infra/aws/network.tf, tagged by tier (public, app, data)
+    network: Public tier for the load balancer only; app and data tiers have local and gateway-endpoint routes only
+    flow_control: Route tables per tier, security groups on what sits in them
+    surface: No public IPs assigned on launch in any tier
+    availability: {posture: "One subnet per tier per zone, two zones", recovery: "Re-apply"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state, drift-checked; cna-rnt-cfg-aws-private-routes per session
+    evaluation: {by: "Private-route check while the environment stands; Security Hub EC2 controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: VPC flow logs
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::EC2::SecurityGroup:
+    definition: Terraform -- one group per service (network.tf, compute.tf, database.tf, edge.tf); the default group is declared with no rules
+    network: Attached to the tasks, the database, the endpoints and the load balancer
+    flow_control: Itself -- rules reference other groups or the S3 prefix list; only the load balancer admits the internet, on 443 and 80
+    surface: The load balancer's 443 and 80 are the only openings to anywhere
+    availability: {posture: "Regional", recovery: "Re-apply"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state, drift-checked; open-ingress and open-egress checks per session
+    evaluation: {by: "Open-ingress and open-egress checks while the environment stands; Security Hub EC2 controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: VPC flow logs record what the rules admit and reject
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::ECS::Cluster:
+    definition: Terraform -- infra/aws/compute.tf (per session)
+    network: Fargate tasks in the app tier, no public IPs
+    flow_control: The tasks' security groups and task roles
+    surface: No ingress except the api from the load balancer
+    availability: {posture: "Fargate across two zones", recovery: "Tasks replaced automatically"}
+    backup: {coverage: "None", reason: "Stateless; the cluster is declared"}
+    objective: {rto: "Minutes: tasks are replaced by the service scheduler", rpo: "None: no state"}
+    integrity: Declared state, drift-checked
+    evaluation: {by: "Task-definition checks while the environment stands; Security Hub ECS controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: CloudTrail ECS events; container logs to CloudWatch under the logs key
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::ECS::Service:
+    definition: Terraform -- infra/aws/compute.tf, phase 2 (deploy_services)
+    network: Tasks in the app tier; the api behind the load balancer, the worker with no ingress at all
+    flow_control: Security groups per service, endpoint policies, task roles
+    surface: The api on its port from the load balancer only; the worker none
+    availability: {posture: "api: two tasks across zones. worker: one task, deliberately reduced", recovery: "The scheduler replaces a stopped task in seconds", reason: "The worker is a single extractor; its landed high-water mark makes a gap during replacement cost latency, not data"}
+    backup: {coverage: "None", reason: "Stateless; images and task definitions are the recovery"}
+    objective: {rto: "Minutes: task replacement", rpo: "None: no state; the worker resumes from its landed mark"}
+    integrity: Images pinned by digest and signed at build; containers hardened (read-only root, non-root, no capabilities)
+    evaluation: {by: "Task hardening, explicitness and digest checks while the environment stands; Inspector on the images continuously", interval_days: 1}
+    change_surface: *aws_change
+    logging: Container logs to CloudWatch; the tasks' API calls in CloudTrail
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::ECS::TaskDefinition:
+    definition: Terraform -- infra/aws/compute.tf; revisions retained by ECS as the prior baseline
+    network: Not applicable -- a definition, not a running resource
+    flow_control: Declares the task role and network mode the flows depend on
+    surface: Declares no privileged mode, no added capability, a non-root user
+    availability: {posture: "Regional definition", recovery: "Prior revisions retained"}
+    backup: {coverage: "ECS keeps every revision", reason: ""}
+    objective: *reapply
+    integrity: Image by digest; hardening checked per session
+    evaluation: {by: "Task-definition checks while the environment stands; Security Hub ECS controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: CloudTrail RegisterTaskDefinition and deregistration
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::ECR::Repository:
+    definition: Terraform -- infra/aws/registry.tf (persistent)
+    network: Regional ECR, reached by the tasks through its interface endpoints and S3 for layers
+    flow_control: IAM, endpoint policies, the artifacts key
+    surface: No public repository policy; pushes only by the build role (observed)
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "The last 10 builds and their signatures are kept", reason: "An image is rebuilt from its commit; older ones expire by lifecycle"}
+    objective: {rto: "About 5 minutes, a CI rebuild", rpo: "The last commit"}
+    integrity: Immutable tags, cosign signatures verified before the digest is recorded, enhanced continuous scanning
+    evaluation: {by: "Inspector enhanced scanning continuously; immutability and scanning checks daily", interval_days: 1}
+    change_surface: CloudTrail ECR events; pushes held to the build role by a standing query
+    logging: CloudTrail management events
+    assessment: *aws_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-aws-stores-use-declared-keys}
+
+  AWS::ElasticLoadBalancingV2::LoadBalancer:
+    definition: Terraform -- infra/aws/edge.tf (per session)
+    network: Public tier, two zones; the only internet-facing component
+    flow_control: Its security group (443, 80), the WAF, HTTP redirected to HTTPS
+    surface: Internet-facing on 443, and 80 for the redirect only
+    availability: {posture: "Two availability zones", recovery: "Provider-managed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: TLS 1.3 policy with an ACM certificate; HTTPS to the targets
+    evaluation: {by: "svc-sin-cfg-aws-alb-tls while the environment stands; Security Hub ELB controls", interval_days: 1}
+    change_surface: *aws_change
+    logging: Access logs to the load balancer log bucket; WAF logs
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::WAFv2::WebACL:
+    definition: Terraform -- infra/aws/edge.tf (per session)
+    network: Regional, associated with the load balancer
+    flow_control: Itself -- managed rule groups and a rate rule in front of the api
+    surface: Reduces the load balancer's; exposes nothing of its own
+    availability: {posture: *provider_regional, recovery: "Re-apply"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state, drift-checked
+    evaluation: {by: "Security Hub WAF controls; drift", interval_days: 1}
+    change_surface: *aws_change
+    logging: WAF logs
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  AWS::CloudTrail::Trail:
+    definition: Terraform -- infra/aws/log_corpus.tf (persistent)
+    network: Regional service delivering to the log store
+    flow_control: The log store's bucket policy admits only CloudTrail's writes
+    surface: No reader but the four declared
+    availability: {posture: "Multi-region trail", recovery: "None needed"}
+    backup: {coverage: "Its output is Object Locked and versioned in the log store", reason: ""}
+    objective: {rto: "Not applicable: a configuration", rpo: "CloudTrail's delivery interval, about 5 minutes"}
+    integrity: Log file validation, verified daily over the last 26 hours
+    evaluation: {by: "Trail validation, data-event scope and digest checks daily", interval_days: 1}
+    change_surface: CloudTrail records changes to itself
+    logging: It is the log
+    assessment: *aws_assessment
+    data_store: {holds_data: false}
+
+  storage.googleapis.com/Bucket:
+    definition: Terraform -- infra/gcp/analytics.tf (the landing bucket)
+    network: Google APIs; the pipeline job writes, nothing else
+    flow_control: IAM, public access prevention enforced, uniform bucket-level access
+    surface: No public access (svc-sin-cfg-gcp-buckets-prevent-public-access)
+    availability: {posture: "Regional, multi-zone by design", recovery: "None needed"}
+    backup: {coverage: "None", reason: "Intermediate and regenerable: re-running the pipeline rewrites it (KSI-RPL-ABO)"}
+    objective: {not_applicable: "Regenerable by re-running the pipeline"}
+    integrity: Customer key (analytics); Data Access logs record reads and writes
+    evaluation: {by: "Public access and store-key checks daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Data Access audit logs, routed to the CMEK log bucket
+    assessment: *gcp_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-gcp-stores-use-declared-keys}
+
+  bigquery.googleapis.com/Dataset:
+    definition: Terraform -- infra/gcp/analytics.tf
+    network: Google APIs
+    flow_control: Dataset access list, held to its declaration (svc-sin-cfg-gcp-bigquery-access-declared)
+    surface: Two declared entries, no public or domain-wide grant
+    availability: {posture: "Regional, multi-zone by design", recovery: "None needed"}
+    backup: {coverage: "None", reason: "Derived data: re-running the pipeline over the extracts rebuilds it (KSI-RPL-RRO)"}
+    objective: {not_applicable: "Derived; reconstructed by re-running the pipeline"}
+    integrity: Customer key; the MERGE on (id, recorded_at) keeps re-landing idempotent
+    evaluation: {by: "Access and store-key checks daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Data Access audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-gcp-stores-use-declared-keys}
+
+  bigquery.googleapis.com/Table:
+    definition: Terraform -- infra/gcp/analytics.tf
+    network: Google APIs
+    flow_control: The dataset's access list
+    surface: As its dataset
+    availability: {posture: "Regional, multi-zone by design", recovery: "None needed"}
+    backup: {coverage: "BigQuery time travel, 7 days", reason: "Derived data; time travel is the provider's default, not a backup design"}
+    objective: {not_applicable: "Derived; reconstructed by re-running the pipeline"}
+    integrity: Customer key; idempotent MERGE
+    evaluation: {by: "Store-key check daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Data Access audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-gcp-stores-use-declared-keys}
+
+  artifactregistry.googleapis.com/Repository:
+    definition: Terraform -- infra/gcp/analytics.tf
+    network: Google APIs
+    flow_control: Repository IAM -- publish only by build-and-push.yml's federated principal
+    surface: Not public
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: "Images rebuild from their commit"}
+    objective: {rto: "About 5 minutes, a CI rebuild", rpo: "The last commit"}
+    integrity: Immutable tags, cosign signatures verified before the digest is recorded, Container Scanning on push
+    evaluation: {by: "Container Scanning on push; immutability and store-key checks daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-gcp-stores-use-declared-keys}
+
+  cloudkms.googleapis.com/CryptoKey:
+    definition: Terraform -- infra/gcp/analytics.tf (evidence, analytics, artifacts)
+    network: Google APIs
+    flow_control: Key IAM, resolved through key, key ring and project
+    surface: Decrypt confined to each key's declared members
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: "Key material never leaves Cloud KMS; keys cannot be deleted, only versions destroyed"}
+    objective: {not_applicable: "Provider-held key material"}
+    integrity: Annual rotation
+    evaluation: {by: "Decrypt-principal and rotation checks daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  cloudresourcemanager.googleapis.com/Project:
+    definition: Created by hand outside any organization; excused by rule in the inventory check
+    network: Not applicable
+    flow_control: Project IAM; basic roles only as named allowances
+    surface: Two named basic-role allowances with reasons
+    availability: {posture: "Global", recovery: "Not applicable"}
+    backup: {coverage: "None", reason: "A container, not data"}
+    objective: {not_applicable: "A container; its contents carry their own objectives"}
+    integrity: Basic-role allowances checked daily
+    evaluation: {by: "Basic-roles check daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  iam.googleapis.com/Role:
+    definition: Terraform -- infra/gcp/github_federation.tf (the collector and image publisher custom roles)
+    network: Not applicable
+    flow_control: IAM itself
+    surface: Granted only to their declared workflow principals
+    availability: {posture: "Global", recovery: "None needed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Enumerated permissions, no predefined roles on workload identities; drift-checked
+    evaluation: {by: "GCP drift check daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  iam.googleapis.com/ServiceAccount:
+    definition: Terraform -- the pipeline and scheduler accounts; terraform-admin and the default compute account are excused by rule
+    network: Not applicable
+    flow_control: IAM itself
+    surface: No user-managed keys (iam-snu-cfg-gcp-no-user-managed-sa-keys)
+    availability: {posture: "Global", recovery: "None needed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Keyless -- impersonation and federation only
+    evaluation: {by: "User-managed key check and GCP drift daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  pubsub.googleapis.com/Topic:
+    definition: Terraform -- the asset feed topic (inventory.tf, GCP); Container Analysis's four topics are provider-created and excused by rule
+    network: Google APIs
+    flow_control: Topic IAM
+    surface: Not public; publishers are Google services
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: "Notifications in transit, not data at rest"}
+    objective: {not_applicable: "Transient notifications"}
+    integrity: The asset feed topic under the evidence key
+    evaluation: {by: "Store-key check daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Admin Activity audit logs
+    assessment: *gcp_assessment
+    data_store: {holds_data: true, encryption_check: svc-sin-cfg-gcp-stores-use-declared-keys}
+
+  run.googleapis.com/Service:
+    definition: None exist. The pipeline runs as a Cloud Run job, not a service
+    network: Not applicable -- none exist
+    flow_control: Not applicable
+    surface: None
+    availability: {posture: "Not applicable: none exist", recovery: "Not applicable"}
+    backup: {coverage: "None", reason: "None exist"}
+    objective: {not_applicable: "None exist"}
+    integrity: Not applicable
+    evaluation: {by: "GCP drift and inventory checks would find one", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Not applicable
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  run.googleapis.com/Job:
+    definition: Terraform -- infra/gcp/pipeline.tf (the analytics pipeline)
+    network: Google-managed; reaches AWS over the internet with a federated session and Google APIs directly; no VPC
+    flow_control: IAM on both sides -- the AWS role trusts only its service account's numeric ID
+    surface: No ingress; invoked only by its scheduler
+    availability: {posture: "Regional, Google-managed", recovery: "The next scheduled run; jobs are idempotent"}
+    backup: {coverage: "None", reason: "Stateless and re-runnable by design (KSI-CNA-OFA build row 5)"}
+    objective: {rto: "Six hours: the next scheduled run, or minutes run by hand", rpo: "None: it re-reads every extract"}
+    integrity: Image pinned by digest and signed; svc-vri-cfg-gcp-run-jobs-digest-pinned
+    evaluation: {by: "Schedule-run and digest checks daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Job execution logs in Cloud Logging; its AWS calls in CloudTrail
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}
+
+  cloudscheduler.googleapis.com/Job:
+    definition: Terraform -- infra/gcp/pipeline.tf
+    network: Google-managed
+    flow_control: IAM -- runs the job as its own service account
+    surface: No ingress
+    availability: {posture: *provider_regional, recovery: "None needed"}
+    backup: {coverage: "None", reason: *no_data}
+    objective: *reapply
+    integrity: Declared state, drift-checked
+    evaluation: {by: "svc-vcm-ops-gcp-pipeline-schedule-runs daily", interval_days: 1}
+    change_surface: *gcp_change
+    logging: Scheduler attempts in Cloud Logging
+    assessment: *gcp_assessment
+    data_store: {holds_data: false}

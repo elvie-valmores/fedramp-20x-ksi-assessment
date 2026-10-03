@@ -1,0 +1,22 @@
+{
+  "id": "svc-sin-ops-register-data-store",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every resource class in the live AWS and GCP inventories has an entry in registers/resources.yaml recording whether it holds data at rest and, if it does, the encryption check that judges it; zero unaccounted",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/resources.yaml",
+    "assertion": "covers_inventory",
+    "dimension": "data_store",
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.6",
+      "covers": "partial",
+      "gap": "Each data-store class names its encryption check; that the check's population includes every resource of the class is that check's design (it reads the stores from the APIs), not re-verified here."
+    }
+  ]
+}

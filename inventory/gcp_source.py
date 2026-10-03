@@ -21,6 +21,7 @@ from gcp_auth import DEFAULT_PROJECT_ID, GCPNotConfigured, asset_client
 ASSET_TYPES = [
     "storage.googleapis.com/Bucket",
     "run.googleapis.com/Service",
+    "run.googleapis.com/Job",  # the analytics pipeline (2026-10-03); its scheduler job is not searchable
     "bigquery.googleapis.com/Dataset",
     "bigquery.googleapis.com/Table",
     "cloudkms.googleapis.com/CryptoKey",
