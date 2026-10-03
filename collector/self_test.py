@@ -1071,7 +1071,40 @@ def _reg_with(dimension, value):
     return r
 
 
+_PLAN = {"classes": {"key": {"mechanism": "auto", "interval_days": 365, "members": [{"resource_type": "AWS::KMS::Key", "name": "*"}]},
+                     "token": {"mechanism": "workflow", "interval_days": None, "deferred": "no token yet",
+                               "members": [{"resource_type": "T", "name": "*"}]},
+                     "secret": {"mechanism": "native", "interval_days": 7,
+                                "members": [{"resource_type": "AWS::SecretsManager::Secret", "name": "rds!db-*"}]}}}
+
+
+def _plan_without(name, field):
+    import copy as _c
+    p = _c.deepcopy(_PLAN)
+    p["classes"][name].pop(field)
+    return p
+
+
 SINGLE_CASES = [
+    ("register_read (plan_covers_classes)", lambda c: rr.evaluate_plan_classes(c, ["key", "token", "secret"]), _PLAN, {
+        "class missing": {"classes": {k: v for k, v in _PLAN["classes"].items() if k != "secret"}},
+        "no interval and no deferral": _plan_without("token", "deferred"),
+        "no mechanism": _plan_without("key", "mechanism"),
+    }),
+    ("register_read (entries_complete)", rr.evaluate_entries_complete,
+     [{"what": "a", "reason": "r", "expiry_days": 30}, {"what": "b", "reason": "r", "expires_with": "the next build"},
+      {"what": "c", "reason": "r", "expiry_days": 0}], {
+        "no expiry": [{"what": "a", "reason": "r", "expiry_days": None}],
+        "no reason": [{"what": "a", "reason": " ", "expiry_days": 30}],
+        "negative days": [{"what": "a", "reason": "r", "expiry_days": -1}],
+        "empty register": [],
+    }),
+    ("register_read (secrets_owned)", lambda c: rr.evaluate_secrets_owned(c, _PLAN),
+     [{"resource_type": "AWS::KMS::Key", "name": None, "resource_id": "k"},
+      {"resource_type": "AWS::SecretsManager::Secret", "name": "rds!db-1", "resource_id": "s"}], {
+        "a secret no class owns": [{"resource_type": "AWS::SecretsManager::Secret", "name": "hand-made", "resource_id": "x"}],
+        "nothing to judge": [],
+    }),
     ("register_read (covers_inventory)", lambda c: rr.evaluate_register_coverage(c[0], c[1], c[2], {"keys"}),
      ({"A::B": 2}, _REG, "availability"), {
         "inventoried class without an entry": ({"A::B": 2, "C::D": 1}, _REG, "network"),

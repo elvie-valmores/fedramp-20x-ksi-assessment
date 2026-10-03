@@ -1,0 +1,18 @@
+{
+  "id": "svc-prr-cfg-retention-register-complete",
+  "indicator": "KSI-SVC-PRR",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "The retention register (registers/retention.yaml) exists and every entry carries a reason and an expiry, in days or as the event that removes it",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/retention.yaml",
+    "assertion": "entries_complete"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-PRR.verify.2",
+      "covers": "full"
+    }
+  ]
+}

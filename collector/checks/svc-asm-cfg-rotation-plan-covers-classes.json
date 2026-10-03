@@ -1,0 +1,24 @@
+{
+  "id": "svc-asm-cfg-rotation-plan-covers-classes",
+  "indicator": "KSI-SVC-ASM",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "The rotation interval plan (registers/secrets.yaml) exists and plans every secret class the determination names -- managed secrets, encryption keys, certificates and bearer tokens -- each with its mechanism and an interval, or a recorded deferral where the class has no member",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/secrets.yaml",
+    "assertion": "plan_covers_classes",
+    "required_classes": [
+      "managed_secret",
+      "encryption_key",
+      "certificate",
+      "bearer_token"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ASM.verify.5",
+      "covers": "full"
+    }
+  ]
+}

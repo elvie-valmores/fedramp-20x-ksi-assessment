@@ -1,0 +1,88 @@
+# The retention register: KSI-SVC-PRR build row 2.
+#
+# Started 2026-10-03. Everything the project keeps beyond the moment it was
+# made, with the reason it is kept and when it goes. The determination's
+# point is that retained data is residue unless it has an expiry: an entry
+# needs a reason, and either expiry_days or expires_with naming the event
+# that removes it. An entry with neither fails the check; that is how the
+# open ones below are kept visible instead of forgotten.
+
+entries:
+  - what: Log store objects (CloudTrail, normalized events, collector run records)
+    where: fedramp-20x-ksi-log-store (S3)
+    reason: Audit evidence; twelve months is OMB M-21-31's active retention and SDR-CSX-KMT's year of metrics
+    expiry_days: 365
+  - what: Superseded log store versions
+    where: fedramp-20x-ksi-log-store (S3)
+    reason: Object Lock keeps each version 7 days; the version hidden by expiry is kept 30 days more
+    expiry_days: 30
+  - what: Config configuration history files
+    where: fedramp-20x-ksi-config (S3)
+    reason: The record of how resources were configured; same window as the log store
+    expiry_days: 365
+  - what: Superseded Terraform state versions
+    where: fedramp-20x-ksi-tfstate (S3)
+    reason: The depth a state rollback can reach (KSI-RPL-ABO's prior baseline)
+    expiry_days: 90
+  - what: Extract files
+    where: fedramp-20x-ksi-extracts (S3)
+    reason: Customer data in transit to GCP; the pipeline re-reads every extract each run, so 30 days is the window a missed run can recover
+    expiry_days: 30
+  - what: Athena query results
+    where: fedramp-20x-ksi-athena-results (S3)
+    reason: Re-derivable scratch output
+    expiry_days: 7
+  - what: Load balancer access logs
+    where: The load balancer log bucket (S3, per session)
+    reason: Request records for the session's investigation window
+    expiry_days: 30
+  - what: CloudWatch log groups (Lambdas, containers, RDS, VPC flow logs, WAF)
+    where: CloudWatch Logs
+    reason: Operational logs; the audit record of the same activity is CloudTrail in the log store
+    expiry_days: 30
+  - what: Database automated backups and snapshots
+    where: RDS, retained after the instance is deleted
+    reason: Recovery testing across sessions (2026-09-05); under the persistent database key since 2026-10-03
+    expiry_days: 7
+  - what: Container images in ECR
+    where: fedramp-20x-ksi/api and /worker
+    reason: The last 10 builds and their signatures, so a recent deployable image survives builds
+    expires_with: The eleventh newer build (lifecycle policy); untagged leftovers after a day
+  - what: Session KMS keys after teardown
+    where: KMS (secrets and logs keys)
+    reason: The deletion window is the recovery path for a teardown made in error
+    expiry_days: 7
+  - what: Secrets after teardown
+    where: Secrets Manager
+    reason: Regenerated each session; no recovery window is kept
+    expiry_days: 0
+  - what: Landing files in GCS
+    where: fedramp-20x-ksi-assessment-landing
+    reason: Intermediate and regenerable by re-running the pipeline
+    expiry_days: 30
+  - what: GCP Data Access logs
+    where: fedramp-20x-ksi-data-access (Cloud Logging, CMEK)
+    reason: The customer-data access record on the GCP side
+    expiry_days: 30
+  - what: GitHub Actions evidence artifacts
+    where: GitHub, per collect.yml run
+    reason: The SDR and run outputs per run; the durable copy is the record in the log store
+    expiry_days: 90
+
+  # Open: retained with no expiry. Each needs a decision.
+  - what: Inactive ECS task definition revisions
+    where: ECS, per session
+    reason: ECS keeps deregistered revisions indefinitely; they are the prior configuration baseline KSI-RPL-ABO counts on, but nothing bounds them
+    expiry_days: null
+  - what: Analytics images in Artifact Registry
+    where: fedramp-20x-ksi (Artifact Registry)
+    reason: No cleanup policy; every build since 2026-10-01 is kept. The pinned digest must survive any policy chosen
+    expiry_days: null
+  - what: The measurements warehouse rows
+    where: measurements.measurements (BigQuery)
+    reason: Derived customer data, rebuilt from extracts but kept with no table or partition expiration
+    expiry_days: null
+  - what: AWS Config's own configuration item history
+    where: AWS Config service (not the S3 delivery files)
+    reason: No retention configuration is set, so AWS keeps the default of seven years
+    expiry_days: null
