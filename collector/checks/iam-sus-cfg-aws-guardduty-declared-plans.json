@@ -3,7 +3,7 @@
   "indicator": "KSI-IAM-SUS",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "GuardDuty is enabled, publishes findings every fifteen minutes, and has exactly the declared plans on: the foundational sources, S3 Protection and RDS Protection",
+  "description": "GuardDuty is enabled, publishes findings every fifteen minutes, and has exactly the declared plans on: the foundational sources, S3, RDS and Lambda Protection",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
@@ -15,7 +15,8 @@
       "DNS_LOGS",
       "FLOW_LOGS",
       "S3_DATA_EVENTS",
-      "RDS_LOGIN_EVENTS"
+      "RDS_LOGIN_EVENTS",
+      "LAMBDA_NETWORK_LOGS"
     ]
   },
   "matrix_rows": [

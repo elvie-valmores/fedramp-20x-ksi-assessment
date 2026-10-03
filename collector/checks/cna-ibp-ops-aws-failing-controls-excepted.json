@@ -62,6 +62,50 @@
       {
         "control": "EC2.60",
         "reason": "Endpoints are declared per service the tasks call; Systems Manager Incident Manager is not used."
+      },
+      {
+        "control": "SSM.6",
+        "reason": "Nothing here uses SSM Automation; there are no runbooks to log. Decided 2026-10-03."
+      },
+      {
+        "control": "IAM.18",
+        "reason": "The operator's Identity Center role (InterimOperatorAdmin) holds AWS Support access; a separate support role would be a second standing identity for a two-person team. Decided 2026-10-03."
+      },
+      {
+        "control": "CloudTrail.5",
+        "reason": "Detection reads the trail from S3 through Athena and the normalized corpus, not CloudWatch Logs; integrating it would duplicate the stream and its cost. Decided 2026-10-03."
+      },
+      {
+        "control": "S3.9",
+        "reason": "Server access logging is not enabled: customer-data object access is recorded as CloudTrail data events (the 2026-09-05 MLA-LET scope), and the other buckets hold logs, state and scratch output. Decided 2026-10-03."
+      },
+      {
+        "control": "CloudTrail.7",
+        "reason": "As S3.9, for the trail's own bucket: its writes are CloudTrail's, and reads of it are confined to four declared readers by bucket policy. Decided 2026-10-03."
+      },
+      {
+        "control": "S3.20",
+        "reason": "MFA delete can be set only by the root user through the API. The log store's Object Lock in COMPLIANCE mode is stronger: nobody can delete a locked version, root included. Decided 2026-10-03."
+      },
+      {
+        "control": "Macie.1",
+        "reason": "The one customer-data store holds synthetic measurements, classified by design; Macie bills per bucket and per byte scanned for a classification the design already made. Decided 2026-10-03."
+      },
+      {
+        "control": "Inspector.3",
+        "reason": "The two Lambdas are first-party code using only the runtime's boto3, with no packaged dependencies to scan; their source is reviewed in the repository. Decided 2026-10-03."
+      },
+      {
+        "control": "Inspector.4",
+        "reason": "As Inspector.3: no packaged dependencies. Decided 2026-10-03."
+      },
+      {
+        "control": "GuardDuty.11",
+        "reason": "Runtime Monitoring would inject an agent into the Fargate tasks, which run with a read-only root filesystem and every capability dropped; that combination is untested here. Revisit with a session to test it. Decided 2026-10-03."
+      },
+      {
+        "control": "GuardDuty.12",
+        "reason": "As GuardDuty.11, for ECS specifically. Decided 2026-10-03."
       }
     ]
   },

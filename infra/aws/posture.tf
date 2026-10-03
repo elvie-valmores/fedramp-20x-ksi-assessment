@@ -67,6 +67,17 @@ resource "aws_guardduty_detector" "main" {
 # It bills per login event, so only while the application environment is up.
 # The datasources block above predates the features API and has no field
 # for it, so it is a feature resource of its own.
+# Lambda Protection: GuardDuty watching the two Lambdas' network activity
+# (Security Hub GuardDuty.6, 2026-10-03). Both run in this account between
+# sessions, and the normalizer handles every CloudTrail file, so they are the
+# workloads that never go down. Billed per volume of their flow data, which
+# is small.
+resource "aws_guardduty_detector_feature" "lambda_network_logs" {
+  detector_id = aws_guardduty_detector.main.id
+  name        = "LAMBDA_NETWORK_LOGS"
+  status      = "ENABLED"
+}
+
 resource "aws_guardduty_detector_feature" "rds_login_events" {
   detector_id = aws_guardduty_detector.main.id
   name        = "RDS_LOGIN_EVENTS"

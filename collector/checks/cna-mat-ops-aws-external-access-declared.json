@@ -1,0 +1,41 @@
+{
+  "id": "cna-mat-ops-aws-external-access-declared",
+  "indicator": "KSI-CNA-MAT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "IAM Access Analyzer's account analyzer is active, and every external access path it finds is on the declared list: the three CI roles federated to GitHub's OIDC provider the pipeline role federated to Google, and the operator's Identity Center role. No public access anywhere",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "external_access",
+    "region": "us-east-1",
+    "declared": [
+      {
+        "resource": "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-drift",
+        "reason": "GitHub Actions on main, by immutable owner and repository IDs (pipeline_identity.tf)"
+      },
+      {
+        "resource": "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-build",
+        "reason": "GitHub Actions on main (pipeline.tf)"
+      },
+      {
+        "resource": "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-collector",
+        "reason": "GitHub Actions on main (collector_identity.tf)"
+      },
+      {
+        "resource": "arn:aws:iam::437672023758:role/fedramp-20x-ksi-gcp-pipeline",
+        "reason": "The GCP pipeline's service account by numeric ID, through accounts.google.com (cross_cloud.tf)"
+      },
+      {
+        "resource": "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*",
+        "reason": "The operator's sign-in: Identity Center's SAML provider, federated to Google Cloud Identity (identity_center.tf). The suffix is Identity Center's, hence the pattern"
+      }
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-MAT.validate.4",
+      "covers": "full"
+    }
+  ]
+}

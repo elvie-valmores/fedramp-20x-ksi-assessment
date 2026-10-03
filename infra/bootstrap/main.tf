@@ -33,6 +33,31 @@ resource "aws_s3_bucket_versioning" "tfstate" {
   }
 }
 
+# Prior state versions kept 90 days, current ones forever (Security Hub
+# S3.13, 2026-10-03). Ninety days is the depth a state rollback can reach,
+# which is far beyond any session gap here; until then every version since
+# the first apply was kept. Nothing expires a current state file.
+resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+
+  rule {
+    id     = "expire-superseded-state"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.tfstate]
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
 

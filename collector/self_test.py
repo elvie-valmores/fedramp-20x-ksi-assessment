@@ -807,6 +807,13 @@ CFG_CASES = [
         "unknown": {"a": None},
         "none named": {},
     }),
+    ("evaluate_external_access", lambda c: cfg.evaluate_external_access(*c, [{"resource": "arn:aws:iam::1:role/ci", "reason": "GitHub"}]),
+     (True, [{"resource": "arn:aws:iam::1:role/ci", "type": "AWS::IAM::Role", "public": False, "principal": {}}]), {
+        "no analyzer": (False, []),
+        "undeclared path": (True, [{"resource": "arn:aws:s3:::data", "type": "AWS::S3::Bucket", "public": False, "principal": {}}]),
+        # A declared resource that becomes public is still a finding.
+        "declared but public": (True, [{"resource": "arn:aws:iam::1:role/ci", "type": "AWS::IAM::Role", "public": True, "principal": {}}]),
+    }),
     ("evaluate_sources_catalogued", lambda c: cfg.evaluate_sources_catalogued(*c), (["aws"], ["aws", "gcp"]), {
         "stored, not catalogued": (["aws", "gcp"], ["aws"]),
         "empty store": ([], ["aws"]),
@@ -1002,6 +1009,7 @@ CFG_RESOURCES = {
     "evaluate_validate_logs": "trail_logs_validate",
     "evaluate_failing_controls": "securityhub_failing_controls",
     "evaluate_sources_catalogued": "store_sources_catalogued",
+    "evaluate_external_access": "external_access",
     "evaluate_snapshots_accounted": "snapshots_accounted",
     "evaluate_services_enabled": "services_enabled",
     "evaluate_config_recorder": "config_recorder",

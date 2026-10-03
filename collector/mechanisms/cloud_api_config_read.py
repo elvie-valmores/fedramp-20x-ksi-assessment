@@ -128,6 +128,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._gcp_run_job_images(check)
         if provider == "gcp" and resource == "services_enabled":
             return self._gcp_services_enabled(check)
+        if provider == "aws" and resource == "external_access":
+            return self._aws_external_access(check)
         if provider == "aws" and resource == "store_sources_catalogued":
             return self._aws_store_sources_catalogued(check)
         if provider == "aws" and resource == "snapshots_accounted":
@@ -937,6 +939,25 @@ class CloudAPIConfigRead(Mechanism):
             response.raise_for_status()
             states[service] = response.json().get("state")
         ok, detail, evidence = evaluate_services_enabled(states)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_external_access(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-MAT validate 4: no external access path beyond the declared list.
+
+        Requires params: region, declared ([{resource, reason}], ARN globs).
+        From IAM Access Analyzer's account analyzer: every active finding is
+        a resource that admits a principal outside the account.
+        """
+        aa = boto3.client("accessanalyzer", region_name=check.params["region"])
+        analyzers = [a for a in aa.list_analyzers(type="ACCOUNT")["analyzers"] if a["status"] == "ACTIVE"]
+        findings = []
+        if analyzers:
+            for page in aa.get_paginator("list_findings").paginate(
+                    analyzerArn=analyzers[0]["arn"], filter={"status": {"eq": ["ACTIVE"]}}):
+                for f in page["findings"]:
+                    findings.append({"resource": f.get("resource"), "type": f.get("resourceType"),
+                                     "public": f.get("isPublic", False), "principal": f.get("principal")})
+        ok, detail, evidence = evaluate_external_access(bool(analyzers), findings, check.params["declared"])
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_store_sources_catalogued(self, check: CheckDefinition) -> CheckResult:
@@ -2198,6 +2219,18 @@ def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str
 
 def evaluate_services_enabled(states: dict[str, str | None]) -> tuple[bool, str, dict]:
     return _judged("services", {s: {"passed": st == "ENABLED", "detail": str(st)} for s, st in states.items()})
+
+
+def evaluate_external_access(analyzer: bool, findings: list[dict], declared: list[dict]) -> tuple[bool, str, dict]:
+    """An active analyzer, no public finding, and every finding on a declared resource."""
+    if not analyzer:
+        return False, "no active account analyzer -- external access is unexamined", {"findings": []}
+    undeclared = [f for f in findings if f["public"] or not any(
+        fnmatch.fnmatchcase(f["resource"] or "", d["resource"]) for d in declared)]
+    evidence = {"findings": findings, "undeclared": undeclared}
+    if undeclared:
+        return False, f"{len(undeclared)} external access path(s) not on the declared list", evidence
+    return True, f"all {len(findings)} external access path(s) declared", evidence
 
 
 def evaluate_sources_catalogued(stored: list[str], catalogued: list[str]) -> tuple[bool, str, dict]:

@@ -97,6 +97,12 @@ data "aws_iam_policy_document" "github_drift" {
     effect = "Allow"
 
     actions = [
+      # The account analyzer (account.tf, 2026-10-03): its refresh, and the
+      # collector's read of its findings (cna-mat-ops-aws-external-access-declared).
+      "access-analyzer:GetAnalyzer",
+      "access-analyzer:ListAnalyzers",
+      "access-analyzer:ListFindings",
+      "access-analyzer:ListTagsForResource",
       "acm:Describe*",
       "acm:List*",
       # Athena's workgroup read. Absent entirely until 2026-09-22, which is
@@ -119,6 +125,9 @@ data "aws_iam_policy_document" "github_drift" {
       "config:Get*",
       "config:List*",
       "ec2:Describe*",
+      # EBS default encryption (account.tf, 2026-10-03): Get, not Describe.
+      "ec2:GetEbsDefaultKmsKeyId",
+      "ec2:GetEbsEncryptionByDefault",
       "ecr:Describe*",
       "ecr:Get*",
       "ecr:List*",

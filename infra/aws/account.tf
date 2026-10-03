@@ -30,3 +30,36 @@ resource "aws_ssm_service_setting" "document_public_sharing" {
   setting_id    = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:servicesetting/ssm/documents/console/public-sharing-permission"
   setting_value = "Disable"
 }
+
+# Security Hub EC2.7 (2026-10-03). Nothing here uses EBS -- the workloads
+# are Fargate -- which makes this free and forward-looking: a volume
+# created later is encrypted without anyone remembering to ask.
+resource "aws_ebs_encryption_by_default" "main" {
+  enabled = true
+}
+
+# Security Hub IAM.28, and the source KSI-CNA-MAT validate row 4 names
+# (2026-10-03). An account analyzer finds every resource policy and trust
+# that admits a principal outside the account. Free for external access.
+# The trusts it will report -- GitHub's OIDC provider and Google's issuer
+# on the CI and pipeline roles -- are declared, and the collector holds
+# its findings to that list.
+resource "aws_accessanalyzer_analyzer" "external" {
+  analyzer_name = "fedramp-20x-ksi-external"
+  type          = "ACCOUNT"
+}
+
+# Security Hub IAM.7, IAM.15 and IAM.16 (2026-10-03). No IAM user exists
+# and none should (iam-snu-cfg-aws-no-user-access-keys), so this governs
+# nothing today. It is the floor a user created by mistake would meet:
+# CIS's length and reuse settings rather than AWS's defaults.
+resource "aws_iam_account_password_policy" "main" {
+  minimum_password_length        = 14
+  require_lowercase_characters   = true
+  require_uppercase_characters   = true
+  require_numbers                = true
+  require_symbols                = true
+  password_reuse_prevention      = 24
+  max_password_age               = 90
+  allow_users_to_change_password = true
+}
