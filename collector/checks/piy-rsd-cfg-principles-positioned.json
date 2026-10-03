@@ -1,0 +1,18 @@
+{
+  "id": "piy-rsd-cfg-principles-positioned",
+  "indicator": "KSI-PIY-RSD",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Each Secure by Design principle carries a position, with the checks that evidence it or the reason it is not evidenced",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/lifecycle.yaml",
+    "assertion": "principles_positioned"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-RSD.verify.2",
+      "covers": "full"
+    }
+  ]
+}

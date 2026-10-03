@@ -1,0 +1,78 @@
+# The lifecycle: stages, the security control at each, and the principles.
+#
+# Started 2026-10-03. Serves KSI-CMT-VTD build row 6 (each stage with its
+# validation criterion and what a failure stops), KSI-PIY-RSD build row 1
+# (each lifecycle stage mapped to the control operating at it) and build
+# row 2 (each Secure by Design principle with its evidence or a reason).
+# Stages are the determinations' own order. A stage not yet built says so;
+# the check fails on it until it is, rather than the map implying otherwise.
+
+stages:
+  - name: pre-merge policy evaluation
+    control: Policy rules evaluated against the Terraform plan (KSI-MLA-EVC)
+    criterion: No rule at or above the declared severity fails
+    failure_stops: The change, before it is applied
+    status: not_built
+    evidence: []
+    note: Planned for the week of 2026-10-12. The project pushes to main, so it runs on every push rather than gating a merge
+
+  - name: build
+    control: Hashed, fully pinned manifests; dependency audit against OSV; images built and signed with cosign (KSI-SCR-MIT, KSI-SCR-MON, KSI-SVC-VRI)
+    criterion: Every manifest hashed and pinned, pip-audit clean, signature produced
+    failure_stops: The image, which never reaches a registry
+    status: built
+    evidence: [scr-mit-cfg-manifest-integrity-checked, scr-mon-cfg-dependencies-audited, svc-vri-cfg-image-signed, svc-vri-cfg-image-signed-analytics]
+
+  - name: pre-deploy verification
+    control: Signature verified before the digest is recorded; deployment by digest only; provenance by commit label (KSI-SVC-VRI, KSI-CMT-RMV)
+    criterion: cosign verify succeeds; the task definition and job reference a digest
+    failure_stops: The digest, which is never recorded as deployable
+    status: partial
+    evidence: [svc-vri-cfg-signature-verified-before-digest-recorded, svc-vri-cfg-signature-verified-before-digest-recorded-analytics, svc-vri-cfg-aws-tasks-digest-pinned, svc-vri-cfg-gcp-run-jobs-digest-pinned]
+    note: Verification happens at build, not again at deploy
+
+  - name: apply
+    control: Declared state applied by plan file, which shows exactly what will change; drift detected daily (KSI-SVC-ACM)
+    criterion: The saved plan applies without error
+    failure_stops: Terraform stops at the failed resource and surfaces it; nothing retries silently
+    status: built
+    evidence: [svc-acm-ops-aws-no-drift, svc-acm-ops-gcp-no-drift]
+    note: Applied by the operator, under the standing exception in registers/change-exceptions.yaml
+
+  - name: post-apply health
+    control: Load balancer health checks and ECS desired count; a health-check grace period before a task counts as failed
+    criterion: Targets healthy and desired count running
+    failure_stops: The deployment, which the circuit breaker rolls back
+    status: built
+    evidence: []
+
+  - name: post-apply verification
+    control: The collector re-run against the applied environment (KSI-CMT-VTD build row 5)
+    criterion: The determinations covering what changed pass
+    failure_stops: The deployment's completion; a failing check is a finding, not a pass
+    status: partial
+    evidence: [svc-acm-ops-aws-no-drift]
+    note: Run by hand after each session's apply, and daily from CI; not triggered by the apply itself
+
+  - name: rollback
+    control: ECS deployment circuit breaker with rollback (KSI-CMT-VTD build row 4)
+    criterion: A deployment whose tasks fail health checks reverts to the last working task definition
+    failure_stops: The failing revision
+    status: built
+    evidence: []
+
+principles:
+  ownership_of_customer_security_outcomes:
+    position: evidenced
+    evidence: [svc-sin-cfg-aws-stores-use-declared-keys, svc-sin-cfg-gcp-stores-use-declared-keys, svc-sin-cfg-aws-buckets-block-public-access, svc-sin-cfg-gcp-buckets-prevent-public-access, cna-dfp-cfg-actions-pinned-build, svc-vri-cfg-aws-tasks-digest-pinned]
+    reason: Secure defaults in the declared baselines -- encryption with customer keys, no public access, pinned actions, digest-pinned images -- are not opt-in; the customer does nothing to get them
+
+  radical_transparency_and_accountability:
+    position: evidenced
+    evidence: []
+    reason: The decision log (docs/DECISIONS.md) is a contemporaneous, versioned record of security reasoning, corrections included; the SDR states what is not automated as plainly as what is. The published disclosure policy (security.txt) stands only with the environment
+
+  lead_from_the_top:
+    position: not_evidenced
+    evidence: []
+    reason: Organizational, and belongs to the executive support indicator; a two-person persona has no executive layer to evidence it

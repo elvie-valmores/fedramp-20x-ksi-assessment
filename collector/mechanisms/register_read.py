@@ -62,6 +62,10 @@ class RegisterRead(Mechanism):
             objectives = yaml.safe_load((REPO / p["objectives"]).read_text())
             exists = lambda path: (REPO / path).exists()
             ok, detail, evidence = evaluate_recovery_paths(register.get("paths") or {}, objectives, exists)
+        elif p["assertion"] in ("stages_have_criteria", "stages_controlled", "principles_positioned",
+                                "risks_dispositioned", "surfaces_positioned"):
+            existing = {f.stem for f in CHECKS.glob("*.json")}
+            ok, detail, evidence = evaluate_lists(register, p["assertion"], existing)
         elif p["assertion"] == "paths_authenticated":
             ok, detail, evidence = evaluate_paths_authenticated(register)
         elif p["assertion"] == "exceptions_bounded":
@@ -183,6 +187,60 @@ def evaluate_sources(sources: dict, assertion: str, existing_checks: set[str]) -
     if problems:
         return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
     return True, f"all {len(sources)} sources pass {assertion}", evidence
+
+
+def evaluate_lists(register: dict, assertion: str, existing_checks: set[str], today: str | None = None) -> tuple[bool, str, dict]:
+    """The smaller registers, one rule set each.
+
+    stages_have_criteria  every stage: control, criterion, what a failure stops (CMT-VTD verify 4)
+    stages_controlled     as above, and every stage built or partly built (PIY-RSD verify 1)
+    principles_positioned each principle evidenced by existing checks or a reason, or not evidenced with a reason (PIY-RSD verify 2)
+    risks_dispositioned   each risk mitigated or accepted, with a reason and a review date not passed (SCR-MIT verify 4, validate 3)
+    surfaces_positioned   each change surface with its record source, position and expected interval (CMT-LMC verify 4)
+    """
+    from datetime import date
+
+    today = today or date.today().isoformat()
+    problems, items = [], []
+    if assertion in ("stages_have_criteria", "stages_controlled"):
+        items = register.get("stages") or []
+        for s in items:
+            for f in ("control", "criterion", "failure_stops"):
+                if not (s.get(f) or "").strip():
+                    problems.append(f"{s.get('name')}: no {f}")
+            if s.get("status") not in ("built", "partial", "not_built"):
+                problems.append(f"{s.get('name')}: status must be built, partial or not_built")
+            problems += [f"{s.get('name')}: evidence {c} does not exist" for c in s.get("evidence") or [] if c not in existing_checks]
+            if assertion == "stages_controlled" and s.get("status") == "not_built":
+                problems.append(f"{s.get('name')}: its control is not built")
+    elif assertion == "principles_positioned":
+        items = list((register.get("principles") or {}).items())
+        for name, p in items:
+            if p.get("position") not in ("evidenced", "not_evidenced") or not (p.get("reason") or "").strip():
+                problems.append(f"{name}: needs evidenced or not_evidenced, and a reason")
+            problems += [f"{name}: evidence {c} does not exist" for c in p.get("evidence") or [] if c not in existing_checks]
+    elif assertion == "risks_dispositioned":
+        items = register.get("risks") or []
+        for r in items:
+            label = (r.get("risk") or "")[:40]
+            if r.get("disposition") not in ("mitigation", "accepted") or not (r.get("reason") or "").strip():
+                problems.append(f"{label}: needs mitigation or accepted, and a reason")
+            if r.get("disposition") == "mitigation" and not (r.get("mitigation") or "").strip():
+                problems.append(f"{label}: a mitigation must say what it is")
+            if str(r.get("review_by") or "") < today:
+                problems.append(f"{label}: review date missing or passed")
+    elif assertion == "surfaces_positioned":
+        items = list((register.get("surfaces") or {}).items())
+        for name, s in items:
+            for f in ("source", "position", "expected_record"):
+                if not (s.get(f) or "").strip():
+                    problems.append(f"{name}: no {f}")
+    evidence = {"items": len(items), "problems": problems}
+    if not items:
+        return False, "the register is empty", evidence
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:3])}", evidence
+    return True, f"all {len(items)} entries pass {assertion}", evidence
 
 
 POSITIONS = ("satisfied", "inherited", "partial", "unavailable", "inapplicable")

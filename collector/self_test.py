@@ -1110,6 +1110,8 @@ SRC_OK = {"events": "e", "expected": "daily", "destination": "store", "logged": 
 RP_OBJ = {"classes": {"A": {"objective": {"rto": "1h", "rpo": "5m"}}, "B": {"objective": {"rto": "5m", "rpo": "0"}},
                      "N": {"objective": {"not_applicable": "none"}}}}
 RP_OK = {"a": {"encoded_in": ["x"], "recovers": ["A"], "after": []}, "b": {"encoded_in": ["y"], "recovers": ["B"], "after": ["a"]}}
+STAGE_OK = {"name": "build", "control": "c", "criterion": "k", "failure_stops": "image", "status": "built", "evidence": ["q"]}
+RISK_OK = {"risk": "old base", "disposition": "mitigation", "mitigation": "move", "reason": "r", "review_by": "2027-01-01"}
 EXC_OK = {"categories": {"db": "d", "emergency": "e"},
           "entries": [{"category": "db", "date": "2026-09-23", "what": "schema", "reason": "in place"}],
           "standing": [{"what": "human apply", "closing_condition": "JIT built"}]}
@@ -1166,6 +1168,30 @@ SINGLE_CASES = [
         "path encoded in a missing file": {**RP_OK, "a": {**RP_OK["a"], "encoded_in": ["gone.sh"]}},
         "circular order": {"a": {**RP_OK["a"], "after": ["b"]}, "b": {**RP_OK["b"], "after": ["a"]}},
         "unknown predecessor": {**RP_OK, "b": {**RP_OK["b"], "after": ["z"]}},
+    }),
+    ("register_read (stages_controlled)", lambda c: rr.evaluate_lists(c, "stages_controlled", {"q"}), {"stages": [STAGE_OK]}, {
+        "a stage not built": {"stages": [STAGE_OK, {**STAGE_OK, "name": "gate", "status": "not_built"}]},
+        "no criterion": {"stages": [{**STAGE_OK, "criterion": ""}]},
+        "evidence that does not exist": {"stages": [{**STAGE_OK, "evidence": ["gone"]}]},
+    }),
+    ("register_read (stages_have_criteria)", lambda c: rr.evaluate_lists(c, "stages_have_criteria", {"q"}),
+     {"stages": [STAGE_OK, {**STAGE_OK, "name": "gate", "status": "not_built"}]}, {
+        "nothing a failure stops": {"stages": [{**STAGE_OK, "failure_stops": " "}]},
+        "empty": {"stages": []},
+    }),
+    ("register_read (principles_positioned)", lambda c: rr.evaluate_lists(c, "principles_positioned", {"q"}),
+     {"principles": {"a": {"position": "evidenced", "evidence": ["q"], "reason": "r"}, "b": {"position": "not_evidenced", "reason": "r"}}}, {
+        "no reason": {"principles": {"b": {"position": "not_evidenced", "reason": ""}}},
+        "evidence that does not exist": {"principles": {"a": {"position": "evidenced", "evidence": ["gone"], "reason": "r"}}},
+    }),
+    ("register_read (risks_dispositioned)", lambda c: rr.evaluate_lists(c, "risks_dispositioned", set(), "2026-10-03"), {"risks": [RISK_OK]}, {
+        "review date passed": {"risks": [{**RISK_OK, "review_by": "2026-01-01"}]},
+        "mitigation unstated": {"risks": [{**RISK_OK, "mitigation": ""}]},
+        "no disposition": {"risks": [{**RISK_OK, "disposition": "noted"}]},
+    }),
+    ("register_read (surfaces_positioned)", lambda c: rr.evaluate_lists(c, "surfaces_positioned", set()),
+     {"surfaces": {"s": {"source": "trail", "position": "logged", "expected_record": "daily"}}}, {
+        "no source": {"surfaces": {"s": {"source": "", "position": "logged", "expected_record": "daily"}}},
     }),
     ("register_read (exceptions_bounded)", lambda c: rr.evaluate_exceptions_bounded(c, ["db", "emergency"]), EXC_OK, {
         "a third category": {**EXC_OK, "categories": {**EXC_OK["categories"], "convenience": "x"}},

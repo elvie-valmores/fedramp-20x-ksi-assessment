@@ -1,0 +1,18 @@
+{
+  "id": "piy-rsd-cfg-lifecycle-controls",
+  "indicator": "KSI-PIY-RSD",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every lifecycle stage has a security control operating at it, built or partly built; a stage whose control is not built fails",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/lifecycle.yaml",
+    "assertion": "stages_controlled"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-RSD.verify.1",
+      "covers": "full"
+    }
+  ]
+}

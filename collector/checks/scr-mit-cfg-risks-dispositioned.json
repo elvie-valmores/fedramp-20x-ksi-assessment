@@ -1,0 +1,22 @@
+{
+  "id": "scr-mit-cfg-risks-dispositioned",
+  "indicator": "KSI-SCR-MIT",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every supply chain risk in registers/supply-chain-risks.yaml has a mitigation or accepted-risk disposition, a reason and a review date not yet passed",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/supply-chain-risks.yaml",
+    "assertion": "risks_dispositioned"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SCR-MIT.verify.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-SCR-MIT.validate.3",
+      "covers": "full"
+    }
+  ]
+}

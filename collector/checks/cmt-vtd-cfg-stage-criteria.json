@@ -1,0 +1,18 @@
+{
+  "id": "cmt-vtd-cfg-stage-criteria",
+  "indicator": "KSI-CMT-VTD",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every deployment stage in registers/lifecycle.yaml carries its control, its validation criterion and what a failure stops",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/lifecycle.yaml",
+    "assertion": "stages_have_criteria"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-VTD.verify.4",
+      "covers": "full"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Change surfaces: KSI-CMT-LMC build row 5.
+#
+# Started 2026-10-03. Every surface through which the offering can be
+# modified -- including the three the determination found outside the
+# infrastructure: repository content, pipeline definitions, and policy and
+# detection content -- with where its changes are recorded and whether they
+# are monitored (something alerts) or logged only.
+
+surfaces:
+  aws_infrastructure:
+    source: CloudTrail management events in the corpus
+    position: monitored, partly -- IAM writes, registry pushes and key misuse are held by standing queries; evidence-key attempts alert
+    expected_record: Continuous
+  gcp_infrastructure:
+    source: Cloud Audit Logs Admin Activity, Google-held
+    position: logged only -- not in the corpus
+    expected_record: On change
+  application_images:
+    source: The build workflow's change event, put to EventBridge and recorded by CloudTrail with the commit and actor
+    position: logged only
+    expected_record: Every push touching app/
+  repository_content:
+    source: Git history on GitHub, every commit attributed to its author; commits are not cryptographically signed (KSI-SVC-VRI verify 3, open)
+    position: logged only -- commits are not delivered to the corpus beyond the image build event
+    expected_record: Every commit
+  pipeline_definitions:
+    source: .github/workflows in git history; the pinning, credential and permission assertions run daily
+    position: logged only; a weakened workflow fails its pipeline checks the next day
+    expected_record: Every commit touching .github/
+  policy_and_detection_content:
+    source: The detection query (lambda/run_detection_query), the collector's checks and the registers, in git history
+    position: logged only -- a change to a check or query alerts nobody (KSI-CMT-LMC build row 2, not built)
+    expected_record: Every commit touching collector/, registers/ or lambda/
+  identity:
+    source: Identity Center and Identity Store events in CloudTrail; Google Admin's own log for the identity provider
+    position: logged; sign-in failures monitored by the detection query
+    expected_record: Continuous

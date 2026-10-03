@@ -1,0 +1,39 @@
+# The supply chain risk register: KSI-SCR-MIT build row 5.
+#
+# Started 2026-10-03. Risks that are not vulnerabilities -- a component past
+# its support window, an unmaintained dependency, a supplier that could
+# disappear -- each with a mitigation or an accepted-risk disposition, a
+# reason and a review date. A lapsed review date fails the check.
+
+risks:
+  - risk: The python base image is Debian 12 (bookworm), past its regular security support (ended June 2026) and in Debian LTS until June 2028
+    component: python:3.12-slim-bookworm, all three application images
+    disposition: mitigation
+    mitigation: Move the base to python:3.12-slim-trixie (Debian 13) at the next image change; Inspector and Container Scanning still report the image's vulnerabilities meanwhile
+    reason: LTS still ships security fixes, so the image is supported, but by a smaller team on a narrower package set
+    review_by: 2026-10-31
+
+  - risk: Python 3.12 reaches end of security support in October 2028
+    component: The application images and the collector
+    disposition: accepted
+    reason: Two years beyond this project; recorded so a later reader sees the window
+    review_by: 2027-04-03
+
+  - risk: The HashiCorp providers and Terraform itself have a single vendor and change licence terms
+    component: Terraform, the AWS, Google and utility providers
+    disposition: accepted
+    reason: Pinned in the lock files with hashes; a licence change does not alter what is installed, and the declared state remains readable by OpenTofu
+    review_by: 2027-04-03
+
+  - risk: Third-party GitHub Actions could be abandoned or compromised upstream
+    component: aws-actions, google-github-actions, docker, sigstore, hashicorp
+    disposition: mitigation
+    mitigation: Every action pinned to a commit SHA, so an upstream change cannot alter what runs; nothing monitors their advisories (registers/third-parties.yaml)
+    reason: Pinning bounds the compromise case; abandonment would show as a stale pin, found when next updated
+    review_by: 2027-04-03
+
+  - risk: A single cloud account per provider and a single region per cloud
+    component: AWS us-east-1, GCP us-central1
+    disposition: accepted
+    reason: Zone-level resilience only, per KSI-RPL-ARP and KSI-CNA-OFA; a regional outage is an outage
+    review_by: 2027-04-03

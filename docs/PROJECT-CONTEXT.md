@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 117 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 125 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  81 are fully automated, 27 partly, and 272 not yet, across 27 of 40 determinations (2026-10-02).
+  95 are fully automated, 27 partly, and 258 not yet, across 32 of 40 determinations (2026-10-02).
   14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
@@ -261,8 +261,8 @@ or a recorded finding.
    - **Freeze the final SDR.**
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 81 are fully automated, 27 partly, and 272 not
-yet. 27 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 95 are fully automated, 27 partly, and 258 not
+yet. 32 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
 ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 

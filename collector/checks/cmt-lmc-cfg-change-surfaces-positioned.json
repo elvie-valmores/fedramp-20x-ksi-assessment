@@ -1,0 +1,18 @@
+{
+  "id": "cmt-lmc-cfg-change-surfaces-positioned",
+  "indicator": "KSI-CMT-LMC",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every change surface -- infrastructure in both clouds, images, repository content, pipeline definitions, policy and detection content, identity -- names where its changes are recorded and whether they are monitored or logged only",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/change-surfaces.yaml",
+    "assertion": "surfaces_positioned"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-LMC.verify.4",
+      "covers": "full"
+    }
+  ]
+}

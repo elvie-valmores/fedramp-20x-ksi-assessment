@@ -8146,3 +8146,35 @@ The descoped determinations become partially satisfied, with their risk written 
 the pipeline". That holds for 30 days only. Extracts expire after 30 days and the database is rebuilt
 every session, so past 30 days the warehouse is the only copy. Its register entries now say so, and
 its recovery objective states that older data is not recoverable.
+
+## 2026-10-03 — Week 1's registers finished; the incident runbook and the restore script
+
+The remaining registers, each read by `register_read` with negative controls (90 assertions):
+
+| File | Contents | Rows |
+|---|---|---|
+| `change-exceptions.yaml` | The two in-place categories, and the standing human-apply exception, which closes with JIT elevation | CMT-RMV v2 |
+| `flows.yaml` | 20 paths, each with how both ends authenticate. The 12 in-VPC flows list their 19 rules, and a session check holds live rules and declared flows to the same set | SVC-VCM v5, CNA-MAT v1 |
+| `control-positions.yaml` | RPL-ARP's 16 controls (4 satisfied, 7 inherited, 3 unavailable, 2 inapplicable) and INR-RIR's 10 | RPL-ARP v2, val4; INR-RIR v3, val3 |
+| `recovery-paths.yaml` | 7 encoded, ordered paths covering all 21 recovery objectives | RPL-ARP v1, v3, val1, val2 |
+| `lifecycle.yaml` | 7 deployment stages, each with its control, criterion and what a failure stops; the three Secure by Design principles, two evidenced and one not | CMT-VTD v4; PIY-RSD v1, v2 |
+| `supply-chain-risks.yaml` | 5 risks, each mitigated or accepted, with a reason and a review date | SCR-MIT v4, val3 |
+| `change-surfaces.yaml` | 7 surfaces, each with its record source and position | CMT-LMC v4 |
+
+**New documents and scripts:**
+
+- **`docs/INCIDENT-RESPONSE.md`:** the manual procedure the descoped responder leaves. It covers what
+  alerts, triage, containment commands, recovery by redeploy, reconciliation and the record.
+- **`infra/aws/restore_database.sh`:** a timed point-in-time restore, from the live instance or its
+  retained backups. Week 3's restore test runs it.
+
+**What these surfaced:**
+
+- **INR-RIR is weaker after the descoping.** IR-4 and IR-4 (1) are partial, not satisfied: detection
+  and alerting are automated, and containment is manual.
+- **The base image is past Debian 12's regular security support,** and in LTS until June 2028. It is
+  a mitigation entry: move to Debian 13 (trixie) at the next image change, review by 2026-10-31.
+- **Commits are not cryptographically signed.** SVC-VRI verify 3 is open, and the change-surfaces
+  register now says so.
+- **The pre-merge policy stage is not built,** so `piy-rsd-cfg-lifecycle-controls` fails until
+  policy-as-code lands in week 2.
