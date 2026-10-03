@@ -33,7 +33,7 @@ The design phase is closed. What remains is the build.
 
 The build is in progress, and `README.md` carries the current status table. As of 2026-10-02:
 
-- **Persisting between sessions**: 271 AWS resource instances (85 resources plus 186 disabled
+- **Persisting between sessions**: 276 AWS resource instances (90 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 91 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 92 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  49 are fully automated, 25 partly, and 306 not yet, across 23 of 40 determinations (2026-10-02).
+  50 are fully automated, 25 partly, and 305 not yet, across 23 of 40 determinations (2026-10-02).
   14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
@@ -96,7 +96,7 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
      expected to be red **only** on the one known finding below. Open its log: the self-test says
      22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
      `evidence-<run id>` holds `results.json` and the SDR.
-   - `infra/aws/boundary.py --persistent | wc -l` gives **271**, and `--ephemeral` gives 0.
+   - `infra/aws/boundary.py --persistent | wc -l` gives **276**, and `--ephemeral` gives 0.
    - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
    - `gh run list --workflow drift.yml -L 3`: green.
    - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
@@ -113,9 +113,9 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
 
 ### What is standing
 
-**AWS: 271 persistent resource instances** (85 resources plus 186 disabled Security Hub
+**AWS: 276 persistent resource instances** (90 resources plus 186 disabled Security Hub
 controls). Nothing ephemeral is in state, and nothing expensive is running (verified 2026-10-01).
-`terraform state list` prints more lines than 271; the rest are data sources.
+`terraform state list` prints more lines than 276; the rest are data sources.
 
 The persistent set, by file (`boundary.py --files`, 17 files):
 
@@ -240,7 +240,7 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 49 are fully automated, 25 partly, and 306 not
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 50 are fully automated, 25 partly, and 305 not
 yet. 23 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
 ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
@@ -304,8 +304,8 @@ AccessDenied.
 | Analytics dropped rows whose id an earlier session used | **Fixed and proven live 2026-10-02:** the MERGE matches on (id, recorded_at); the drop was reproduced with the old image and closed with the new |
 | Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
-| Security Hub: 21 failing controls with no exception | **Open, for decisions.** The list is in DECISIONS.md, "Operational rows from the corpus". `cna-ibp-ops-aws-failing-controls-excepted` fails until each is remediated or excepted with a reason |
-| Detection query under the log-read deny | Check its first daily run after 2026-10-02 20:40 UTC: no AccessDenied in `/aws/lambda/fedramp-20x-ksi-run-detection-query`. Simulation and every other reader already passed |
+| Security Hub: 21 failing controls with no exception | **Decided 2026-10-03:** 8 remediated, 2 done by the operator in the console, 11 excepted. Ten still show as failing until Security Hub re-evaluates them within a day; confirm `cna-ibp-ops-aws-failing-controls-excepted` then passes |
+| Detection query under the log-read deny | **Closed 2026-10-03:** the 00:20 UTC run succeeded; the handler raises on any failed query |
 | Analytics image not registry-scanned | **Fixed 2026-10-02:** Container Scanning is enabled. The running image is scanned at its next push |
 | Log store does not restrict object reads | **Fixed 2026-10-02:** a deny confines reads to the evidence key's four readers. The MLA-ALA lane model itself is still unbuilt |
 | ECR lifecycle expires deployable tags | Fixed 2026-10-02: it keeps 10 builds and their signatures, counted per kind, checked by preview and applied. Orphaned buildx attestations are left, since no lifecycle rule reaches them |

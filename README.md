@@ -113,8 +113,8 @@ set. A missing variable is reported as an error, never as a pass.
 |---|---|
 | Terraform foundations, both clouds | Done |
 | Inventory generator (KSI-PIY-GIV) | Done, self-tested |
-| Collector framework | 5 of 9 mechanisms implemented. 91 check definitions, each linked to the matrix rows it proves (2026-10-02). **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
-| SDR emitter | Emits a schema-valid record for all 46 indicators. Each evidence row names the checks behind it: of 380 rows, 49 fully automated, 25 partly ([coverage report](docs/MATRIX-COVERAGE.md)) |
+| Collector framework | 5 of 9 mechanisms implemented. 92 check definitions, each linked to the matrix rows it proves (2026-10-02). **Runs daily from GitHub Actions** (`collect.yml`, 05:30 UTC) as read-only identities in AWS and GCP, with no stored credential, and emits the SDR each run |
+| SDR emitter | Emits a schema-valid record for all 46 indicators. Each evidence row names the checks behind it: of 380 rows, 50 fully automated, 25 partly ([coverage report](docs/MATRIX-COVERAGE.md)) |
 | Central log store and query engine | Done |
 | Log normalization and detection | Done, AWS side only. Sign-in classification fixed and tested 2026-10-01; the detection Lambda's alert path to the encrypted topic is not yet proven |
 | Application environment, AWS | Phase 1 and 2 last run 2026-10-02: served requests with IAM auth to the database, and the worker's extracts landed through the S3 gateway endpoint after its policy was fixed (it had never allowed a write). Torn down after |
@@ -124,7 +124,7 @@ set. A missing variable is reported as an error, never as a pass.
 | CI/CD pipeline | `drift` clean in CI over the full persistent set (2026-09-23). `build-and-push` has published signed images |
 | Posture services (GuardDuty, Security Hub, Inspector) | Running continuously since 2026-09-23. Inspector scans the persisted images |
 
-**Nothing expensive is standing between sessions.** 271 AWS resource instances persist,
+**Nothing expensive is standing between sessions.** 276 AWS resource instances persist,
 plus the state backend: the log store, CloudTrail, the Config recorder, Athena,
 both Lambdas, the CI identities, the cross-cloud role, the container registry
 with its signed images, the extract bucket, the artifacts key and the posture

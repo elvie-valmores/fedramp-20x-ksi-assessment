@@ -7968,3 +7968,58 @@ reason.
 | S3.20 | Low | MFA delete, 3 buckets |
 
 `cna-ibp-ops-aws-failing-controls-excepted` fails until each is decided.
+
+## 2026-10-03 — Security Hub's open controls decided: eight remediated, two done by hand, eleven excepted
+
+The operator took the recommendations on all 21 open controls.
+
+**Remediated in Terraform** (applied by the operator; the persistent set is now 276 instances):
+
+- **IAM.28:** an account Access Analyzer.
+  - Its first findings were five federated trusts: the three CI roles through GitHub's OIDC
+    provider, the pipeline role through Google, and the operator's Identity Center role through
+    the SAML provider.
+  - All five are declared with reasons. `cna-mat-ops-aws-external-access-declared` (CNA-MAT
+    validate 4) holds the analyzer to that list and passes.
+- **Config.1:** the recorder runs as Config's service-linked role.
+  - The role did not exist in the account. Planning showed it before the apply, and it is now
+    declared, so it is created first.
+  - The custom recorder role and its AWS-managed `AWS_ConfigRole` attachment are gone. That was a
+    managed policy on a workload identity, which CNA-DFP bars.
+  - The recorder is still recording, with status SUCCESS.
+- **EC2.7:** EBS default encryption is on, free, with no EBS in use.
+- **IAM.7, IAM.15, IAM.16:** a CIS password policy (length 14, 24 remembered, 90 days). No IAM
+  user exists, so it governs a mistake, not a person.
+- **GuardDuty.6:** Lambda Protection is on, and added to the GuardDuty check's declared plans.
+- **S3.13 lifecycles:**
+  - the log store keeps 12 months, OMB M-21-31's active retention and SDR-CSX-KMT's year;
+    superseded versions go after 30 days, well after the 7-day lock
+  - the Config bucket keeps 12 months
+  - superseded state versions go after 90 days, in the bootstrap root
+- **CI read access:** the drift and collector read policy gained the analyzer and EBS reads.
+
+**Done by the operator in the console, confirmed by API:**
+
+- **IAM.6:** a hardware security key on root, with no virtual MFA device left on the account.
+- **Account.1:** the security contact.
+
+**Excepted with reasons** in `cna-ibp-ops-aws-failing-controls-excepted`:
+
+| Control | Reason |
+|---|---|
+| SSM.6 | No SSM Automation is used |
+| IAM.18 | The operator role holds support access |
+| CloudTrail.5 | Detection reads the trail from S3 through Athena |
+| S3.9, CloudTrail.7 | Data events cover customer data, under the 2026-09-05 scope |
+| S3.20 | Root-only, and the log store's Object Lock is stronger |
+| Macie.1 | The only customer data is synthetic, classified by design |
+| Inspector.3, Inspector.4 | The Lambdas are first-party with no packaged dependencies |
+| GuardDuty.11, GuardDuty.12 | The runtime agent in the hardened Fargate tasks is untested. Revisit in a session |
+
+**Still showing as failing, awaiting Security Hub's re-evaluation**, which runs every 12–24 hours:
+Account.1, Config.1, EC2.7, GuardDuty.6, IAM.6, IAM.7, IAM.15, IAM.16, IAM.28 and S3.13.
+`cna-ibp-ops-aws-failing-controls-excepted` passes once they clear.
+
+**Closed: the detection query under the log-read deny.** Its first run after the deny, at
+2026-10-03 00:20 UTC, completed without error. The handler raises on any query state but
+SUCCEEDED, so its Athena read of the corpus as the detection role succeeded.
