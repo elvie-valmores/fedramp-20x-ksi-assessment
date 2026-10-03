@@ -8023,3 +8023,14 @@ Account.1, Config.1, EC2.7, GuardDuty.6, IAM.6, IAM.7, IAM.15, IAM.16, IAM.28 an
 **Closed: the detection query under the log-read deny.** Its first run after the deny, at
 2026-10-03 00:20 UTC, completed without error. The handler raises on any query state but
 SUCCEEDED, so its Athena read of the corpus as the detection role succeeded.
+
+**The IAM-writes standing query caught the root MFA change** (CI run 37133725446).
+`iam-elp-ops-aws-iam-mutations-by-platform-engineer` failed on four root IAM writes on 2026-10-03:
+
+- `EnableMFADevice` twice: two hardware keys, so a backup exists.
+- `DeactivateMFADevice` and `DeleteVirtualMFADevice`: the authenticator app removed.
+
+This is the operator's IAM.6 remediation above: authorized root use. The query is right to surface
+root IAM writes, and root is not excluded to make it pass. It reports them until they leave its
+3-day window on 2026-10-06. Recording a reviewed disposition against a finding belongs to
+MLA-RVL, which is not built.

@@ -305,6 +305,7 @@ AccessDenied.
 | Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
 | Security Hub: 21 failing controls with no exception | **Decided 2026-10-03:** 8 remediated, 2 done by the operator in the console, 11 excepted. Ten still show as failing until Security Hub re-evaluates them within a day; confirm `cna-ibp-ops-aws-failing-controls-excepted` then passes |
+| `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). Investigate it if it still fails after that date |
 | Detection query under the log-read deny | **Closed 2026-10-03:** the 00:20 UTC run succeeded; the handler raises on any failed query |
 | Analytics image not registry-scanned | **Fixed 2026-10-02:** Container Scanning is enabled. The running image is scanned at its next push |
 | Log store does not restrict object reads | **Fixed 2026-10-02:** a deny confines reads to the evidence key's four readers. The MLA-ALA lane model itself is still unbuilt |
