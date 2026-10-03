@@ -1,0 +1,22 @@
+{
+  "id": "mla-ala-cfg-event-sources-tiered",
+  "indicator": "KSI-MLA-ALA",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every source in the event type list carries a sensitivity tier -- sensitive, operational or public-safe -- with its reason",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/event-sources.yaml",
+    "assertion": "sources_tiered"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-ALA.verify.1",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-MLA-ALA.validate.5",
+      "covers": "full"
+    }
+  ]
+}

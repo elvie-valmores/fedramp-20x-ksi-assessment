@@ -1,0 +1,161 @@
+# The event type list: KSI-MLA-LET build row 2, with KSI-MLA-ALA's tiers.
+#
+# Started 2026-10-03, from the sources as built, not as designed. Per source:
+#
+#   events, expected   what it records, and how often a healthy source delivers
+#   destination        where its records land
+#   logged             is the record produced and kept
+#   monitored          does something watch it that can alert (the detection path)
+#   audited            is it reviewed, and by which standing check (reviewed_by)
+#   tier               KSI-MLA-ALA: sensitive, operational or public-safe, with its reason
+#
+# Each of logged, monitored and audited is yes, partial or no, with how. A
+# "no" is a position, not a gap in the list. The gaps the list exposes against
+# the design -- sources outside the central store, little monitoring, review
+# queries and sensitive-tier elevation not yet built -- are recorded in
+# DECISIONS.md, 2026-10-03.
+
+sources:
+  cloudtrail_management:
+    events: Every AWS control-plane and identity call -- IAM, STS, KMS, sign-ins through Identity Center
+    expected: Continuous; CloudTrail delivers about every 5 minutes
+    destination: The Object Locked log store, normalized into the corpus
+    logged: {state: "yes", how: "Multi-region trail, log file validation, 12-month retention"}
+    monitored: {state: "partial", how: "Failed authentications (daily detection query), evidence-key disable or delete attempts (EventBridge), GuardDuty over the same stream"}
+    audited: {state: "partial", how: "Standing queries over the corpus", reviewed_by: [iam-snu-ops-aws-no-long-lived-credential-use, iam-elp-ops-aws-iam-mutations-by-platform-engineer, cmt-rmv-ops-aws-pushes-by-pipeline-only, svc-sin-ops-aws-decrypts-by-declared-principals, svc-vcm-ops-aws-cross-cloud-federated]}
+    tier: {name: operational, reason: "Reveals structure and activity -- who called what -- not content"}
+
+  cloudtrail_data_events:
+    events: Object reads and writes on the extract bucket, the customer-data store
+    expected: At least every six hours, when the pipeline reads
+    destination: The log store, normalized into the corpus
+    logged: {state: "yes", how: "Advanced event selector scoped to the extract bucket (2026-09-05 decision, built 2026-10-02)"}
+    monitored: {state: "no", how: "No alert on extract access"}
+    audited: {state: "partial", how: "TLS on S3 requests", reviewed_by: [svc-sin-ops-aws-s3-requests-over-tls]}
+    tier: {name: sensitive, reason: "Data access events: object keys and access patterns over customer data"}
+
+  vpc_flow_logs:
+    events: Every accepted and rejected flow in the project VPC
+    expected: Continuous while the environment stands
+    destination: CloudWatch Logs, 30 days -- not the central store
+    logged: {state: "yes", how: "Flow log, all traffic"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query; flows are not in the corpus", reviewed_by: []}
+    tier: {name: operational, reason: "Addresses, ports and volumes; no content"}
+
+  load_balancer_access_logs:
+    events: Every request to the load balancer
+    expected: Per request while the environment stands
+    destination: The load balancer log bucket, 30 days -- not the central store
+    logged: {state: "yes", how: "Access logging to S3"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query", reviewed_by: []}
+    tier: {name: operational, reason: "Edge records: client addresses, paths and status codes"}
+
+  waf_logs:
+    events: WAF rule evaluations on the load balancer's requests
+    expected: Per request while the environment stands
+    destination: CloudWatch Logs, 30 days -- not the central store
+    logged: {state: "yes", how: "WAF logging configuration"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query", reviewed_by: []}
+    tier: {name: operational, reason: "Edge records, as the access logs"}
+
+  application_logs:
+    events: The api's and worker's own logs
+    expected: Continuous while the environment stands; the worker every 15 minutes
+    destination: CloudWatch Logs under the logs key, 30 days -- not the central store
+    logged: {state: "yes", how: "awslogs driver"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query", reviewed_by: []}
+    tier: {name: sensitive, reason: "May carry customer data fragments and error detail (SI-11)"}
+
+  database_logs:
+    events: Connections and DDL from the postgresql log export
+    expected: Continuous while the environment stands
+    destination: CloudWatch Logs under the logs key, 30 days -- not the central store
+    logged: {state: "yes", how: "postgresql and upgrade exports"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query", reviewed_by: []}
+    tier: {name: sensitive, reason: "Query content and error detail"}
+
+  pipeline_lambda_logs:
+    events: The normalizer's and the detection query's own logs
+    expected: Continuous; the normalizer on every CloudTrail file
+    destination: CloudWatch Logs under the evidence key, 30 days
+    logged: {state: "yes", how: "Lambda logging"}
+    monitored: {state: "partial", how: "The normalizer's error alarm notifies the detection topic"}
+    audited: {state: "partial", how: "The detection query's daily run is checked", reviewed_by: [mla-osm-ops-aws-detection-query-ran]}
+    tier: {name: operational, reason: "Pipeline operation; no customer data passes through"}
+
+  guardduty_findings:
+    events: Threat findings over CloudTrail, DNS, flow logs, S3, RDS logins and Lambda network activity
+    expected: As findings occur
+    destination: GuardDuty and Security Hub; alerting through EventBridge
+    logged: {state: "yes", how: "GuardDuty keeps findings 90 days"}
+    monitored: {state: "yes", how: "EventBridge rule to the detection topic"}
+    audited: {state: "no", how: "No review query over findings", reviewed_by: []}
+    tier: {name: operational, reason: "Findings describe activity, not content"}
+
+  securityhub_findings:
+    events: Control evaluations against CIS and FSBP, and integrated findings
+    expected: On change and every 12 to 24 hours
+    destination: Security Hub
+    logged: {state: "yes", how: "Security Hub"}
+    monitored: {state: "no", how: "No alert on a newly failing control"}
+    audited: {state: "yes", how: "Every failing control remediated or excepted", reviewed_by: [cna-ibp-ops-aws-failing-controls-excepted]}
+    tier: {name: operational, reason: "Configuration findings"}
+
+  config_history:
+    events: Configuration changes to the recorded resource types
+    expected: On change
+    destination: AWS Config and the Config bucket, 12 months
+    logged: {state: "yes", how: "Recorder, service-linked role"}
+    monitored: {state: "no", how: "No Config rules alert"}
+    audited: {state: "partial", how: "Inventory reconciliation reads it", reviewed_by: [svc-acm-cfg-aws-inventory-is-declared, piy-giv-ops-aws-inventory-current]}
+    tier: {name: operational, reason: "Configuration, not content"}
+
+  gcp_admin_activity:
+    events: Every GCP control-plane change
+    expected: On change
+    destination: Cloud Logging _Required bucket, 400 days, Google-held -- not the central store
+    logged: {state: "yes", how: "Always on"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query; GCP logs are not in the corpus", reviewed_by: []}
+    tier: {name: operational, reason: "Control-plane activity"}
+
+  gcp_data_access:
+    events: Reads and writes of the landing bucket and the warehouse
+    expected: Every six hours, when the pipeline runs
+    destination: fedramp-20x-ksi-data-access, CMEK, 30 days -- not the central store
+    logged: {state: "yes", how: "Data Access audit logs routed by sink"}
+    monitored: {state: "no", how: "Nothing watches them"}
+    audited: {state: "no", how: "No review query", reviewed_by: []}
+    tier: {name: sensitive, reason: "Data access events over customer data"}
+
+  gcp_pipeline_logs:
+    events: The analytics job's own logs
+    expected: Every six hours
+    destination: Cloud Logging _Default, 30 days
+    logged: {state: "yes", how: "Cloud Run job logging"}
+    monitored: {state: "partial", how: "The schedule's last attempt is checked daily"}
+    audited: {state: "partial", how: "Schedule-run check", reviewed_by: [svc-vcm-ops-gcp-pipeline-schedule-runs]}
+    tier: {name: sensitive, reason: "Application logs that may carry record counts and error detail"}
+
+  workforce_sign_in:
+    events: Sign-ins at the identity provider (Google) before Identity Center
+    expected: Per sign-in
+    destination: Google Admin audit logs -- not collected
+    logged: {state: "partial", how: "Google keeps its own log; the AWS side's sign-in events are in CloudTrail"}
+    monitored: {state: "no", how: "Not collected"}
+    audited: {state: "no", how: "Not collected", reviewed_by: []}
+    tier: {name: operational, reason: "Identity activity"}
+
+  collector_records:
+    events: Each CI collection run's results
+    expected: Daily
+    destination: The log store, collector-runs/
+    logged: {state: "yes", how: "Written by collect.yml, Object Locked"}
+    monitored: {state: "partial", how: "A failing check fails the workflow run"}
+    audited: {state: "no", how: "The SDR's metrics summarize them; no review query judges them", reviewed_by: []}
+    tier: {name: public-safe, reason: "Compliance evidence: pass and fail, not content"}

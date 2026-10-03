@@ -1,0 +1,18 @@
+{
+  "id": "mla-let-cfg-event-sources-positioned",
+  "indicator": "KSI-MLA-LET",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "The event type list (registers/event-sources.yaml) states, for every source, its events, expected interval and destination, and whether it is logged, monitored and audited -- yes, partial or no, with how",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/event-sources.yaml",
+    "assertion": "sources_positioned"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-LET.verify.3",
+      "covers": "full"
+    }
+  ]
+}

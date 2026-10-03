@@ -53,6 +53,9 @@ class RegisterRead(Mechanism):
         elif p["assertion"] == "third_parties_cover":
             used = _third_parties_used(p["region"], p["project_id"], p.get("also_used", []))
             ok, detail, evidence = evaluate_third_parties(used, register.get("entries") or {}, p["position"])
+        elif p["assertion"] in ("sources_positioned", "sources_tiered", "audited_reviewed"):
+            existing = {f.stem for f in CHECKS.glob("*.json")}
+            ok, detail, evidence = evaluate_sources(register.get("sources") or {}, p["assertion"], existing)
         elif p["assertion"] == "entries_complete":
             ok, detail, evidence = evaluate_entries_complete(register.get("entries") or [])
         elif p["assertion"] == "secrets_owned":
@@ -127,6 +130,49 @@ def evaluate_third_parties(used: list[dict], entries: dict, position: str) -> tu
     if problems:
         return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
     return True, f"all {len(used)} third parties in use registered with a {position} position", evidence
+
+
+STATES = ("yes", "partial", "no")
+TIERS = ("sensitive", "operational", "public-safe")
+
+
+def evaluate_sources(sources: dict, assertion: str, existing_checks: set[str]) -> tuple[bool, str, dict]:
+    """The event type list, judged one way per assertion.
+
+    sources_positioned  events, expected interval and destination stated, and
+                        logged, monitored and audited each yes, partial or no,
+                        with how (KSI-MLA-LET verify 3)
+    sources_tiered      a tier with its reason (KSI-MLA-ALA verify 1, validate 5)
+    audited_reviewed    every source audited in any part names the standing
+                        checks that review it, and they exist (KSI-MLA-RVL validate 5)
+    """
+    problems = []
+    for name, s in sources.items():
+        if assertion == "sources_positioned":
+            for field in ("events", "expected", "destination"):
+                if not (s.get(field) or "").strip():
+                    problems.append(f"{name}: no {field}")
+            for axis in ("logged", "monitored", "audited"):
+                pos = s.get(axis) or {}
+                if pos.get("state") not in STATES or not (pos.get("how") or "").strip():
+                    problems.append(f"{name}: {axis} needs a state of yes, partial or no, and how")
+        elif assertion == "sources_tiered":
+            tier = s.get("tier") or {}
+            if tier.get("name") not in TIERS or not (tier.get("reason") or "").strip():
+                problems.append(f"{name}: tier needs one of {', '.join(TIERS)} and a reason")
+        elif assertion == "audited_reviewed":
+            audited = s.get("audited") or {}
+            if audited.get("state") in ("yes", "partial"):
+                checks = audited.get("reviewed_by") or []
+                if not checks:
+                    problems.append(f"{name}: audited, but names no review")
+                problems += [f"{name}: review {c} does not exist" for c in checks if c not in existing_checks]
+    evidence = {"sources": len(sources), "problems": problems}
+    if not sources:
+        return False, "the event type list is empty", evidence
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
+    return True, f"all {len(sources)} sources pass {assertion}", evidence
 
 
 def evaluate_entries_complete(entries: list[dict]) -> tuple[bool, str, dict]:

@@ -1,0 +1,18 @@
+{
+  "id": "mla-rvl-ops-audited-sources-reviewed",
+  "indicator": "KSI-MLA-RVL",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every source the event type list marks audited, in whole or part, names the standing checks that review it, and each exists",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/event-sources.yaml",
+    "assertion": "audited_reviewed"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-RVL.validate.5",
+      "covers": "full"
+    }
+  ]
+}

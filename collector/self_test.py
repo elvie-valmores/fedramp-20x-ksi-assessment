@@ -1089,6 +1089,9 @@ def _plan_without(name, field):
     return p
 
 
+SRC_OK = {"events": "e", "expected": "daily", "destination": "store", "logged": {"state": "yes", "how": "h"},
+          "monitored": {"state": "no", "how": "none"}, "audited": {"state": "yes", "how": "q", "reviewed_by": ["q1"]},
+          "tier": {"name": "operational", "reason": "r"}}
 TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison": {"basis": "pins", "automated": True},
                      "monitoring": {"mechanism": "none", "status": "unavailable"}},
               "img": {"matches": [{"base_image": "python:*"}], "comparison": {"basis": "scans", "automated": True},
@@ -1108,6 +1111,19 @@ SINGLE_CASES = [
         "entry without a monitoring status": ([{"base_image": "python:3.12"}],
                                               {**TP_ENTRIES, "img": {**TP_ENTRIES["img"], "monitoring": {"mechanism": "x"}}}),
         "nothing in use": ([], TP_ENTRIES),
+    }),
+    ("register_read (sources_positioned)", lambda c: rr.evaluate_sources(c, "sources_positioned", set()), {"s": SRC_OK}, {
+        "monitoring unstated": {"s": {**SRC_OK, "monitored": {"state": "maybe", "how": "x"}}},
+        "no destination": {"s": {**SRC_OK, "destination": ""}},
+        "empty list": {},
+    }),
+    ("register_read (sources_tiered)", lambda c: rr.evaluate_sources(c, "sources_tiered", set()), {"s": SRC_OK}, {
+        "unknown tier": {"s": {**SRC_OK, "tier": {"name": "secret", "reason": "r"}}},
+        "tier without reason": {"s": {**SRC_OK, "tier": {"name": "sensitive"}}},
+    }),
+    ("register_read (audited_reviewed)", lambda c: rr.evaluate_sources(c, "audited_reviewed", {"q1"}), {"s": SRC_OK}, {
+        "audited with no review named": {"s": {**SRC_OK, "audited": {"state": "yes", "how": "x", "reviewed_by": []}}},
+        "review that does not exist": {"s": {**SRC_OK, "audited": {"state": "partial", "how": "x", "reviewed_by": ["gone"]}}},
     }),
     ("register_read (entries_complete)", rr.evaluate_entries_complete,
      [{"what": "a", "reason": "r", "expiry_days": 30}, {"what": "b", "reason": "r", "expires_with": "the next build"},
