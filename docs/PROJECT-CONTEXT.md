@@ -50,12 +50,12 @@ The build is in progress, and `README.md` carries the current status table. As o
 - **Proven**: the CI/CD pipeline. `drift` runs clean in CI against the full persistent set, and
   `build-and-push` has published signed images, which survive teardown. See the 2026-09-22 and
   2026-09-23 entries in `DECISIONS.md`.
-- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 92 checks
+- **Running daily**: the evidence collector and the SDR emitter. `collect.yml` runs the 113 checks
   from GitHub Actions each day and emits the SDR with SDR-CSX-KMT metrics. 5 of 9 collector
   mechanisms are implemented and self-tested. The other four raise a clear error naming what they
   wait on.
 - **Evidence coverage, by matrix row** (`docs/MATRIX-COVERAGE.md`, generated): of 380 evidence rows,
-  50 are fully automated, 25 partly, and 305 not yet, across 23 of 40 determinations (2026-10-02).
+  78 are fully automated, 27 partly, and 275 not yet, across 27 of 40 determinations (2026-10-02).
   14 of those rest only on checks of the ephemeral environment, judged per session.
 - **Not started**: the three workflows and policy-as-code.
 
@@ -240,8 +240,8 @@ around a refusal.** Refused so far:
 ### The next thing to do
 
 **Evidence coverage is still the bottleneck.** Every check now links the matrix rows it proves
-(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 50 are fully automated, 25 partly, and 305 not
-yet. 23 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
+(`docs/MATRIX-COVERAGE.md`). Of 380 evidence rows, 78 are fully automated, 27 partly, and 275 not
+yet. 27 of 40 determinations have any. 14 of the covered rows rest only on checks gated to the
 ephemeral environment, which are unproven until the next phase 1. The old "12 of 46 indicators" counted an indicator as covered
 by any check at all. In rough priority:
 
@@ -306,6 +306,9 @@ AccessDenied.
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
 | Security Hub: 21 failing controls with no exception | **Decided 2026-10-03:** 8 remediated, 2 done by the operator in the console, 11 excepted. Ten still show as failing until Security Hub re-evaluates them within a day; confirm `cna-ibp-ops-aws-failing-controls-excepted` then passes |
 | `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). Investigate it if it still fails after that date |
+| Retention with no expiry (4 entries) | **Open, for decisions.** Inactive task definitions, Artifact Registry images, the warehouse rows, and Config's 7-year history. `svc-prr-cfg-retention-register-complete` fails until each is decided (registers/retention.yaml) |
+| Recovery objectives declared from the design | **For the operator's review.** Database RTO 60 minutes and RPO 5 minutes, among others (registers/resources.yaml). Unmeasured until RPL-TRC |
+| Log sources outside the central store, mostly unmonitored; sensitive tier without elevation | **Design gaps the event type list exposed** (DECISIONS.md, 2026-10-03). Larger work: shipping CloudWatch and GCP logs into the corpus, alerting, and MLA-ALA elevation |
 | Detection query under the log-read deny | **Closed 2026-10-03:** the 00:20 UTC run succeeded; the handler raises on any failed query |
 | Analytics image not registry-scanned | **Fixed 2026-10-02:** Container Scanning is enabled. The running image is scanned at its next push |
 | Log store does not restrict object reads | **Fixed 2026-10-02:** a deny confines reads to the evidence key's four readers. The MLA-ALA lane model itself is still unbuilt |

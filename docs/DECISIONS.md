@@ -8034,3 +8034,70 @@ This is the operator's IAM.6 remediation above: authorized root use. The query i
 root IAM writes, and root is not excluded to make it pass. It reports them until they leave its
 3-day window on 2026-10-06. Recording a reviewed disposition against a finding belongs to
 MLA-RVL, which is not built.
+
+## 2026-10-03 — The registers: five files, the register_read mechanism, and what they expose
+
+**Why registers.** About seventy evidence rows ask the same thing in different words: that every
+resource, secret, third party or log source carries a recorded position. Typical wordings are "every
+resource in the inventory has a recorded network position" and "every source carries a logged,
+monitored and audited position". Those positions had no home, so the rows had no evidence.
+
+They now live in `registers/`, versioned and read by `register_read`. That collector was a stub
+until today. It reconciles the live inventory against a register, so a class that appears in the
+account without a position fails the day it appears.
+
+**The five registers:**
+
+| File | Contents | Checks | Rows |
+|---|---|---|---|
+| `resources.yaml` | 29 resource classes across both clouds, each with 13 positions: definition, network, flow control, surface, availability, backup, recovery objective, integrity, evaluation, change surface, logging, assessment, data store | 13 | about 20 (CNA-DFP, RNT, ULN, MAT, OFA; RPL-ABO, RRO; SVC-VRI, EIS, SIN; CMT-LMC; MLA-LET; CNA-EIS) |
+| `secrets.yaml` | The rotation interval plan: managed secrets 7 days, keys 365, certificates by ACM renewal or per session. Bearer tokens are deferred, with no interval invented, until SCIM exists | 2 | SVC-ASM v5, v6 |
+| `retention.yaml` | 19 retained things, each with a reason and an expiry | 1 | SVC-PRR v2 |
+| `third-parties.yaml` | Both clouds, GitHub, Google Cloud Identity, the python base image, PyPI, the HashiCorp providers and six action owners. Each has its comparison basis (CNA-IBP) and monitoring position (SCR-MON). Coverage is reconciled against what is actually used: inventory clouds, workflow action owners, Dockerfile images and lock-file providers | 2 | CNA-IBP v3, val3; SCR-MON v4, val4 |
+| `event-sources.yaml` | 16 log sources, each logged, monitored and audited (yes, partial or no, with how), with a sensitivity tier and reason | 3 | MLA-LET v3; MLA-ALA v1, val5; MLA-RVL val5 |
+
+Every assertion has negative controls; the self-test has 79.
+
+**Also changed:**
+
+- **Security Hub exceptions carry review dates** (CNA-IBP verify 4). A lapsed date reopens the
+  control.
+- **The GCP inventory now includes Cloud Run jobs:** the pipeline was invisible to it. The scheduler
+  job stays out, because Cloud Asset cannot search that type even though a feed accepts it.
+
+**Declared here for the first time, for the operator's review:**
+
+- **Recovery objectives**, encoded from KSI-RPL-RRO's qualitative determination:
+  - database: RTO 60 minutes and RPO 5 minutes, from "tens of minutes" and point-in-time recovery
+  - compute: minutes, with no recovery point
+  - images: a CI rebuild against the last commit
+  - the pipeline: its next run
+
+  All are unmeasured until RPL-TRC's restore test runs.
+- **Exception review dates:** 2027-04-03 for the design exceptions, and 2026-11-03 for the
+  runtime-monitoring pair.
+
+**What the registers expose.** Each was written from what exists, so each shows where the build
+falls short of the design:
+
+1. **Four things retained with no expiry**, so `svc-prr-cfg-retention-register-complete` fails until
+   each is decided:
+   - inactive ECS task definition revisions
+   - Artifact Registry images
+   - the BigQuery warehouse rows
+   - AWS Config's own configuration history, at its 7-year default
+2. **Nine of 16 log sources are not in the central store.** The design (MLA-LET build row 1) says
+   every source delivers there. These go to CloudWatch, their own buckets, or Google's buckets:
+   - VPC flow logs
+   - load balancer and WAF logs
+   - application and database logs
+   - GCP Admin Activity and Data Access
+   - the GCP job's logs
+   - workforce sign-in
+3. **Most sources are not monitored:** nothing alerts on them. Monitoring is partial or full for only
+   five: CloudTrail management events, GuardDuty, the pipeline Lambdas, the GCP job, and the
+   collector records.
+4. **The sensitive tier has no elevation.** Application, database and data-access logs are readable
+   by the operator role without any grant (MLA-ALA build rows 3–4, not built).
+5. **Provider change monitoring is unavailable**, as are advisory feeds for GitHub, the providers and
+   the actions (SCR-MON build rows 2 and 4).
