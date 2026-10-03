@@ -1,0 +1,18 @@
+{
+  "id": "svc-vcm-cfg-flow-paths-authenticated",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every path in the flow register (registers/flows.yaml) -- 20, inside the VPC and across clouds -- records how each end authenticates the other",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/flows.yaml",
+    "assertion": "paths_authenticated"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VCM.verify.5",
+      "covers": "full"
+    }
+  ]
+}

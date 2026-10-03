@@ -56,6 +56,10 @@ class RegisterRead(Mechanism):
         elif p["assertion"] in ("sources_positioned", "sources_tiered", "audited_reviewed"):
             existing = {f.stem for f in CHECKS.glob("*.json")}
             ok, detail, evidence = evaluate_sources(register.get("sources") or {}, p["assertion"], existing)
+        elif p["assertion"] == "paths_authenticated":
+            ok, detail, evidence = evaluate_paths_authenticated(register)
+        elif p["assertion"] == "exceptions_bounded":
+            ok, detail, evidence = evaluate_exceptions_bounded(register, p["categories"])
         elif p["assertion"] == "entries_complete":
             ok, detail, evidence = evaluate_entries_complete(register.get("entries") or [])
         elif p["assertion"] == "secrets_owned":
@@ -173,6 +177,47 @@ def evaluate_sources(sources: dict, assertion: str, existing_checks: set[str]) -
     if problems:
         return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
     return True, f"all {len(sources)} sources pass {assertion}", evidence
+
+
+def evaluate_paths_authenticated(register: dict) -> tuple[bool, str, dict]:
+    """Every flow records its authenticity mechanism, and its rules name declared groups."""
+    groups = set(register.get("groups") or [])
+    problems = []
+    for name, f in (register.get("flows") or {}).items():
+        if not (f.get("authenticity") or "").strip():
+            problems.append(f"{name}: no authenticity mechanism")
+        for r in f.get("rules") or []:
+            for g in (r.get("group"), r.get("peer")):
+                if g and g.startswith("fedramp-") and g not in groups:
+                    problems.append(f"{name}: unknown group {g}")
+    flows = register.get("flows") or {}
+    evidence = {"flows": len(flows), "problems": problems}
+    if not flows:
+        return False, "the flow register is empty", evidence
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:3])}", evidence
+    return True, f"all {len(flows)} paths record how each end is authenticated", evidence
+
+
+def evaluate_exceptions_bounded(register: dict, allowed: list[str]) -> tuple[bool, str, dict]:
+    """Only the declared categories; every entry dated, reasoned and in one;
+    every standing exception with a closing condition (KSI-CMT-RMV verify 2)."""
+    problems = []
+    categories = set((register.get("categories") or {}).keys())
+    if categories != set(allowed):
+        problems.append(f"categories {sorted(categories)} are not exactly {sorted(allowed)}")
+    for e in register.get("entries") or []:
+        if e.get("category") not in allowed:
+            problems.append(f"{e.get('what')}: category {e.get('category')!r} is not a declared one")
+        if not (e.get("reason") or "").strip() or not e.get("date"):
+            problems.append(f"{e.get('what')}: needs a date and a reason")
+    for s in register.get("standing") or []:
+        if not (s.get("closing_condition") or "").strip():
+            problems.append(f"{s.get('what')}: a standing exception needs its closing condition")
+    evidence = {"entries": len(register.get("entries") or []), "standing": len(register.get("standing") or []), "problems": problems}
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:3])}", evidence
+    return True, f"{evidence['entries']} exception(s), all in the two declared categories with reasons; {evidence['standing']} standing, each with a closing condition", evidence
 
 
 def evaluate_entries_complete(entries: list[dict]) -> tuple[bool, str, dict]:

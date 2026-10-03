@@ -1,0 +1,172 @@
+# The flow register: every path between components, and how each end knows
+# who is on the other. KSI-SVC-VCM build row 5; KSI-CNA-MAT and KSI-CNA-ULN
+# read it too.
+#
+# Started 2026-10-03, from the security group rules and federation trusts as
+# declared. A flow inside the VPC lists the rules that realize it, as
+# {group, direction, port, peer} -- peer is another group, "prefix:s3" for the
+# S3 gateway endpoint's prefix list, or a CIDR -- so cna-mat-cfg-aws-open-ports-
+# declared can hold every open port to a declared flow while the environment
+# stands. A flow outside the VPC has no rules; its control is identity.
+
+groups: [fedramp-20x-ksi-alb, fedramp-20x-ksi-api, fedramp-20x-ksi-worker, fedramp-20x-ksi-migrate, fedramp-20x-ksi-database, fedramp-20x-ksi-endpoints]
+
+flows:
+  internet_to_load_balancer_https:
+    from: The internet
+    to: The load balancer
+    port: 443
+    authenticity: Server -- TLS 1.3 with the ACM certificate for the offering's domain. Clients are not authenticated at this hop; the api is the public face
+    rules:
+      - {group: fedramp-20x-ksi-alb, direction: ingress, port: 443, peer: 0.0.0.0/0}
+
+  internet_to_load_balancer_http:
+    from: The internet
+    to: The load balancer
+    port: 80
+    authenticity: None -- the listener only answers with a 301 to HTTPS, so nothing is served on this path
+    rules:
+      - {group: fedramp-20x-ksi-alb, direction: ingress, port: 80, peer: 0.0.0.0/0}
+
+  load_balancer_to_api:
+    from: The load balancer
+    to: The api tasks
+    port: 8443
+    authenticity: TLS to a self-signed task certificate the load balancer does not verify; the target's identity rests on AWS's packet-level authentication of VPC traffic, as KSI-SVC-ASM build row 4 records
+    rules:
+      - {group: fedramp-20x-ksi-alb, direction: egress, port: 8443, peer: fedramp-20x-ksi-api}
+      - {group: fedramp-20x-ksi-api, direction: ingress, port: 8443, peer: fedramp-20x-ksi-alb}
+
+  api_to_database:
+    from: The api tasks
+    to: The database
+    port: 5432
+    authenticity: Both ends -- TLS verify-full against the RDS certificate authority, and an IAM authentication token minted per connection; no password exists
+    rules:
+      - {group: fedramp-20x-ksi-api, direction: egress, port: 5432, peer: fedramp-20x-ksi-database}
+      - {group: fedramp-20x-ksi-database, direction: ingress, port: 5432, peer: fedramp-20x-ksi-api}
+
+  worker_to_database:
+    from: The worker task
+    to: The database
+    port: 5432
+    authenticity: As the api -- TLS verify-full and an IAM authentication token
+    rules:
+      - {group: fedramp-20x-ksi-worker, direction: egress, port: 5432, peer: fedramp-20x-ksi-database}
+      - {group: fedramp-20x-ksi-database, direction: ingress, port: 5432, peer: fedramp-20x-ksi-worker}
+
+  migrate_to_database:
+    from: The migration task
+    to: The database
+    port: 5432
+    authenticity: TLS verify-full; the master user's password, read from the RDS-managed secret at run time and never stored elsewhere
+    rules:
+      - {group: fedramp-20x-ksi-migrate, direction: egress, port: 5432, peer: fedramp-20x-ksi-database}
+      - {group: fedramp-20x-ksi-database, direction: ingress, port: 5432, peer: fedramp-20x-ksi-migrate}
+
+  api_to_endpoints:
+    from: The api tasks
+    to: The interface endpoints (ECR, logs, KMS, Secrets Manager, STS)
+    port: 443
+    authenticity: SigV4 with the task role's credentials over TLS; the endpoint policy names the principal
+    rules:
+      - {group: fedramp-20x-ksi-api, direction: egress, port: 443, peer: fedramp-20x-ksi-endpoints}
+      - {group: fedramp-20x-ksi-endpoints, direction: ingress, port: 443, peer: fedramp-20x-ksi-api}
+
+  worker_to_endpoints:
+    from: The worker task
+    to: The interface endpoints
+    port: 443
+    authenticity: As the api
+    rules:
+      - {group: fedramp-20x-ksi-worker, direction: egress, port: 443, peer: fedramp-20x-ksi-endpoints}
+      - {group: fedramp-20x-ksi-endpoints, direction: ingress, port: 443, peer: fedramp-20x-ksi-worker}
+
+  migrate_to_endpoints:
+    from: The migration task
+    to: The interface endpoints
+    port: 443
+    authenticity: As the api
+    rules:
+      - {group: fedramp-20x-ksi-migrate, direction: egress, port: 443, peer: fedramp-20x-ksi-endpoints}
+      - {group: fedramp-20x-ksi-endpoints, direction: ingress, port: 443, peer: fedramp-20x-ksi-migrate}
+
+  api_to_s3:
+    from: The api tasks
+    to: S3, through the gateway endpoint
+    port: 443
+    authenticity: SigV4 with the task role over TLS; the endpoint policy admits the declared roles by aws:PrincipalArn
+    rules:
+      - {group: fedramp-20x-ksi-api, direction: egress, port: 443, peer: "prefix:s3"}
+
+  worker_to_s3:
+    from: The worker task
+    to: The extract bucket, through the gateway endpoint
+    port: 443
+    authenticity: As the api; writes are denied unless they arrive through the endpoint
+    rules:
+      - {group: fedramp-20x-ksi-worker, direction: egress, port: 443, peer: "prefix:s3"}
+
+  migrate_to_s3:
+    from: The migration task
+    to: S3, through the gateway endpoint (image layers)
+    port: 443
+    authenticity: As the api
+    rules:
+      - {group: fedramp-20x-ksi-migrate, direction: egress, port: 443, peer: "prefix:s3"}
+
+  gcp_pipeline_to_aws:
+    from: The GCP analytics job
+    to: AWS STS, then the extract bucket
+    port: 443
+    authenticity: A Google-signed ID token for the pipeline's service account, exchanged by AssumeRoleWithWebIdentity for a role that trusts only that account's numeric ID; SigV4 after
+    rules: []
+
+  gcp_pipeline_to_google:
+    from: The GCP analytics job
+    to: Cloud Storage and BigQuery
+    port: 443
+    authenticity: The job's service account identity from the Cloud Run metadata server; no key exists
+    rules: []
+
+  ci_to_aws:
+    from: GitHub Actions on main
+    to: AWS STS, then ECR, S3 and the APIs the plan reads
+    port: 443
+    authenticity: GitHub's OIDC token, exchanged for roles whose trust pins the repository and branch by immutable ID
+    rules: []
+
+  ci_to_gcp:
+    from: GitHub Actions on main
+    to: Google's STS, then Artifact Registry and the APIs the collector reads
+    port: 443
+    authenticity: Workload identity federation; the provider's condition pins owner, repository and branch, and each grant names its workflow
+    rules: []
+
+  operator_to_aws:
+    from: The operator
+    to: The AWS console and APIs
+    port: 443
+    authenticity: Identity Center, SAML-federated to Google Cloud Identity; root holds two hardware keys and is break-glass only
+    rules: []
+
+  operator_to_gcp:
+    from: The operator
+    to: The Google Cloud console and APIs
+    port: 443
+    authenticity: The project owner's Google account; terraform-admin is impersonated, never keyed
+    rules: []
+
+  cloudtrail_to_log_store:
+    from: CloudTrail
+    to: The log store
+    port: 443
+    authenticity: The CloudTrail service principal, admitted by the bucket policy to its own prefix only
+    rules: []
+
+  normalizer:
+    from: The normalizer Lambda
+    to: The log store, reading raw logs and writing normalized events
+    port: 443
+    authenticity: SigV4 with the normalizer's role, one of the four readers the bucket policy admits
+    rules: []

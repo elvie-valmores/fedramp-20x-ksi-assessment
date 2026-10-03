@@ -1,0 +1,28 @@
+# The change exception register: KSI-CMT-RMV build row 5.
+#
+# Started 2026-10-03. Redeployment from version control is the default; an
+# in-place modification is allowed in two categories only, each recorded per
+# instance with its reason. Anything else is a finding, not an exception:
+# the direct changes of 2026-10-03 (root MFA and the security contact in the
+# console, the default VPCs deleted by script) are recorded as operator
+# decisions in DECISIONS.md, not here.
+
+categories:
+  database_in_place: The database cannot be redeployed without data loss, so schema and parameter changes are applied to the running instance (KSI-CMT-RMV)
+  emergency_response: An action during an active incident, where redeploying is slower than the attack; reconciled into declared state afterwards (build row 6)
+
+entries:
+  - category: database_in_place
+    date: 2026-09-23
+    what: The schema and the two IAM-authenticated database roles, created by the migration task (app/api/migrate.py)
+    reason: Applied to the running instance, in place, at every session's phase 2; the task is idempotent and its source is version-controlled, so it is the in-place half of a redeployment, not a hand edit
+    recurring: Every session
+
+# Not a modification category: a dated exception to build row 3, which says
+# only the pipeline principal applies declared state. Kept apart so the two
+# categories above stay the only kinds of in-place change.
+standing:
+  - what: A human identity -- the operator's Identity Center role -- applies Terraform, not the pipeline
+    opened: 2026-09-19
+    reason: The elevation path is KSI-IAM-JIT's, and the dependency is circular -- the pipeline would deploy JIT
+    closing_condition: JIT elevation built (planned for the week of 2026-10-12); the standing role then holds no apply right

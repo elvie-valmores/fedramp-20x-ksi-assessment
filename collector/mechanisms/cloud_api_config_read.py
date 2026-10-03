@@ -116,6 +116,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_acm_certificates(check)
         if provider == "aws" and resource == "private_routes":
             return self._aws_private_routes(check)
+        if provider == "aws" and resource == "rules_match_flows":
+            return self._aws_rules_match_flows(check)
         if provider == "aws" and resource == "security_group_reach":
             return self._aws_security_group_reach(check)
         if provider == "aws" and resource == "endpoint_policies":
@@ -809,6 +811,35 @@ class CloudAPIConfigRead(Mechanism):
                                                 "EgressOnlyInternetGatewayId") if r.get(k)), None)}
                 for r in t["Routes"]]})
         ok, detail, evidence = evaluate_private_routes(tables, check.params["private_tiers"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_rules_match_flows(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-MAT verify 1: every open port is a declared flow, and every declared flow is open.
+
+        Requires params: region, vpc_name, register. Live rules in the project
+        VPC are reduced to (group, direction, port, peer) -- peer a group name,
+        "prefix:s3" for a prefix list, or a CIDR -- and compared both ways with
+        the flow register's.
+        """
+        import yaml
+        from pathlib import Path
+
+        ec2 = boto3.client("ec2", region_name=check.params["region"])
+        vpc = self._project_vpc(ec2, check.params["vpc_name"])
+        names = {g["GroupId"]: g["GroupName"]
+                 for g in ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["SecurityGroups"]}
+        live = []
+        for page in ec2.get_paginator("describe_security_group_rules").paginate(
+                Filters=[{"Name": "group-id", "Values": list(names)}]):
+            for r in page["SecurityGroupRules"]:
+                ref = (r.get("ReferencedGroupInfo") or {}).get("GroupId")
+                peer = names.get(ref, ref) if ref else ("prefix:s3" if r.get("PrefixListId") else r.get("CidrIpv4") or r.get("CidrIpv6"))
+                port = r.get("FromPort") if r.get("FromPort") == r.get("ToPort") else f"{r.get('FromPort')}-{r.get('ToPort')}"
+                live.append({"group": names[r["GroupId"]], "direction": "egress" if r["IsEgress"] else "ingress",
+                             "port": port, "peer": peer, "protocol": r["IpProtocol"]})
+        register = yaml.safe_load((Path(__file__).resolve().parents[2] / check.params["register"]).read_text())
+        declared = [r for f in register["flows"].values() for r in f.get("rules") or []]
+        ok, detail, evidence = evaluate_rules_match_flows(live, declared)
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_security_group_reach(self, check: CheckDefinition) -> CheckResult:
@@ -2105,6 +2136,24 @@ def evaluate_private_routes(tables: list[dict], private_tiers: list[str]) -> tup
                                             "detail": "routes outside the VPC: " + ", ".join(outside) if outside
                                             else "local and gateway-endpoint routes only"}
     return _judged("route tables", results)
+
+
+def evaluate_rules_match_flows(live: list[dict], declared: list[dict]) -> tuple[bool, str, dict]:
+    """Live and declared rules are the same set. A live rule with no flow is
+    an open port nobody declared; a declared rule not live is a flow that
+    does not work. All protocols (-1) never matches a declared port."""
+    key = lambda r: (r["group"], r["direction"], r["port"], r["peer"])
+    live_keys = {key(r) for r in live if r.get("protocol") in ("tcp", "6")}
+    live_keys |= {key(r) + ("all protocols",) for r in live if r.get("protocol") not in ("tcp", "6")}
+    declared_keys = {key(r) for r in declared}
+    undeclared = sorted(map(str, live_keys - declared_keys))
+    missing = sorted(map(str, declared_keys - live_keys))
+    evidence = {"live": len(live_keys), "declared": len(declared_keys), "undeclared": undeclared, "not_live": missing}
+    if not live:
+        return False, "no rules found -- nothing to judge", evidence
+    if undeclared or missing:
+        return False, f"{len(undeclared)} open port(s) with no declared flow, {len(missing)} declared rule(s) not live", evidence
+    return True, f"all {len(live_keys)} rules are declared flows, and every declared flow is open", evidence
 
 
 def evaluate_open_rules(rules: list[dict], allowed: list[dict], direction: str) -> tuple[bool, str, dict]:

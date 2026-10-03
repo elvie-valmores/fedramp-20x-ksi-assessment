@@ -1,0 +1,22 @@
+{
+  "id": "cmt-rmv-cfg-exception-register-bounded",
+  "indicator": "KSI-CMT-RMV",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "The change exception register (registers/change-exceptions.yaml) declares only the two categories -- database changes in place, emergency response -- and every entry is dated and reasoned in one of them; the standing human-apply exception names its closing condition",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/change-exceptions.yaml",
+    "assertion": "exceptions_bounded",
+    "categories": [
+      "database_in_place",
+      "emergency_response"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-RMV.verify.2",
+      "covers": "full"
+    }
+  ]
+}

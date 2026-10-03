@@ -1,0 +1,22 @@
+{
+  "id": "cna-mat-cfg-aws-open-ports-declared",
+  "indicator": "KSI-CNA-MAT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every security group rule in the project VPC is a declared flow in registers/flows.yaml, and every declared flow's rules are live: no open port lacks a declared flow",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "rules_match_flows",
+    "region": "us-east-1",
+    "vpc_name": "fedramp-20x-ksi",
+    "register": "registers/flows.yaml"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-MAT.verify.1",
+      "covers": "full"
+    }
+  ],
+  "requires_environment": "aws-phase1"
+}

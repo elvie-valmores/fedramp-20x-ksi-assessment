@@ -444,6 +444,9 @@ def _trust(condition, principal=None, action="sts:AssumeRoleWithWebIdentity", pa
 
 
 _PINNED = {"StringEquals": {_GH_SUB: "repo:o@1/r@2:ref:refs/heads/main", _GH_AUD: "sts.amazonaws.com"}}
+FLOW_DECL = [{"group": "alb", "direction": "egress", "port": 8443, "peer": "api"},
+             {"group": "api", "direction": "ingress", "port": 8443, "peer": "alb"}]
+FLOW_LIVE = [{**r, "protocol": "tcp"} for r in FLOW_DECL]
 SLR_EXEMPT = [{"path": "/aws-service-role/", "reason": "AWS writes the trust"}]
 GD_OK = {"status": "ENABLED", "frequency": "FIFTEEN_MINUTES",
          "features": {"CLOUD_TRAIL": "ENABLED", "S3_DATA_EVENTS": "ENABLED", "EKS_AUDIT_LOGS": "DISABLED"}}
@@ -747,6 +750,12 @@ CFG_CASES = [
         "peering": [{**ROUTES_OK[0], "routes": [{"destination": "10.9.0.0/16", "target": "pcx-1"}]}],
         "no table for the tier": [ROUTES_OK[1]],
     }),
+    ("evaluate_rules_match_flows", lambda c: cfg.evaluate_rules_match_flows(*c), (FLOW_LIVE, FLOW_DECL), {
+        "undeclared open port": (FLOW_LIVE + [{"group": "api", "direction": "ingress", "port": 22, "peer": "0.0.0.0/0", "protocol": "tcp"}], FLOW_DECL),
+        "declared flow not live": (FLOW_LIVE[:1], FLOW_DECL),
+        "all protocols where a port is declared": ([{**FLOW_LIVE[0], "protocol": "-1"}, FLOW_LIVE[1]], FLOW_DECL),
+        "no rules": ([], FLOW_DECL),
+    }),
     ("evaluate_open_rules", lambda c: cfg.evaluate_open_rules(c, SG_ALLOWED, "ingress"), SG_OK, {
         "undeclared group open": SG_OK + [{"group": "api", "protocol": "tcp", "from": 22, "to": 22, "cidr": "0.0.0.0/0"}],
         "declared group, other port": SG_OK + [{"group": "alb", "protocol": "tcp", "from": 22, "to": 22, "cidr": "0.0.0.0/0"}],
@@ -1005,6 +1014,7 @@ CFG_RESOURCES = {
     "evaluate_state_bucket": "state_bucket",
     "evaluate_private_routes": "private_routes",
     "evaluate_open_rules": "security_group_reach",
+    "evaluate_rules_match_flows": "rules_match_flows",
     "evaluate_endpoint_policies": "endpoint_policies",
     "evaluate_load_balancer_tls": "load_balancer_tls",
     "evaluate_database_settings": "database_settings",
@@ -1097,6 +1107,9 @@ def _plan_without(name, field):
 SRC_OK = {"events": "e", "expected": "daily", "destination": "store", "logged": {"state": "yes", "how": "h"},
           "monitored": {"state": "no", "how": "none"}, "audited": {"state": "yes", "how": "q", "reviewed_by": ["q1"]},
           "tier": {"name": "operational", "reason": "r"}}
+EXC_OK = {"categories": {"db": "d", "emergency": "e"},
+          "entries": [{"category": "db", "date": "2026-09-23", "what": "schema", "reason": "in place"}],
+          "standing": [{"what": "human apply", "closing_condition": "JIT built"}]}
 TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison": {"basis": "pins", "automated": True},
                      "monitoring": {"mechanism": "none", "status": "unavailable"}},
               "img": {"matches": [{"base_image": "python:*"}], "comparison": {"basis": "scans", "automated": True},
@@ -1129,6 +1142,18 @@ SINGLE_CASES = [
     ("register_read (audited_reviewed)", lambda c: rr.evaluate_sources(c, "audited_reviewed", {"q1"}), {"s": SRC_OK}, {
         "audited with no review named": {"s": {**SRC_OK, "audited": {"state": "yes", "how": "x", "reviewed_by": []}}},
         "review that does not exist": {"s": {**SRC_OK, "audited": {"state": "partial", "how": "x", "reviewed_by": ["gone"]}}},
+    }),
+    ("register_read (paths_authenticated)", rr.evaluate_paths_authenticated,
+     {"groups": ["fedramp-a"], "flows": {"f": {"authenticity": "TLS", "rules": [{"group": "fedramp-a", "peer": "0.0.0.0/0"}]}}}, {
+        "path with no authenticity": {"groups": ["fedramp-a"], "flows": {"f": {"authenticity": " ", "rules": []}}},
+        "rule naming an unknown group": {"groups": ["fedramp-a"], "flows": {"f": {"authenticity": "TLS", "rules": [{"group": "fedramp-b"}]}}},
+        "empty register": {"flows": {}},
+    }),
+    ("register_read (exceptions_bounded)", lambda c: rr.evaluate_exceptions_bounded(c, ["db", "emergency"]), EXC_OK, {
+        "a third category": {**EXC_OK, "categories": {**EXC_OK["categories"], "convenience": "x"}},
+        "entry outside the categories": {**EXC_OK, "entries": [{**EXC_OK["entries"][0], "category": "convenience"}]},
+        "entry without a reason": {**EXC_OK, "entries": [{**EXC_OK["entries"][0], "reason": ""}]},
+        "standing without a closing condition": {**EXC_OK, "standing": [{"what": "human apply"}]},
     }),
     ("register_read (entries_complete)", rr.evaluate_entries_complete,
      [{"what": "a", "reason": "r", "expiry_days": 30}, {"what": "b", "reason": "r", "expires_with": "the next build"},
