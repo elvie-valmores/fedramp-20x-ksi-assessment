@@ -1,0 +1,41 @@
+{
+  "id": "rpl-arp-cfg-control-positions",
+  "indicator": "KSI-RPL-ARP",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Each of KSI-RPL-ARP's sixteen mapped controls (the catalog's list) carries a position -- satisfied, inherited, partial, unavailable or inapplicable -- with its reason",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/control-positions.yaml",
+    "assertion": "controls_positioned",
+    "indicator": "KSI-RPL-ARP",
+    "controls": [
+      "CP-2",
+      "CP-2 (1)",
+      "CP-2 (3)",
+      "CP-4 (1)",
+      "CP-6",
+      "CP-6 (1)",
+      "CP-6 (3)",
+      "CP-7",
+      "CP-7 (1)",
+      "CP-7 (2)",
+      "CP-7 (3)",
+      "CP-8",
+      "CP-8 (1)",
+      "CP-8 (2)",
+      "CP-10",
+      "CP-10 (2)"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-ARP.verify.2",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ARP.validate.4",
+      "covers": "full"
+    }
+  ]
+}

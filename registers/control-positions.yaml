@@ -1,0 +1,43 @@
+# Control position registers: KSI-RPL-ARP build row 3 and KSI-INR-RIR build row 3.
+#
+# Started 2026-10-03. Each mapped control with a position -- satisfied,
+# inherited, partial, unavailable or inapplicable -- and its reason, taken
+# from the determinations' own rationale. The control lists are the
+# catalog's (docs/KSI-Catalog-Reference.md), and the check holds the
+# register to exactly those.
+#
+# KSI-INR-RIR's positions changed on 2026-10-03: its determination counted on
+# the responder built for KSI-IAM-SUS, which was descoped. Detection and
+# alerting are automated; containment is manual, by the runbook in
+# docs/INCIDENT-RESPONSE.md. Incident handling is therefore partial, not
+# satisfied.
+
+KSI-RPL-ARP:
+  CP-2: {position: satisfied, reason: "The recovery paths are encoded (registers/recovery-paths.yaml) and mapped to the objectives declared under KSI-RPL-RRO; the automation is the plan"}
+  CP-2 (1): {position: satisfied, reason: "Related plans are the same encoded artifacts -- objectives, backups, paths -- reviewed together, both directions checked"}
+  CP-2 (3): {position: satisfied, reason: "Resuming mission functions maps onto the per-class recovery time objectives in registers/resources.yaml"}
+  CP-4 (1): {position: unavailable, reason: "Coordinating tests with the organizational elements behind related plans needs elements that do not exist for a two-person persona"}
+  CP-6: {position: inherited, reason: "Alternate storage read as a failure domain (KSI-RPL-ABO): provider-managed multi-zone storage satisfies it at zone granularity; it fails at region, with no cross-region replication"}
+  CP-6 (1): {position: inherited, reason: "Separation from primary storage holds at zone granularity by the provider's design, not at region"}
+  CP-6 (3): {position: inherited, reason: "Accessibility during a disruption is the provider's"}
+  CP-7: {position: inherited, reason: "Alternate processing in a cloud is multi-zone compute replaced automatically -- always running, not a site to fail over to; zone granularity only"}
+  CP-7 (1): {position: inherited, reason: "Separation from the primary processing site holds across zones, not regions"}
+  CP-7 (2): {position: inherited, reason: "Accessibility of alternate processing is the provider's"}
+  CP-7 (3): {position: unavailable, reason: "Priority of service provisions are contractual; this persona has no provider agreements"}
+  CP-8: {position: inapplicable, reason: "The offering procures no telecommunications service; connectivity is part of the platform"}
+  CP-8 (1): {position: unavailable, reason: "Priority of service provisions for telecommunications are contractual"}
+  CP-8 (2): {position: inapplicable, reason: "Single points of failure in telecommunications are the platform's, which the offering does not procure"}
+  CP-10: {position: satisfied, reason: "Recovery and reconstitution are the encoded paths: re-apply declared state, restore the database to a point in time, re-run the pipeline"}
+  CP-10 (2): {position: inherited, reason: "Transaction recovery is the database engine's and RDS point-in-time recovery's"}
+
+KSI-INR-RIR:
+  IR-4: {position: partial, reason: "Detection and alerting are automated (failed-authentication query, GuardDuty and evidence-key alerts to the detection topic); containment, eradication and recovery are manual, by docs/INCIDENT-RESPONSE.md, since the automated responder was descoped (2026-10-03)"}
+  IR-4 (1): {position: partial, reason: "Automated incident handling stops at detection and alerting; containment is not automated"}
+  IR-6: {position: unavailable, reason: "Incident reporting needs a recipient -- FedRAMP and affected agencies -- which this persona does not have"}
+  IR-6 (1): {position: unavailable, reason: "Automated reporting needs the same recipient"}
+  IR-6 (3): {position: unavailable, reason: "Supply chain coordination needs vendor agreements; declared unavailable under KSI-SCR-MON"}
+  IR-7: {position: inapplicable, reason: "Incident response assistance has no subject: there are no users to assist"}
+  IR-7 (1): {position: inapplicable, reason: "Automated assistance support, as IR-7"}
+  IR-8: {position: partial, reason: "The response plan is docs/INCIDENT-RESPONSE.md with the detection path; it covers the incident classes the detection path raises, not every incident type"}
+  IR-8 (1): {position: inapplicable, reason: "Breaches of personally identifiable information: the offering holds no PII, only synthetic measurements"}
+  SI-4 (5): {position: satisfied, reason: "System-generated alerts: failed authentications, GuardDuty findings and evidence-key disable or delete attempts notify the detection topic by email"}

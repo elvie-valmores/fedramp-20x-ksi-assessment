@@ -56,6 +56,12 @@ class RegisterRead(Mechanism):
         elif p["assertion"] in ("sources_positioned", "sources_tiered", "audited_reviewed"):
             existing = {f.stem for f in CHECKS.glob("*.json")}
             ok, detail, evidence = evaluate_sources(register.get("sources") or {}, p["assertion"], existing)
+        elif p["assertion"] == "controls_positioned":
+            ok, detail, evidence = evaluate_controls_positioned(register.get(p["indicator"]) or {}, p["controls"])
+        elif p["assertion"] == "paths_cover_objectives":
+            objectives = yaml.safe_load((REPO / p["objectives"]).read_text())
+            exists = lambda path: (REPO / path).exists()
+            ok, detail, evidence = evaluate_recovery_paths(register.get("paths") or {}, objectives, exists)
         elif p["assertion"] == "paths_authenticated":
             ok, detail, evidence = evaluate_paths_authenticated(register)
         elif p["assertion"] == "exceptions_bounded":
@@ -177,6 +183,52 @@ def evaluate_sources(sources: dict, assertion: str, existing_checks: set[str]) -
     if problems:
         return False, f"{len(problems)} problem(s): {'; '.join(problems[:4])}", evidence
     return True, f"all {len(sources)} sources pass {assertion}", evidence
+
+
+POSITIONS = ("satisfied", "inherited", "partial", "unavailable", "inapplicable")
+
+
+def evaluate_controls_positioned(register: dict, controls: list[str]) -> tuple[bool, str, dict]:
+    """Exactly the mapped controls, each with a position and its reason."""
+    problems = [f"{c}: not positioned" for c in controls if c not in register]
+    problems += [f"{c}: not a mapped control" for c in register if c not in controls]
+    for c, v in register.items():
+        if (v or {}).get("position") not in POSITIONS or not ((v or {}).get("reason") or "").strip():
+            problems.append(f"{c}: needs one of {', '.join(POSITIONS)} and a reason")
+    counts = {}
+    for v in register.values():
+        counts[(v or {}).get("position")] = counts.get((v or {}).get("position"), 0) + 1
+    evidence = {"positions": counts, "problems": problems}
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:3])}", evidence
+    return True, f"all {len(controls)} controls positioned: " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())), evidence
+
+
+def evaluate_recovery_paths(paths: dict, objectives: dict, exists) -> tuple[bool, str, dict]:
+    """Every class with an objective has a path, every path recovers a class
+    with an objective, every path is encoded in files that exist, and the
+    order is a sequence: every predecessor exists and nothing depends on itself."""
+    with_objective = {k for k, v in (objectives.get("classes") or {}).items()
+                      if (v.get("objective") or {}).get("rto")}
+    recovered = {c for p in paths.values() for c in p.get("recovers") or []}
+    problems = [f"{c}: has an objective and no recovery path" for c in sorted(with_objective - recovered)]
+    for name, p in paths.items():
+        if not set(p.get("recovers") or []) & with_objective:
+            problems.append(f"{name}: recovers nothing with an objective")
+        problems += [f"{name}: encoded in {f}, which does not exist" for f in p.get("encoded_in") or [] if not exists(f)]
+        if not p.get("encoded_in"):
+            problems.append(f"{name}: not encoded anywhere")
+        problems += [f"{name}: follows unknown path {a}" for a in p.get("after") or [] if a not in paths]
+
+    def cyclic(node, seen):
+        if node in seen:
+            return True
+        return any(cyclic(a, seen | {node}) for a in (paths.get(node) or {}).get("after") or [] if a in paths)
+    problems += [f"{name}: its order is circular" for name in paths if cyclic(name, frozenset())]
+    evidence = {"paths": len(paths), "objectives": len(with_objective), "problems": problems}
+    if problems:
+        return False, f"{len(problems)} problem(s): {'; '.join(problems[:3])}", evidence
+    return True, f"all {len(with_objective)} objectives have encoded, ordered recovery paths ({len(paths)} paths)", evidence
 
 
 def evaluate_paths_authenticated(register: dict) -> tuple[bool, str, dict]:

@@ -1,0 +1,31 @@
+{
+  "id": "rpl-arp-cfg-recovery-paths",
+  "indicator": "KSI-RPL-ARP",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every recovery objective in registers/resources.yaml maps to a recovery path and every path to an objective; each path is encoded in files that exist, and the paths form an ordered sequence with no cycle",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/recovery-paths.yaml",
+    "assertion": "paths_cover_objectives",
+    "objectives": "registers/resources.yaml"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-ARP.verify.1",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ARP.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ARP.validate.1",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-ARP.validate.2",
+      "covers": "full"
+    }
+  ]
+}

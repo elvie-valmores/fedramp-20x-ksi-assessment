@@ -1,0 +1,51 @@
+# Recovery paths: KSI-RPL-ARP build rows 1, 2 and 4.
+#
+# Started 2026-10-03. The determination's position is that recovery here is
+# automation, versioned and executed exactly as written, so the automation is
+# the plan. Each path names the files that encode it, the resource classes it
+# recovers (so every objective in registers/resources.yaml maps to a path and
+# every path to an objective), and the paths it must follow (so recovery is a
+# sequence, not a set). register_read checks all three.
+
+paths:
+  reapply_aws_declared:
+    what: Re-apply the AWS root's declared state -- phase 1, then phase 2
+    encoded_in: [infra/aws, infra/aws/boundary.py]
+    recovers: [AWS::IAM::Role, AWS::IAM::Policy, AWS::EC2::VPC, AWS::EC2::Subnet, AWS::EC2::SecurityGroup, AWS::ECS::Cluster, AWS::ECS::TaskDefinition, AWS::ElasticLoadBalancingV2::LoadBalancer, AWS::WAFv2::WebACL, AWS::CloudTrail::Trail]
+    after: []
+
+  restore_s3_versions:
+    what: Read or restore a prior object version in place (aws s3api get-object or copy-object with --version-id)
+    encoded_in: [infra/aws/log_corpus.tf, infra/aws/registry.tf]
+    recovers: [AWS::S3::Bucket]
+    after: []
+
+  restore_database:
+    what: Point-in-time restore into a new instance, timed
+    encoded_in: [infra/aws/restore_database.sh]
+    recovers: [AWS::RDS::DBInstance]
+    after: [reapply_aws_declared]
+
+  replace_tasks:
+    what: The ECS service scheduler replaces stopped tasks; a full redeploy is phase 2's apply
+    encoded_in: [infra/aws/compute.tf]
+    recovers: [AWS::ECS::Service]
+    after: [reapply_aws_declared, restore_database]
+
+  rebuild_images:
+    what: Rebuild, sign and push images from the commit
+    encoded_in: [.github/workflows/build-and-push.yml]
+    recovers: [AWS::ECR::Repository, artifactregistry.googleapis.com/Repository]
+    after: []
+
+  reapply_gcp_declared:
+    what: Re-apply the GCP root's declared state
+    encoded_in: [infra/gcp]
+    recovers: [iam.googleapis.com/Role, iam.googleapis.com/ServiceAccount, cloudscheduler.googleapis.com/Job]
+    after: []
+
+  rerun_pipeline:
+    what: Run the analytics job; it re-reads every extract within 30 days and merges idempotently
+    encoded_in: [infra/gcp/pipeline.tf, app/analytics/main.py]
+    recovers: [bigquery.googleapis.com/Dataset, bigquery.googleapis.com/Table, run.googleapis.com/Job]
+    after: [reapply_gcp_declared, rebuild_images, replace_tasks]

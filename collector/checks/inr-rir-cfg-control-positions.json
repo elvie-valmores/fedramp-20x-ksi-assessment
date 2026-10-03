@@ -1,0 +1,35 @@
+{
+  "id": "inr-rir-cfg-control-positions",
+  "indicator": "KSI-INR-RIR",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Each of KSI-INR-RIR's ten mapped controls carries a position with its reason, revised for the descoped responder",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/control-positions.yaml",
+    "assertion": "controls_positioned",
+    "indicator": "KSI-INR-RIR",
+    "controls": [
+      "IR-4",
+      "IR-4 (1)",
+      "IR-6",
+      "IR-6 (1)",
+      "IR-6 (3)",
+      "IR-7",
+      "IR-7 (1)",
+      "IR-8",
+      "IR-8 (1)",
+      "SI-4 (5)"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-INR-RIR.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-INR-RIR.validate.3",
+      "covers": "full"
+    }
+  ]
+}

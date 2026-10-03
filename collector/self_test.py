@@ -1107,6 +1107,9 @@ def _plan_without(name, field):
 SRC_OK = {"events": "e", "expected": "daily", "destination": "store", "logged": {"state": "yes", "how": "h"},
           "monitored": {"state": "no", "how": "none"}, "audited": {"state": "yes", "how": "q", "reviewed_by": ["q1"]},
           "tier": {"name": "operational", "reason": "r"}}
+RP_OBJ = {"classes": {"A": {"objective": {"rto": "1h", "rpo": "5m"}}, "B": {"objective": {"rto": "5m", "rpo": "0"}},
+                     "N": {"objective": {"not_applicable": "none"}}}}
+RP_OK = {"a": {"encoded_in": ["x"], "recovers": ["A"], "after": []}, "b": {"encoded_in": ["y"], "recovers": ["B"], "after": ["a"]}}
 EXC_OK = {"categories": {"db": "d", "emergency": "e"},
           "entries": [{"category": "db", "date": "2026-09-23", "what": "schema", "reason": "in place"}],
           "standing": [{"what": "human apply", "closing_condition": "JIT built"}]}
@@ -1148,6 +1151,21 @@ SINGLE_CASES = [
         "path with no authenticity": {"groups": ["fedramp-a"], "flows": {"f": {"authenticity": " ", "rules": []}}},
         "rule naming an unknown group": {"groups": ["fedramp-a"], "flows": {"f": {"authenticity": "TLS", "rules": [{"group": "fedramp-b"}]}}},
         "empty register": {"flows": {}},
+    }),
+    ("register_read (controls_positioned)", lambda c: rr.evaluate_controls_positioned(c, ["CP-2", "CP-8"]),
+     {"CP-2": {"position": "satisfied", "reason": "encoded"}, "CP-8": {"position": "inapplicable", "reason": "no telecom"}}, {
+        "a mapped control missing": {"CP-2": {"position": "satisfied", "reason": "r"}},
+        "an unmapped control added": {"CP-2": {"position": "satisfied", "reason": "r"}, "CP-8": {"position": "inapplicable", "reason": "r"},
+                                      "AC-1": {"position": "satisfied", "reason": "r"}},
+        "unknown position": {"CP-2": {"position": "mostly", "reason": "r"}, "CP-8": {"position": "inapplicable", "reason": "r"}},
+        "no reason": {"CP-2": {"position": "satisfied", "reason": ""}, "CP-8": {"position": "inapplicable", "reason": "r"}},
+    }),
+    ("register_read (paths_cover_objectives)", lambda c: rr.evaluate_recovery_paths(c, RP_OBJ, lambda f: f != "gone.sh"), RP_OK, {
+        "objective with no path": {"a": RP_OK["a"]},
+        "path recovering nothing with an objective": {**RP_OK, "c": {"encoded_in": ["x"], "recovers": ["N"], "after": []}},
+        "path encoded in a missing file": {**RP_OK, "a": {**RP_OK["a"], "encoded_in": ["gone.sh"]}},
+        "circular order": {"a": {**RP_OK["a"], "after": ["b"]}, "b": {**RP_OK["b"], "after": ["a"]}},
+        "unknown predecessor": {**RP_OK, "b": {**RP_OK["b"], "after": ["z"]}},
     }),
     ("register_read (exceptions_bounded)", lambda c: rr.evaluate_exceptions_bounded(c, ["db", "emergency"]), EXC_OK, {
         "a third category": {**EXC_OK, "categories": {**EXC_OK["categories"], "convenience": "x"}},
