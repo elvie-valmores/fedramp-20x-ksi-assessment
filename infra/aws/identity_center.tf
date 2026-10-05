@@ -65,13 +65,8 @@ data "aws_identitystore_user" "alex" {
   }
 }
 
-resource "aws_ssoadmin_account_assignment" "alex_interim_operator_admin" {
-  instance_arn       = local.sso_instance_arn
-  permission_set_arn = aws_ssoadmin_permission_set.interim_operator_admin.arn
-
-  principal_type = "USER"
-  principal_id   = data.aws_identitystore_user.alex.user_id
-
-  target_type = "AWS_ACCOUNT"
-  target_id   = data.aws_caller_identity.current.account_id
-}
+# The assignment to InterimOperatorAdmin was removed on 2026-10-05, once
+# just-in-time elevation (elevation.tf) was proven end to end. Standing
+# access is OperatorReadOnly; administration is ElevatedAdmin, granted per
+# elevation. The permission set stays defined, unassigned, for one session
+# in case the elevation path has to be backed out.

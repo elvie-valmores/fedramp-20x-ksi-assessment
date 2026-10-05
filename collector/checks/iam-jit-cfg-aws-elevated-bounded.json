@@ -1,0 +1,23 @@
+{
+  "id": "iam-jit-cfg-aws-elevated-bounded",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The elevated permission set's session lasts at most an hour, and its inline policy denies every regional action outside us-east-1",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "elevated_bounded",
+    "max_session_seconds": 3600,
+    "home_region": "us-east-1"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.verify.4",
+      "covers": "partial",
+      "gap": "The conditions bind the requested region and the session's length, not session attributes such as a source identity or MFA age; Identity Center's sign-in carries Google's MFA, which the policy cannot see."
+    }
+  ]
+}

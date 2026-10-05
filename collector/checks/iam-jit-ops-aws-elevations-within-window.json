@@ -1,0 +1,23 @@
+{
+  "id": "iam-jit-ops-aws-elevations-within-window",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing, zero expected: no ElevatedAdmin assignment outside a running elevation, and no running elevation past its requested window plus 15 minutes for the grant, the revocation and one backstop interval",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "elevations_within_window",
+    "state_machine": "fedramp-20x-ksi-elevation",
+    "allowance_minutes": 15
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.validate.2",
+      "covers": "partial",
+      "gap": "AWS only: GCP has no elevation yet, so no conditional bindings to judge."
+    }
+  ]
+}

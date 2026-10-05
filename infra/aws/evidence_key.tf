@@ -37,10 +37,15 @@ locals {
   # key: the reference would be a cycle.
   trail_arn = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/fedramp-20x-ksi-trail"
 
-  # The operator's Identity Center role. Matched by pattern because the
+  # The operator's Identity Center roles. Matched by pattern because the
   # suffix is Identity Center's to choose and changes if the permission set
-  # is reprovisioned. See identity_center.tf.
-  operator_role_pattern = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+  # is reprovisioned. The standing read-only role and the elevated one
+  # (elevation.tf); InterimOperatorAdmin (identity_center.tf) until its
+  # assignment is removed.
+  operator_role_patterns = [
+    for set in ["OperatorReadOnly", "ElevatedAdmin", "InterimOperatorAdmin"] :
+    "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_${set}_*"
+  ]
 }
 
 resource "aws_kms_key" "evidence" {
@@ -263,9 +268,10 @@ data "aws_iam_policy_document" "key_evidence" {
     }
   }
 
-  # The two Lambdas' log groups (log_normalization.tf, detection.tf). Logs
-  # encrypts and decrypts with the log group's ARN as context, so this is
-  # scoped to this project's Lambda log groups by name.
+  # The Lambdas' log groups (log_normalization.tf, detection.tf,
+  # elevation.tf) and the elevation workflow's. Logs encrypts and decrypts
+  # with the log group's ARN as context, so this is scoped to this
+  # project's log groups by name.
   statement {
     sid    = "LogsEncryptsLambdaLogGroups"
     effect = "Allow"
@@ -287,7 +293,10 @@ data "aws_iam_policy_document" "key_evidence" {
     condition {
       test     = "ArnLike"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/fedramp-20x-ksi-*"]
+      values = [
+        "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/fedramp-20x-ksi-*",
+        "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vendedlogs/states/fedramp-20x-ksi-*",
+      ]
     }
   }
 
@@ -330,9 +339,31 @@ data "aws_iam_policy_document" "key_evidence" {
     }
   }
 
+  # The elevation function records each elevation in the log store and
+  # alerts on the detection topic (elevation.tf).
+  statement {
+    sid    = "ElevationRecordsThroughS3AndSns"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.elevation.arn]
+    }
+
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${data.aws_region.current.name}.amazonaws.com", "sns.${data.aws_region.current.name}.amazonaws.com"]
+    }
+  }
+
   # The operator reads evidence through S3 and Athena: the collector's
-  # log_query checks and any investigation. Standing, under the same
-  # exception as the operator's permission set, and closing with it.
+  # log_query checks and any investigation. The read-only role holds
+  # kms:Decrypt on this key for it; the elevated role holds it through
+  # AdministratorAccess.
   statement {
     sid    = "OperatorUsesThroughS3"
     effect = "Allow"
@@ -348,7 +379,7 @@ data "aws_iam_policy_document" "key_evidence" {
     condition {
       test     = "ArnLike"
       variable = "aws:PrincipalArn"
-      values   = [local.operator_role_pattern]
+      values   = local.operator_role_patterns
     }
 
     condition {

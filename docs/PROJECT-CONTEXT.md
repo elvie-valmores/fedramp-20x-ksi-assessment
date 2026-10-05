@@ -38,7 +38,8 @@ The build is in progress, and `README.md` carries the current status table. As o
   the Config recorder, Athena and Glue, both Lambdas, the budget guardrail, the CI identities (OIDC
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
   the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
-  S3 public access block, and the operator's Identity Center permission set and assignment. On GCP:
+  S3 public access block, and the operator's Identity Center permission sets and the JIT elevation
+  workflow (294 AWS instances since 2026-10-05). On GCP:
   everything, phase 2 included. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
   in about fifteen minutes and is torn down after each session. Both phases last ran on 2026-10-02,
@@ -87,9 +88,9 @@ collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 0
 ### First actions for the next session
 
 1. **Sign in.** Click the Identity Center tile in Google's app grid as `alex@`, then run
-   `aws sso login --profile caliper-admin`. The AWS-started sign-in worked once, on 10-01, after
+   `aws sso login --profile caliper-readonly` (since 2026-10-05; `caliper-admin` has no assignment). The AWS-started sign-in worked once, on 10-01, after
    failing five times, so the tile is the reliable path. Every command below needs
-   `AWS_PROFILE=caliper-admin`. It is set in the user's `~/.zshrc`, but a shell started earlier may
+   `AWS_PROFILE=caliper-readonly`, and anything that changes the account needs an elevation (`infra/aws/elevate.sh`). The user's `~/.zshrc` may still set `caliper-admin`; it is set in the user's `~/.zshrc`, but a shell started earlier may
    not have it. There are no static AWS credentials anywhere, and no IAM users.
 2. **Verify, do not trust:**
    - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The scheduled run (05:30 UTC, but GitHub has started it hours late) is
@@ -206,7 +207,8 @@ Nothing below is "configured". Each was exercised.
 ### Running things
 
 ```sh
-export AWS_PROFILE=caliper-admin                     # after aws sso login --profile caliper-admin
+export AWS_PROFILE=caliper-readonly                  # after aws sso login --profile caliper-readonly
+# Changes: infra/aws/elevate.sh start "<why>" [minutes], then AWS_PROFILE=caliper-elevated
 export TF_VAR_billing_alert_email=aws@elvievalmores.com
 export TF_VAR_gcp_pipeline_sa_unique_id=104894493962317106056
 export TF_VAR_app_domain=caliper.elvievalmores.com   # not a repository variable
@@ -246,8 +248,8 @@ or a recorded finding.
 1. **Week 1:** more checks using the existing collectors, and the remaining registers: the change
    exception register, the flow register, change surfaces, recovery paths and control positions.
 2. **Week 2:**
-   - **JIT elevation (build).** It needs one batched IAM apply from the operator, and retires the
-     standing InterimOperatorAdmin role.
+   - ~~**JIT elevation (build).**~~ **Done 2026-10-05** (DECISIONS.md): standing access is
+     `OperatorReadOnly`; changes go through `infra/aws/elevate.sh`. GCP's half (PAM) is not built.
    - **Policy-as-code on every push (build).**
    - **The signal-report generator.**
 3. **Week 3:**
@@ -318,15 +320,17 @@ AccessDenied.
 | Normalized corpus before 2026-10-01 misclassifies sign-ins | Ages out by 2026-10-08. Read raw CloudTrail for earlier failures |
 | Config lag on deletions | Not a finding: recorded 27 to 51 hours late, in one batch (2026-10-02 correction). `inventory_current` shows the staleness while it lasts. Second instance: CI run 37044949435 (2026-10-02) failed it on `sg-0607b33343156f7f2`. That is the VPC's default security group, deleted implicitly with the VPC at teardown. It was gone live, and Config still held only its `ResourceDiscovered` record. Expect it to clear |
 | AWS-started Identity Center sign-in | Failed five times on 09-29/30, worked once on 10-01. Cause unconfirmed |
-| Key policy changes are not alerted, and need no JIT | The operator's standing admin can rewrite any key policy. Closes with KSI-IAM-JIT |
+| Key policy changes are not alerted | **Half closed 2026-10-05:** rewriting a key policy now needs an elevation, which is justified, recorded and alerted. The change itself is still not alerted |
 | GCP inventory misses regional log buckets | Cloud Asset does not report them; the key check now reads Logging, the inventory generator does not yet |
 | Glue Data Catalog encryption | Off. Table definitions only. Left out of row 1 for now |
 | Worker drops a batch whose landing fails | **Fixed and proven live 2026-10-02:** marked keys, quiet cycles land nothing, and listing works through the endpoint |
 | Analytics dropped rows whose id an earlier session used | **Fixed and proven live 2026-10-02:** the MERGE matches on (id, recorded_at); the drop was reproduced with the old image and closed with the new |
 | Retained database backups expire with their key | **Decided 2026-10-02: the key persists** (`database_key.tf`). Today's backups, under the old key, lapse on 2026-10-09 as agreed; `svc-sin-cfg-aws-backups-restorable` fails until then |
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
-| Security Hub: 21 failing controls with no exception | **Decided 2026-10-03:** 8 remediated, 2 done by the operator in the console, 11 excepted. Ten still show as failing until Security Hub re-evaluates them within a day; confirm `cna-ibp-ops-aws-failing-controls-excepted` then passes |
-| `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). Investigate it if it still fails after that date |
+| Security Hub: 21 failing controls with no exception | **Closed 2026-10-05:** re-evaluation cleared the remediations. Config.1 then failed on its second half, recording scope, and is excepted under the 2026-09-05 cost decision. 100 of 117 pass outright, and `cna-ibp-ops-aws-failing-controls-excepted` passes |
+| `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). On 2026-10-05 it was the only cause left: Identity Center's service-linked role is now exempt. Investigate it if it still fails after that date |
+| JIT follow-ups | **Next session:** delete the unassigned `InterimOperatorAdmin` permission set, and drop it from `operator_role_patterns` and the five checks. **Week 3:** a deliberate backstop test, then trim the backstop's IAM removal rights; checks for JIT validate 3 to 5. **GCP:** PAM entitlements |
+| Standing change exception | **Narrowed 2026-10-05, for the operator's review:** humans apply only as ElevatedAdmin. It closes when CI applies declared state |
 | Retention with no expiry (4 entries) | **Decided 2026-10-03** (lean set): 30 or 90 days each. The Artifact Registry cleanup policy is in dry run until reviewed |
 | Recovery objectives declared from the design | **For the operator's review.** Database RTO 60 minutes and RPO 5 minutes, among others (registers/resources.yaml). Unmeasured until RPL-TRC |
 | Log sources outside the central store, mostly unmonitored; sensitive tier without elevation | **Design gaps the event type list exposed** (DECISIONS.md, 2026-10-03). Larger work: shipping CloudWatch and GCP logs into the corpus, alerting, and MLA-ALA elevation |

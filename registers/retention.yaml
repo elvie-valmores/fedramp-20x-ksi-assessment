@@ -86,3 +86,7 @@ entries:
     where: AWS Config service (not the S3 delivery files)
     reason: Was AWS's seven-year default; now as the delivered files
     expiry_days: 90
+  - what: Elevation workflow execution history
+    where: Step Functions (fedramp-20x-ksi-elevation)
+    reason: Each elevation's input -- its justification and window -- and its steps; Step Functions keeps a closed execution 90 days, not configurable. The durable record is in the log store under elevations/
+    expiry_days: 90

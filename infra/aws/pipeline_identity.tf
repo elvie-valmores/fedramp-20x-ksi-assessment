@@ -177,6 +177,11 @@ data "aws_iam_policy_document" "github_drift" {
       "sso:Describe*",
       "sso:Get*",
       "sso:List*",
+      # The elevation workflow (elevation.tf, 2026-10-03). Describe* also
+      # returns an execution's input -- the justification -- which the
+      # collector's JIT checks read.
+      "states:Describe*",
+      "states:List*",
       "sts:GetCallerIdentity",
       "wafv2:Get*",
       "wafv2:List*",

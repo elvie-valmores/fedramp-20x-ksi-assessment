@@ -8178,3 +8178,99 @@ The remaining registers, each read by `register_read` with negative controls (90
   register now says so.
 - **The pre-merge policy stage is not built,** so `piy-rsd-cfg-lifecycle-controls` fails until
   policy-as-code lands in week 2.
+
+## 2026-10-05 — Just-in-time elevation built; standing admin retired
+
+KSI-IAM-JIT, approved 2026-10-03. The operator's standing access is now read-only. Any change goes
+through an elevation: a written justification, an `ElevatedAdmin` assignment for 15 to 240
+minutes, and its removal when the window closes. `InterimOperatorAdmin`, standing
+AdministratorAccess since 2026-09-22, lost its assignment on 2026-10-05 at about 22:06 UTC. That
+was applied *as* ElevatedAdmin, from a plan made by the read-only role.
+
+**What was built** (`infra/aws/elevation.tf`, persistent; the boundary is now 18 files and 294
+instances):
+
+| Piece | What it does |
+|---|---|
+| `OperatorReadOnly` | Standing. ReadOnlyAccess, plus starting and stopping an elevation, Athena queries over the evidence (evidence-key decrypt through S3 only), and the Terraform state lock, so a plan runs without elevation |
+| `ElevatedAdmin` | Never standing. AdministratorAccess, 1-hour sessions, every regional action denied outside us-east-1 (AWS's published global-service exemptions) |
+| The workflow | Step Functions, `fedramp-20x-ksi-elevation`. It validates and records the request, assigns, confirms the assignment succeeded, alerts, waits out the window, revokes, and confirms the revocation. The user, the permission set and the account are fixed in the definition, so the input carries only the justification and the window |
+| The backstop | Every 15 minutes, the same function's `sweep` removes any ElevatedAdmin assignment no running elevation accounts for, and stops any elevation older than 255 minutes |
+| The record | Each phase (`requested`, `granted`, `revoked`, `refused`, `swept`) is one JSON object in the log store under `elevations/`, Object Locked and under the evidence key. Also in the workflow's own log group, and in its execution history (90 days) |
+| `infra/aws/elevate.sh` | `start "<why>" [minutes]`, `status`, `release`. Release stops the workflow, and the backstop removes the assignment |
+
+**Proven live:**
+
+- **Test 1 (2026-10-03, 15 minutes):** the grant was confirmed 5 seconds in, and the revocation
+  landed on time at 16:51 EDT. Identity Center then deleted the ElevatedAdmin role from the
+  account. All three records are in the log store.
+  - The helper never reported the grant. It polled with `--max-items`, which makes the CLI print a
+    pagination token on a second line, so the comparison never matched. It now uses
+    `--max-results`.
+  - The operator's elevated sign-in also failed. Their SSO token had expired, and by the time they
+    signed in again the window had closed.
+- **Test 2 (2026-10-05, 15 minutes):** granted in 6 seconds. `sts get-caller-identity` as
+  `caliper-elevated` returned the `AWSReservedSSO_ElevatedAdmin_` role, and the removal apply ran in
+  that session.
+
+**Who does the IAM work, from the corpus.** Assigning a permission set in the management account
+creates its role with the *caller's* credentials. Here that is the workflow role, which is why it
+holds role-provisioning rights confined to `/aws-reserved/sso.amazonaws.com/`. Removing the role is
+done by Identity Center's service-linked role, `AWSServiceRoleForSSO`.
+
+- `iam-elp-ops-aws-iam-mutations-by-platform-engineer` now exempts that role. Its AWS-managed policy
+  confines it to the reserved path.
+- The backstop function also holds removal rights. On this evidence it does not need them, since
+  revocation goes through the service-linked role, but its own revocation path is unexercised.
+  **Trim them after the week 3 deliberate test** proves the sweep revokes without them.
+
+**Checks.** Six new ones, each with negative controls (self-test: 96 assertions):
+
+| Check | Row | Covers |
+|---|---|---|
+| `iam-jit-cfg-aws-elevated-unassigned` | verify 2 | full |
+| `iam-jit-cfg-aws-no-standing-admin` | verify 3 | partial: AWS only; GCP's owner binding stands as break-glass |
+| `iam-jit-cfg-aws-elevated-bounded` | verify 4 | partial: region and session length, not session attributes |
+| `iam-jit-cfg-aws-backstop-scheduled` | verify 5 | full |
+| `iam-jit-ops-aws-elevations-justified` | validate 1 | partial: AWS only |
+| `iam-jit-ops-aws-elevations-within-window` | validate 2 | partial: AWS only |
+
+All six pass live, run as the read-only role during test 2. So does the whole suite run that way,
+apart from the known failures. Coverage is 97 full and 31 partial of 380 rows, across 33 of 40
+determinations.
+
+**Changed to name the new roles.** The `operator_role_pattern` local became
+`operator_role_patterns`: OperatorReadOnly, ElevatedAdmin, and InterimOperatorAdmin until its
+permission set is deleted. The following now cover all three:
+
+- the evidence key's `OperatorUsesThroughS3`
+- the log store's read deny
+- `cna-mat-ops-aws-external-access-declared`
+- `mla-ala-cfg-aws-log-store-reads-restricted`
+- `svc-sin-cfg-aws-keys-decrypt-only-declared`
+
+The evidence key also admits the elevation function, through S3 and SNS only, and Logs for the
+workflow's log group. The drift and collector roles gained `states:Describe*` and `states:List*`.
+Describe returns an execution's input, which is the justification.
+
+**Two judgement calls, for the operator's review:**
+
+- **The standing change exception is narrowed, not closed.** Its recorded closing condition, "JIT
+  built; the standing role then holds no apply right", is met. But the exception it excuses is "a
+  human applies Terraform, not the pipeline", and that is still true, only now inside an elevation.
+  Closing it would leave build row 3 unexcepted. The new closing condition is an apply job in CI.
+- **Config.1 is excepted.** Once the service-linked role cleared its first half, Security Hub
+  reported the second: Config does not record every type an enabled control covers. Recording is
+  scoped to the inventory's 17 types by the 2026-09-05 cost decision, and the exception cites it
+  (review 2027-04-05). Security Hub is now at 100 of 117 controls passing outright, and every
+  failing control is excepted.
+
+**Not done.**
+
+- **The GCP half.** The owner binding stays as break-glass, and Privileged Access Manager
+  entitlements are not built. Every JIT row is AWS-only until they are.
+- **`InterimOperatorAdmin`'s permission set** stays defined but unassigned for one session, as a
+  fallback. Delete it, and drop it from the patterns and checks, at the next session.
+- **validate.3** (revocation observed by a check), **validate.4** (privileged actions correlated to
+  grant windows) and **validate.5** (identity lanes) have no checks yet. Both tests' records show
+  revocation firing, but no check reads them.

@@ -3,14 +3,14 @@
   "indicator": "KSI-IAM-ELP",
   "mechanism": "log_query",
   "evidence_type": "OPS",
-  "description": "Standing query, zero results expected: no IAM write call in the last three days by anyone but the platform engineer's Identity Center role, or by AWS services acting on its behalf",
+  "description": "Standing query, zero results expected: no IAM write call in the last three days by anyone but the platform engineer's elevated Identity Center role (or the interim one until it goes), the elevation workflow and its backstop provisioning that role, Identity Center's service-linked role removing it (its AWS-managed policy confines it to the reserved path), or AWS services acting on their behalf",
   "required_cadence": "3 days",
   "params": {
     "region": "us-east-1",
     "database": "fedramp_20x_ksi_log_corpus",
     "workgroup": "fedramp-20x-ksi-log-corpus",
     "expect": "no_rows",
-    "query": "SELECT dt, actor.user.type AS type, regexp_replace(actor.user.name, '^arn:aws:sts::\\d+:assumed-role/([^/]+)/.*$', '$1') AS actor, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 'iam.amazonaws.com' AND regexp_like(api.operation, '^(Create|Delete|Put|Attach|Detach|Update|Tag|Untag|Add|Remove|Set|Upload|Change|Enable|Deactivate|Reset)') AND status = 'Success' AND actor.user.type <> 'AWSService' AND NOT regexp_like(coalesce(actor.user.name, ''), 'assumed-role/AWSReservedSSO_InterimOperatorAdmin_[0-9a-f]+/') GROUP BY 1,2,3,4 ORDER BY 1 DESC LIMIT 50"
+    "query": "SELECT dt, actor.user.type AS type, regexp_replace(actor.user.name, '^arn:aws:sts::\\d+:assumed-role/([^/]+)/.*$', '$1') AS actor, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.service.name = 'iam.amazonaws.com' AND regexp_like(api.operation, '^(Create|Delete|Put|Attach|Detach|Update|Tag|Untag|Add|Remove|Set|Upload|Change|Enable|Deactivate|Reset)') AND status = 'Success' AND actor.user.type <> 'AWSService' AND NOT regexp_like(coalesce(actor.user.name, ''), 'assumed-role/(AWSReservedSSO_(ElevatedAdmin|InterimOperatorAdmin)_[0-9a-f]+|fedramp-20x-ksi-elevation(-workflow)?|AWSServiceRoleForSSO)/') GROUP BY 1,2,3,4 ORDER BY 1 DESC LIMIT 50"
   },
   "matrix_rows": [
     {

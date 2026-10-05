@@ -1,0 +1,21 @@
+{
+  "id": "iam-jit-cfg-aws-elevated-unassigned",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The elevated permission set (ElevatedAdmin) exists and holds no account assignment except during a running elevation",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "elevated_unassigned",
+    "state_machine": "fedramp-20x-ksi-elevation"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.verify.2",
+      "covers": "full"
+    }
+  ]
+}

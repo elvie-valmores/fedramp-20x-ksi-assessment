@@ -149,7 +149,8 @@ data "aws_iam_policy_document" "log_store_bucket" {
   #   normalize_events     reads raw CloudTrail files to normalize them
   #   run_detection_query  its Athena query reads the corpus as this role
   #   github_collector     its Athena query, and the run history it fetches
-  #   the operator         investigation and break-glass
+  #   the operator         investigation and break-glass: the read-only and
+  #                        elevated roles, and the interim one until it goes
   #
   # The key alone did not close this. Objects written before the evidence key
   # (2026-09-19 to 2026-09-30) are SSE-S3, which anyone holding s3:GetObject
@@ -174,12 +175,11 @@ data "aws_iam_policy_document" "log_store_bucket" {
     condition {
       test     = "ArnNotLike"
       variable = "aws:PrincipalArn"
-      values = [
+      values = concat([
         aws_iam_role.normalize_events.arn,
         aws_iam_role.run_detection_query.arn,
         aws_iam_role.github_collector.arn,
-        local.operator_role_pattern,
-      ]
+      ], local.operator_role_patterns)
     }
   }
 }

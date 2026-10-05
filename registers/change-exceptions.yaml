@@ -21,8 +21,14 @@ entries:
 # Not a modification category: a dated exception to build row 3, which says
 # only the pipeline principal applies declared state. Kept apart so the two
 # categories above stay the only kinds of in-place change.
+#
+# Narrowed on 2026-10-05, not closed: JIT elevation is built and the
+# standing role is read-only, so a human applies only inside a justified,
+# recorded, time-bound elevation. The pipeline still does not apply
+# declared state; that is what closes this.
 standing:
-  - what: A human identity -- the operator's Identity Center role -- applies Terraform, not the pipeline
+  - what: A human identity applies Terraform, not the pipeline -- since 2026-10-05 only as ElevatedAdmin, inside a justified, recorded, time-bound elevation (infra/aws/elevation.tf)
     opened: 2026-09-19
-    reason: The elevation path is KSI-IAM-JIT's, and the dependency is circular -- the pipeline would deploy JIT
-    closing_condition: JIT elevation built (planned for the week of 2026-10-12); the standing role then holds no apply right
+    narrowed: 2026-10-05
+    reason: The pipeline has no apply path. Until 2026-10-05 the operator held AdministratorAccess standing; that half closed when JIT elevation retired InterimOperatorAdmin's assignment
+    closing_condition: An apply job in CI, gated on policy-as-code and a reviewed plan, so declared state is applied by the pipeline principal alone

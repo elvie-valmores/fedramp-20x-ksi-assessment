@@ -1,0 +1,23 @@
+{
+  "id": "iam-jit-cfg-aws-backstop-scheduled",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The elevation backstop's schedule exists, is enabled, runs at least every 15 minutes, and targets the elevation function's sweep",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "elevation_backstop",
+    "rule": "fedramp-20x-ksi-elevation-sweep",
+    "function": "fedramp-20x-ksi-elevation",
+    "max_minutes": 15
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.verify.5",
+      "covers": "full"
+    }
+  ]
+}

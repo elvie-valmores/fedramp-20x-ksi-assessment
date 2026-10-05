@@ -49,6 +49,11 @@
       },
       {
         "type": "log_group",
+        "name": "/aws/vendedlogs/states/fedramp-20x-ksi-*",
+        "expect": "alias/fedramp-20x-ksi-evidence"
+      },
+      {
+        "type": "log_group",
         "name": "/fedramp-20x-ksi/*",
         "expect": "alias/fedramp-20x-ksi-logs"
       },

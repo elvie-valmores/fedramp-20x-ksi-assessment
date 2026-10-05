@@ -1,0 +1,25 @@
+{
+  "id": "iam-jit-cfg-aws-no-standing-admin",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every Identity Center assignment in the account, users and groups alike, is to the standing read-only set; the elevated set counts only while an elevation runs. Fails while InterimOperatorAdmin is still assigned",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "standing_assignments",
+    "standing_allowed": [
+      "OperatorReadOnly"
+    ],
+    "state_machine": "fedramp-20x-ksi-elevation"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.verify.3",
+      "covers": "partial",
+      "gap": "AWS only. In GCP the project owner's binding stands as break-glass, and Privileged Access Manager entitlements are not built."
+    }
+  ]
+}

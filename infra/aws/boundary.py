@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The persistence boundary, derived once and consumed by two callers.
 
-Seventeen files hold everything that survives a teardown. Everything else is the
+Eighteen files hold everything that survives a teardown. Everything else is the
 application environment, rebuilt on the next apply:
 
     log_corpus.tf         the Object Locked store, Athena, Glue
@@ -21,6 +21,7 @@ application environment, rebuilt on the next apply:
     evidence_key.tf       the key the evidence stores encrypt with
     database_key.tf       the key the database and its retained backups use
     collector_identity.tf the collector's CI role
+    elevation.tf          just-in-time elevation: the operator's roles and the workflow
 
 pipeline_identity.tf is not about cost -- an OIDC provider and IAM roles are
 free. It is there because the drift check runs while the application
@@ -96,6 +97,7 @@ PERSISTENT_FILES = {
     "evidence_key.tf",
     "database_key.tf",
     "collector_identity.tf",
+    "elevation.tf",
     "log_corpus.tf",
     "log_normalization.tf",
     "detection.tf",

@@ -3,7 +3,7 @@
   "indicator": "KSI-CNA-MAT",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "OPS",
-  "description": "IAM Access Analyzer's account analyzer is active, and every external access path it finds is on the declared list: the three CI roles federated to GitHub's OIDC provider the pipeline role federated to Google, and the operator's Identity Center role. No public access anywhere",
+  "description": "IAM Access Analyzer's account analyzer is active, and every external access path it finds is on the declared list: the three CI roles federated to GitHub's OIDC provider, the pipeline role federated to Google, and the operator's Identity Center roles (read-only, elevated, and the interim one until it goes). No public access anywhere",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
@@ -27,8 +27,16 @@
         "reason": "The GCP pipeline's service account by numeric ID, through accounts.google.com (cross_cloud.tf)"
       },
       {
+        "resource": "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_OperatorReadOnly_*",
+        "reason": "The operator's standing read-only sign-in: Identity Center's SAML provider, federated to Google Cloud Identity (elevation.tf). The suffix is Identity Center's, hence the pattern"
+      },
+      {
+        "resource": "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_ElevatedAdmin_*",
+        "reason": "The operator's elevated sign-in, present only during a justified elevation (elevation.tf)"
+      },
+      {
         "resource": "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*",
-        "reason": "The operator's sign-in: Identity Center's SAML provider, federated to Google Cloud Identity (identity_center.tf). The suffix is Identity Center's, hence the pattern"
+        "reason": "The interim administrator sign-in (identity_center.tf), until its assignment is removed after the elevation is proven"
       }
     ]
   },

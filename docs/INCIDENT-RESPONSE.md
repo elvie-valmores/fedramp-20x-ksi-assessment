@@ -19,6 +19,8 @@ Each alert is an email to the detection topic's subscriber.
 | Evidence key disable or delete attempt | The evidence key's EventBridge rule | Someone tried to destroy or disable the key protecting the audit store |
 | Normalizer errors | CloudWatch alarm | The log pipeline is failing, so later detections may be blind |
 | Log store growth | CloudWatch alarm | Unexpected volume: a runaway source, or a flood |
+| Elevation granted | The elevation workflow (`infra/aws/elevation.tf`) | Someone was given ElevatedAdmin; the email carries the justification |
+| Elevation backstop acted | The 15-minute backstop | An elevated assignment outlived its elevation and was removed |
 
 ## 1. Triage, within the hour
 
@@ -38,6 +40,15 @@ Each alert is an email to the detection topic's subscriber.
 
 Use the narrowest action that stops the activity.
 
+Every action below changes the account, and the operator's standing role is read-only (since
+2026-10-05). Elevate first, naming the incident:
+```
+infra/aws/elevate.sh start "Incident: <one line on what alerted>" 60
+export AWS_PROFILE=caliper-elevated
+```
+If the elevation path itself is down or suspect, root, with its hardware key, is the break-glass
+path. Triage needs no elevation: the read-only role runs the Athena query above.
+
 **A role's sessions are being misused.** Revoke every session issued before now. New sessions, once
 the cause is fixed, still work.
 ```
@@ -50,7 +61,11 @@ under `emergency_response`.
 
 **The operator's own sign-in is suspect.** Sign out of Google everywhere, rotate the Google password,
 and revoke the Identity Center session from the console (IAM Identity Center, Users, the user, Active
-sessions). Root, with its hardware key, is the break-glass path.
+sessions). End any running elevation (`elevate.sh release`); the backstop removes its assignment
+within 15 minutes. Root, with its hardware key, is the break-glass path.
+
+**An elevation nobody expected.** Every grant emails "Elevation granted" with its justification.
+If you did not start it, release it, then treat it as the case above.
 
 **A workload is misbehaving.** Stop it.
 ```

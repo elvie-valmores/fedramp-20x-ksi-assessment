@@ -598,6 +598,20 @@ def _with(resource, role, member):
     return out
 
 
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+_JIT_NOW = _dt(2026, 10, 3, 12, tzinfo=_tz.utc)
+_HELD = {"permission_set": "ElevatedAdmin", "principal": "u", "principal_type": "USER"}
+_REGION_DENY = {"Statement": [{"Effect": "Deny", "NotAction": ["iam:*"], "Resource": "*",
+                               "Condition": {"StringNotEquals": {"aws:RequestedRegion": "us-east-1"}}}]}
+_RULE = {"Name": "sweep", "State": "ENABLED", "ScheduleExpression": "rate(15 minutes)"}
+_SWEEP = {"Arn": "arn:aws:lambda:us-east-1:1:function:fedramp-20x-ksi-elevation", "Input": '{"action": "sweep"}'}
+
+
+def _running(age_minutes, window):
+    return {"arn": "e", "started": (_JIT_NOW - _td(minutes=age_minutes)).isoformat(), "minutes": window}
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -982,6 +996,49 @@ CFG_CASES = [
         "NotAction": (_GOOD_KEY + [_st({"AWS": _ROLE + "other"}, NotAction="kms:Encrypt")],),
         "grant to undeclared": (_GOOD_KEY, [{"GranteePrincipal": _ROLE + "other", "Operations": ["Decrypt"]}]),
     }),
+    # KSI-IAM-JIT (2026-10-03).
+    ("evaluate_elevated_unassigned", lambda c: cfg.evaluate_elevated_unassigned(*c), (True, [], []), {
+        "no elevated permission set": (False, [], []),
+        "assigned with no elevation running": (True, [_HELD], []),
+    }),
+    ("evaluate_standing_assignments", lambda c: cfg.evaluate_standing_assignments(c, ["OperatorReadOnly"], "ElevatedAdmin", []),
+     [{"permission_set": "OperatorReadOnly", "principal": "u", "principal_type": "USER"}], {
+        "standing admin": [{"permission_set": "OperatorReadOnly", "principal": "u", "principal_type": "USER"},
+                           {"permission_set": "InterimOperatorAdmin", "principal": "u", "principal_type": "USER"}],
+        # Held outside a running elevation, the elevated set is standing too.
+        "elevated with nothing running": [{"permission_set": "OperatorReadOnly", "principal": "u", "principal_type": "USER"}, _HELD],
+        "admin through a group": [{"permission_set": "OperatorReadOnly", "principal": "u", "principal_type": "USER"},
+                                  {"permission_set": "Admins", "principal": "g", "principal_type": "GROUP"}],
+        "no way in": [],
+    }),
+    ("evaluate_elevated_bounded", lambda c: cfg.evaluate_elevated_bounded(True, c[0], c[1], 3600, "us-east-1"), (3600, _REGION_DENY), {
+        "long session": (14400, _REGION_DENY),
+        "no region deny": (3600, {"Statement": []}),
+        "deny for another region": (3600, {"Statement": [{**_REGION_DENY["Statement"][0],
+                                                          "Condition": {"StringNotEquals": {"aws:RequestedRegion": "us-west-2"}}}]}),
+        "an Allow, not a Deny": (3600, {"Statement": [{**_REGION_DENY["Statement"][0], "Effect": "Allow"}]}),
+    }),
+    ("evaluate_elevation_backstop", lambda c: cfg.evaluate_elevation_backstop(*c, "fedramp-20x-ksi-elevation", 15), (_RULE, [_SWEEP]), {
+        "no schedule": (None, []),
+        "disabled": ({**_RULE, "State": "DISABLED"}, [_SWEEP]),
+        "hourly": ({**_RULE, "ScheduleExpression": "rate(1 hour)"}, [_SWEEP]),
+        "every 30 minutes": ({**_RULE, "ScheduleExpression": "rate(30 minutes)"}, [_SWEEP]),
+        "targets another function": (_RULE, [{**_SWEEP, "Arn": "arn:aws:lambda:us-east-1:1:function:other"}]),
+        "runs something but the sweep": (_RULE, [{**_SWEEP, "Input": '{"action": "request"}'}]),
+    }),
+    ("evaluate_elevations_within_window", lambda c: cfg.evaluate_elevations_within_window(*c, _JIT_NOW, 15),
+     ([_HELD], [_running(30, 60)]), {
+        "assignment with nothing running": ([_HELD], []),
+        "running past its window": ([_HELD], [_running(80, 60)]),
+        "window unreadable": ([_HELD], [_running(10, None)]),
+    }),
+    ("evaluate_elevations_justified", cfg.evaluate_elevations_justified,
+     [{"arn": "a", "status": "SUCCEEDED", "input": {"justification": "x" * 20, "minutes": 30}},
+      {"arn": "b", "status": "FAILED", "input": {"justification": "short"}}], {
+        "short justification granted": [{"arn": "a", "status": "SUCCEEDED", "input": {"justification": "short"}}],
+        "window past the longest, running": [{"arn": "a", "status": "RUNNING", "input": {"justification": "x" * 20, "minutes": 600}}],
+        "no justification, stopped": [{"arn": "a", "status": "ABORTED", "input": {}}],
+    }),
 ]
 
 
@@ -1038,6 +1095,12 @@ CFG_RESOURCES = {
     "evaluate_scheduled_functions": "scheduled_functions",
     "evaluate_certificates": "acm_certificates",
     "evaluate_dataset_access": "bigquery_dataset_access",
+    "evaluate_elevated_unassigned": "elevated_unassigned",
+    "evaluate_standing_assignments": "standing_assignments",
+    "evaluate_elevated_bounded": "elevated_bounded",
+    "evaluate_elevation_backstop": "elevation_backstop",
+    "evaluate_elevations_within_window": "elevations_within_window",
+    "evaluate_elevations_justified": "elevations_justified",
     "evaluate_alarms_target": "alarms_target",
     "evaluate_registry_scanning": "registry_scanning",
     "evaluate_registries_immutable": "registries_immutable",

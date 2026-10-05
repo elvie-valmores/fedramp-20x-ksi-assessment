@@ -154,6 +154,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
+        if provider == "aws" and resource in ELEVATION_RESOURCES:
+            return self._aws_elevation(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -1136,6 +1138,89 @@ class CloudAPIConfigRead(Mechanism):
             policy = None
         ok, detail = evaluate_read_deny(policy, bucket, check.params["readers"])
         return CheckResult(check.id, ok, {"policy": policy}, detail)
+
+    def _aws_elevation(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-JIT: the elevation's configuration and what it has done.
+
+        Requires params: region, elevated (the permission set's name), and per
+        resource: standing_allowed (standing_assignments), max_session_seconds
+        and home_region (elevated_bounded), rule, function and max_minutes
+        (elevation_backstop), state_machine, allowance_minutes and
+        lookback_days (elevations_within_window, elevations_justified). The
+        account's assignments are read for every principal, groups included,
+        so access through a group is not missed.
+        """
+        p, resource = check.params, check.params["resource"]
+        region = p["region"]
+        account = boto3.client("sts").get_caller_identity()["Account"]
+        sso = boto3.client("sso-admin", region_name=region)
+
+        if resource == "elevation_backstop":
+            events = boto3.client("events", region_name=region)
+            try:
+                rule = events.describe_rule(Name=p["rule"])
+                targets = events.list_targets_by_rule(Rule=p["rule"])["Targets"]
+            except events.exceptions.ResourceNotFoundException:
+                rule, targets = None, []
+            ok, detail, evidence = evaluate_elevation_backstop(rule, targets, p["function"], p["max_minutes"])
+            return CheckResult(check.id, ok, evidence, detail)
+
+        instance = sso.list_instances()["Instances"][0]["InstanceArn"]
+        sets = {}
+        for page in sso.get_paginator("list_permission_sets").paginate(InstanceArn=instance):
+            for arn in page["PermissionSets"]:
+                sets[arn] = sso.describe_permission_set(InstanceArn=instance, PermissionSetArn=arn)["PermissionSet"]
+        elevated = next((arn for arn, ps in sets.items() if ps["Name"] == p["elevated"]), None)
+
+        if resource == "elevated_bounded":
+            policy = None
+            if elevated:
+                inline = sso.get_inline_policy_for_permission_set(InstanceArn=instance, PermissionSetArn=elevated)
+                policy = json.loads(inline["InlinePolicy"]) if inline.get("InlinePolicy") else None
+            session = _iso_duration_seconds(sets[elevated].get("SessionDuration", "PT1H")) if elevated else None
+            ok, detail, evidence = evaluate_elevated_bounded(elevated is not None, session, policy,
+                                                             p["max_session_seconds"], p["home_region"])
+            return CheckResult(check.id, ok, evidence, detail)
+
+        assigned = []
+        for arn, ps in sets.items():
+            for page in sso.get_paginator("list_account_assignments").paginate(
+                    InstanceArn=instance, AccountId=account, PermissionSetArn=arn):
+                assigned += [{"permission_set": ps["Name"], "principal": a["PrincipalId"],
+                              "principal_type": a["PrincipalType"]} for a in page["AccountAssignments"]]
+
+        sfn = boto3.client("stepfunctions", region_name=region)
+        machine = f"arn:aws:states:{region}:{account}:stateMachine:{p.get('state_machine', 'fedramp-20x-ksi-elevation')}"
+        executions = []
+        try:
+            for page in sfn.get_paginator("list_executions").paginate(stateMachineArn=machine):
+                executions += page["executions"]
+        except sfn.exceptions.StateMachineDoesNotExist:
+            pass
+        running = [{"arn": e["executionArn"], "started": e["startDate"].isoformat(),
+                    "minutes": _requested_minutes(sfn, e["executionArn"])}
+                   for e in executions if e["status"] == "RUNNING"]
+
+        if resource == "elevated_unassigned":
+            held = [a for a in assigned if a["permission_set"] == p["elevated"]]
+            ok, detail, evidence = evaluate_elevated_unassigned(elevated is not None, held, running)
+        elif resource == "standing_assignments":
+            ok, detail, evidence = evaluate_standing_assignments(assigned, p["standing_allowed"], p["elevated"], running)
+        elif resource == "elevations_within_window":
+            held = [a for a in assigned if a["permission_set"] == p["elevated"]]
+            ok, detail, evidence = evaluate_elevations_within_window(
+                held, running, datetime.now(timezone.utc), p["allowance_minutes"])
+        else:  # elevations_justified
+            since = datetime.now(timezone.utc).timestamp() - p["lookback_days"] * 86400
+            recent = []
+            for e in executions:
+                if e["startDate"].timestamp() < since:
+                    continue
+                described = sfn.describe_execution(executionArn=e["executionArn"])
+                recent.append({"arn": e["executionArn"], "status": e["status"],
+                               "input": json.loads(described.get("input") or "{}")})
+            ok, detail, evidence = evaluate_elevations_justified(recent)
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _gcp_pinned_image_present(self, check: CheckDefinition) -> CheckResult:
         """The image the pipeline is pinned to still exists in its registry.
@@ -2768,3 +2853,139 @@ def evaluate_decrypt_principals(resolved: dict[str, list[dict]],
     if failing:
         return False, f"{len(failing)} of {len(resolved)} keys fail: {', '.join(failing)}", evidence
     return True, f"all {len(resolved)} keys decrypt only for declared principals", evidence
+
+
+# --- KSI-IAM-JIT (2026-10-03) ---
+
+ELEVATION_RESOURCES = {"elevated_unassigned", "standing_assignments", "elevated_bounded",
+                       "elevation_backstop", "elevations_within_window", "elevations_justified"}
+# The workflow's own bounds (lambda/elevation/handler.py), restated here so
+# a check that judges the history does not trust the code it is judging.
+ELEVATION_MIN_JUSTIFICATION, ELEVATION_MINUTES = 20, (15, 240)
+
+
+def _requested_minutes(sfn, execution_arn: str) -> int | None:
+    request = json.loads(sfn.describe_execution(executionArn=execution_arn).get("input") or "{}")
+    minutes = request.get("minutes", 60)
+    return minutes if isinstance(minutes, int) and not isinstance(minutes, bool) else None
+
+
+def evaluate_elevated_unassigned(exists: bool, held: list[dict], running: list[dict]) -> tuple[bool, str, dict]:
+    """verify 2: the elevated permission set exists and nothing holds it outside an elevation."""
+    evidence = {"assignments": held, "running_elevations": running}
+    if not exists:
+        return False, "no elevated permission set -- there is nothing to elevate to", evidence
+    if held and not running:
+        return False, f"{len(held)} elevated assignment(s) with no running elevation", evidence
+    if held:
+        return True, f"assigned only for {len(running)} running elevation(s)", evidence
+    return True, "the elevated permission set exists with no assignment", evidence
+
+
+def evaluate_standing_assignments(assigned: list[dict], allowed: list[str], elevated: str,
+                                  running: list[dict]) -> tuple[bool, str, dict]:
+    """verify 3: every assignment in the account is a declared standing one,
+    or the elevated set held during a running elevation."""
+    standing = [a for a in assigned if not (a["permission_set"] == elevated and running)]
+    undeclared = [a for a in standing if a["permission_set"] not in allowed]
+    evidence = {"assignments": assigned, "allowed": allowed, "undeclared": undeclared}
+    if not standing:
+        return False, "no standing assignment -- the operator has no way in", evidence
+    if undeclared:
+        names = sorted({a["permission_set"] for a in undeclared})
+        return False, f"standing assignment(s) outside the declared set: {', '.join(names)}", evidence
+    return True, f"{len(standing)} standing assignment(s), all to {', '.join(allowed)}", evidence
+
+
+def evaluate_elevated_bounded(exists: bool, session_seconds: int | None, policy: dict | None,
+                              max_session: int, home_region: str) -> tuple[bool, str, dict]:
+    """verify 4: the elevated session is short, and its policy denies outside the home region."""
+    evidence = {"session_seconds": session_seconds, "inline_policy": policy}
+    if not exists:
+        return False, "no elevated permission set", evidence
+    problems = []
+    if session_seconds is None or session_seconds > max_session:
+        problems.append(f"session {session_seconds}s exceeds {max_session}s")
+    bounded = False
+    for st in (policy or {}).get("Statement", []):
+        if st.get("Effect") != "Deny" or _as_list(st.get("Resource", [])) != ["*"]:
+            continue
+        cond = (st.get("Condition") or {}).get("StringNotEquals", {})
+        if _as_list(cond.get("aws:RequestedRegion", [])) == [home_region] and (st.get("NotAction") or st.get("Action") == "*"):
+            bounded = True
+    if not bounded:
+        problems.append(f"no Deny outside {home_region} on aws:RequestedRegion")
+    if problems:
+        return False, "; ".join(problems), evidence
+    return True, f"session at most {session_seconds}s, denied outside {home_region}", evidence
+
+
+def evaluate_elevation_backstop(rule: dict | None, targets: list[dict], function: str,
+                                max_minutes: int) -> tuple[bool, str, dict]:
+    """verify 5: the backstop's schedule exists, is enabled, is frequent, and runs the sweep."""
+    import re
+
+    evidence = {"rule": {k: rule.get(k) for k in ("Name", "State", "ScheduleExpression")} if rule else None,
+                "targets": [{"arn": t.get("Arn"), "input": t.get("Input")} for t in targets]}
+    if not rule:
+        return False, "no backstop schedule", evidence
+    problems = []
+    if rule.get("State") != "ENABLED":
+        problems.append(f"schedule is {rule.get('State')}")
+    match = re.fullmatch(r"rate\((\d+) minutes?\)", rule.get("ScheduleExpression") or "")
+    if not match or int(match.group(1)) > max_minutes:
+        problems.append(f"schedule {rule.get('ScheduleExpression')!r} is not every {max_minutes} minutes or less")
+    sweeps = [t for t in targets if (t.get("Arn") or "").endswith(f":function:{function}")
+              and json.loads(t.get("Input") or "{}").get("action") == "sweep"]
+    if not sweeps:
+        problems.append(f"no target runs {function}'s sweep")
+    if problems:
+        return False, "; ".join(problems), evidence
+    return True, f"{rule['ScheduleExpression']}, enabled, running the sweep", evidence
+
+
+def evaluate_elevations_within_window(held: list[dict], running: list[dict], now: datetime,
+                                      allowance_minutes: int) -> tuple[bool, str, dict]:
+    """validate 2: no elevated assignment outlives its window.
+
+    An assignment no running elevation accounts for has outlived its window
+    by definition. A running elevation past its requested minutes plus the
+    allowance -- the grant, the revocation and one backstop interval -- is
+    overdue, and so is one whose window cannot be read.
+    """
+    overdue = []
+    for e in running:
+        started = datetime.fromisoformat(e["started"])
+        if e["minutes"] is None or (now - started).total_seconds() > (e["minutes"] + allowance_minutes) * 60:
+            overdue.append(e)
+    evidence = {"assignments": held, "running_elevations": running, "overdue": overdue}
+    if held and not running:
+        return False, f"{len(held)} elevated assignment(s) outside any elevation", evidence
+    if overdue:
+        return False, f"{len(overdue)} elevation(s) past their window", evidence
+    return True, f"{len(held)} elevated assignment(s), {len(running)} running elevation(s), none past its window", evidence
+
+
+def evaluate_elevations_justified(executions: list[dict]) -> tuple[bool, str, dict]:
+    """validate 1: every elevation that could have been granted carried a
+    justification and a window within bounds.
+
+    The workflow refuses the rest before granting, so a refused request
+    that did not end FAILED means the refusal did not hold.
+    """
+    low, high = ELEVATION_MINUTES
+    unjustified = []
+    for e in executions:
+        request = e["input"]
+        minutes = request.get("minutes", 60)
+        valid = (len(str(request.get("justification") or "").strip()) >= ELEVATION_MIN_JUSTIFICATION
+                 and isinstance(minutes, int) and not isinstance(minutes, bool) and low <= minutes <= high)
+        if not valid and e["status"] != "FAILED":
+            unjustified.append({"arn": e["arn"], "status": e["status"]})
+    evidence = {"executions": [{"arn": e["arn"], "status": e["status"],
+                                "justification": e["input"].get("justification"),
+                                "minutes": e["input"].get("minutes", 60)} for e in executions],
+                "unjustified": unjustified}
+    if unjustified:
+        return False, f"{len(unjustified)} elevation(s) proceeded without a valid justification and window", evidence
+    return True, f"{len(executions)} elevation(s) in the window, each justified and bounded or refused", evidence

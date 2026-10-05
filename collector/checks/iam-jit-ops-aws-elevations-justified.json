@@ -1,0 +1,23 @@
+{
+  "id": "iam-jit-ops-aws-elevations-justified",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every elevation started in the last three days carried a justification of at least 20 characters and a window of 15 to 240 minutes, or was refused before any grant",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "resource": "elevations_justified",
+    "state_machine": "fedramp-20x-ksi-elevation",
+    "lookback_days": 3
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.validate.1",
+      "covers": "partial",
+      "gap": "AWS only: GCP Privileged Access Manager grants are not built."
+    }
+  ]
+}

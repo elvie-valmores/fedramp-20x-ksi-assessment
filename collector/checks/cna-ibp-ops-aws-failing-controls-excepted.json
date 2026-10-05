@@ -82,7 +82,7 @@
       },
       {
         "control": "IAM.18",
-        "reason": "The operator's Identity Center role (InterimOperatorAdmin) holds AWS Support access; a separate support role would be a second standing identity for a two-person team. Decided 2026-10-03.",
+        "reason": "The operator reaches AWS Support through an elevation (ElevatedAdmin, elevation.tf); a separate support role would be a second identity for a two-person team. Decided 2026-10-03.",
         "review_by": "2027-04-03"
       },
       {
@@ -129,6 +129,11 @@
         "control": "GuardDuty.12",
         "reason": "As GuardDuty.11, for ECS specifically. Decided 2026-10-03.",
         "review_by": "2026-11-03"
+      },
+      {
+        "control": "Config.1",
+        "reason": "Config records the 17 types the inventory reconciles, not every type an enabled control covers: Config bills per configuration item and the environment is rebuilt every session (DECISIONS.md, 2026-09-05). The control's other half, the service-linked role, is remediated (2026-10-03). Decided 2026-10-05.",
+        "review_by": "2027-04-05"
       }
     ]
   },
