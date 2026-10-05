@@ -1,0 +1,24 @@
+{
+  "id": "mla-evc-ops-every-push-evaluated",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing, zero expected: no push to main without a policy evaluation. Each run names its push range, and the ranges must chain from the gate's first run to main's head",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "github",
+    "resource": "pushes_evaluated",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
+    "workflow": "policy.yml",
+    "since": "2026-10-05",
+    "judge": "evaluated",
+    "grace_minutes": 60
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.validate.4",
+      "covers": "partial",
+      "gap": "The project pushes to main rather than merging pull requests, so each push is evaluated once it lands, not before: a failing evaluation is a finding to fix or except before the change is applied, not a blocked merge."
+    }
+  ]
+}

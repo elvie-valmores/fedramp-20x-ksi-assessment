@@ -75,6 +75,13 @@ class RegisterRead(Mechanism):
         elif p["assertion"] == "secrets_owned":
             members = [r for r in _inventory(p["region"], p["project_id"]) if r["resource_type"] in p["types"]]
             ok, detail, evidence = evaluate_secrets_owned(members, register)
+        elif p["assertion"] == "policy_coverage":
+            rules = sorted((REPO / "policy" / "rules").glob("*.rego"))
+            sources = {f.name: f.read_text() for f in rules if not f.name.endswith("_test.rego")}
+            ok, detail, evidence = evaluate_policy_coverage(sources, register)
+        elif p["assertion"] == "policy_exceptions_bounded":
+            import datetime as dt
+            ok, detail, evidence = evaluate_policy_exceptions(register.get("exceptions") or [], dt.date.today())
         else:
             raise NotImplementedError(f"register_read has no assertion {p['assertion']!r}")
         return CheckResult(check.id, ok, evidence, detail)
@@ -100,6 +107,10 @@ def _third_parties_used(region: str, project_id: str, also_used: list[dict]) -> 
 
     used = [{"inventory_cloud": c} for c in sorted({r["cloud"] for r in _inventory(region, project_id)})]
     for wf in sorted((REPO / ".github" / "workflows").glob("*.yml")):
+        # Tools fetched as release binaries rather than as actions (the
+        # policy gate's OPA and Trivy, 2026-10-05).
+        for repo in re.findall(r"github\.com/([\w.-]+/[\w.-]+)/releases/download", wf.read_text()):
+            used.append({"release_download": repo})
         for job in (yaml.safe_load(wf.read_text()) or {}).get("jobs", {}).values():
             for ref in [job.get("uses")] + [s.get("uses") for s in job.get("steps") or []]:
                 if ref and not ref.startswith("./"):
@@ -443,3 +454,43 @@ def evaluate_register_coverage(counts: dict[str, int], register: dict, dimension
     if problems:
         return False, f"{len(problems)} class(es) without a valid {dimension} position: {', '.join(sorted(problems))}", evidence
     return True, f"all {len(counts)} inventoried classes carry a recorded {dimension} position", evidence
+
+
+# --- The policy gate's registers (KSI-MLA-EVC, 2026-10-05) ---
+#
+# The judgements are the gate's own (policy/gate.py), imported rather than
+# restated, so CI and the collector cannot disagree about what counts.
+
+def _gate():
+    import sys
+    if str(REPO / "policy") not in sys.path:
+        sys.path.insert(0, str(REPO / "policy"))
+    import gate
+    return gate
+
+
+def evaluate_policy_coverage(rule_sources: dict[str, str], coverage: dict) -> tuple[bool, str, dict]:
+    """verify 1: every authored rule mapped, every mapping a rule, none unmapped to a determination."""
+    gate = _gate()
+    ids = {m for text in rule_sources.values() for m in gate.RULE_ID.findall(text)}
+    problems = gate.coverage_problems(ids, coverage)
+    evidence = {"rules": sorted(ids), "mapped": sorted((coverage.get("rules") or {})), "problems": problems}
+    if not ids:
+        return False, "no authored rules found -- nothing is mapped", evidence
+    if problems:
+        return False, f"{len(problems)} coverage problem(s): {problems[0]}", evidence
+    return True, f"all {len(ids)} authored rules mapped to determinations, with severities", evidence
+
+
+def evaluate_policy_exceptions(exceptions: list[dict], today) -> tuple[bool, str, dict]:
+    """verify 4: every exception carries a reason and an expiry, and none has lapsed unreviewed."""
+    gate = _gate()
+    problems = gate.exception_problems(exceptions)
+    expired = [f"{e.get('rule')} on {e.get('root')}:{e.get('address')} (expired {e['expires']})"
+               for e in exceptions if hasattr(e.get("expires"), "year") and e["expires"] < today]
+    evidence = {"exceptions": len(exceptions), "problems": problems, "expired": expired}
+    if problems:
+        return False, f"{len(problems)} incomplete exception(s): {problems[0]}", evidence
+    if expired:
+        return False, f"{len(expired)} exception(s) past their expiry: {expired[0]}", evidence
+    return True, f"{len(exceptions)} exception(s), each with a reason and a future expiry", evidence

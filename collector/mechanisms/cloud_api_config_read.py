@@ -156,6 +156,10 @@ class CloudAPIConfigRead(Mechanism):
             return self._github_workflow_active(check)
         if provider == "aws" and resource in ELEVATION_RESOURCES:
             return self._aws_elevation(check)
+        if provider == "github" and resource == "pushes_evaluated":
+            return self._github_pushes_evaluated(check)
+        if provider == "github" and resource == "deliberate_test":
+            return self._github_deliberate_test(check)
 
         raise NotImplementedError(
             f"cloud_api_config_read has no handler for provider={provider!r} "
@@ -1138,6 +1142,57 @@ class CloudAPIConfigRead(Mechanism):
             policy = None
         ok, detail = evaluate_read_deny(policy, bucket, check.params["readers"])
         return CheckResult(check.id, ok, {"policy": policy}, detail)
+
+    def _github_pushes_evaluated(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-EVC validate 4 and 5: every push to main evaluated, and passed.
+
+        Requires params: repository, workflow, since (the first evaluated
+        push), judge ("evaluated" or "passed"), grace_minutes. Each run names
+        its push as `policy <before>..<after>` (policy.yml's run-name), so
+        consecutive pushes must chain: a run whose before is not the last
+        run's after is a push nobody evaluated. Main's head must be the last
+        run's after once the grace has passed.
+        """
+        p = check.params
+        runs, page = [], 1
+        while True:
+            batch = _github_get(f"repos/{p['repository']}/actions/workflows/{p['workflow']}/runs"
+                                f"?branch=main&event=push&per_page=100&page={page}&created=>={p['since']}")
+            runs += batch["workflow_runs"]
+            if len(batch["workflow_runs"]) < 100:
+                break
+            page += 1
+        parsed = [{"title": r["display_title"], "head": r["head_sha"], "created": r["created_at"],
+                   "status": r["status"], "conclusion": r["conclusion"], "url": r["html_url"]} for r in runs]
+        head = _github_get(f"repos/{p['repository']}/commits/main")
+        main = {"sha": head["sha"], "pushed": head["commit"]["committer"]["date"]}
+        if p["judge"] == "evaluated":
+            ok, detail, evidence = evaluate_pushes_chained(parsed, main, datetime.now(timezone.utc), p["grace_minutes"])
+        else:
+            ok, detail, evidence = evaluate_pushes_passed(parsed)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _github_deliberate_test(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-EVC validate 1 to 3: the deliberate test passed, recently.
+
+        Requires params: repository, workflow, job, step, max_age_days. The
+        latest completed run on main is read, whatever triggered it; its
+        step's own conclusion is what counts, not the run's, which also
+        carries the evaluation.
+        """
+        p = check.params
+        runs = _github_get(f"repos/{p['repository']}/actions/workflows/{p['workflow']}/runs"
+                           f"?branch=main&status=completed&per_page=1")["workflow_runs"]
+        latest, step = (runs[0] if runs else None), None
+        if latest:
+            jobs = _github_get(f"repos/{p['repository']}/actions/runs/{latest['id']}/jobs")["jobs"]
+            job = next((j for j in jobs if j["name"] == p["job"]), None)
+            step = next((s for s in (job or {}).get("steps", []) if s["name"] == p["step"]), None)
+        ok, detail, evidence = evaluate_deliberate_test(
+            latest and {"created": latest["created_at"], "url": latest["html_url"], "head": latest["head_sha"]},
+            step and {"name": step["name"], "conclusion": step["conclusion"]},
+            datetime.now(timezone.utc), p["max_age_days"])
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_elevation(self, check: CheckDefinition) -> CheckResult:
         """KSI-IAM-JIT: the elevation's configuration and what it has done.
@@ -2989,3 +3044,92 @@ def evaluate_elevations_justified(executions: list[dict]) -> tuple[bool, str, di
     if unjustified:
         return False, f"{len(unjustified)} elevation(s) proceeded without a valid justification and window", evidence
     return True, f"{len(executions)} elevation(s) in the window, each justified and bounded or refused", evidence
+
+
+# --- KSI-MLA-EVC, from GitHub (2026-10-05) ---
+
+def _github_get(path: str) -> dict:
+    """GET from GitHub's API. Token: GITHUB_TOKEN (CI), else the gh CLI's."""
+    import os
+    import subprocess
+    import urllib.request
+
+    token = os.environ.get("GITHUB_TOKEN") or subprocess.run(
+        ["gh", "auth", "token"], capture_output=True, text=True, check=True).stdout.strip()
+    request = urllib.request.Request(f"https://api.github.com/{path}", headers={
+        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read())
+
+
+def _push_range(title: str) -> tuple[str, str] | None:
+    import re
+
+    m = re.fullmatch(r"policy ([0-9a-f]{40}|none)\.\.([0-9a-f]{40})", title or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def evaluate_pushes_chained(runs: list[dict], main: dict, now: datetime,
+                            grace_minutes: int) -> tuple[bool, str, dict]:
+    """validate 4: the evaluated pushes chain without a gap, up to main's head.
+
+    The first run in the window anchors the chain; its own before is not
+    judged, since the push before it predates the gate.
+    """
+    ordered = sorted(runs, key=lambda r: r["created"])
+    gaps, unreadable, previous = [], [], None
+    for r in ordered:
+        rng = _push_range(r["title"])
+        if rng is None or rng[1] != r["head"]:
+            unreadable.append(r["title"])
+            continue
+        if previous is not None and rng[0] != previous:
+            gaps.append({"after": previous, "next_run_before": rng[0], "run": r["url"]})
+        previous = rng[1]
+    pushed = datetime.fromisoformat(main["pushed"].replace("Z", "+00:00"))
+    head_pending = main["sha"] != previous and (now - pushed).total_seconds() > grace_minutes * 60
+    evidence = {"runs": len(ordered), "gaps": gaps, "unreadable": unreadable, "main": main,
+                "last_evaluated": previous}
+    if not ordered:
+        return False, "no evaluated push -- the gate has not run on main", evidence
+    if unreadable:
+        return False, f"{len(unreadable)} run(s) without a readable push range", evidence
+    if gaps:
+        return False, f"{len(gaps)} push(es) to main with no evaluation", evidence
+    if head_pending:
+        return False, f"main's head {main['sha'][:12]} has no evaluation after {grace_minutes} minutes", evidence
+    return True, f"{len(ordered)} push(es) to main, each evaluated, chained to the head", evidence
+
+
+def evaluate_pushes_passed(runs: list[dict]) -> tuple[bool, str, dict]:
+    """validate 5: no push to main whose evaluation failed.
+
+    A failure is a declared configuration above the threshold, landed. Runs
+    still in progress are not judged yet.
+    """
+    done = [r for r in runs if r["status"] == "completed"]
+    failed = [{"title": r["title"], "conclusion": r["conclusion"], "url": r["url"]}
+              for r in done if r["conclusion"] != "success"]
+    evidence = {"completed": len(done), "failed": failed}
+    if not done:
+        return False, "no completed evaluation of a push -- nothing to judge", evidence
+    if failed:
+        return False, f"{len(failed)} push(es) to main failed the gate", evidence
+    return True, f"all {len(done)} evaluated push(es) passed the gate", evidence
+
+
+def evaluate_deliberate_test(run: dict | None, step: dict | None, now: datetime,
+                             max_age_days: int) -> tuple[bool, str, dict]:
+    """validate 1-3: the deliberate test's step succeeded on a run young enough."""
+    evidence = {"run": run, "step": step}
+    if run is None:
+        return False, "the policy workflow has no completed run on main", evidence
+    age = (now - datetime.fromisoformat(run["created"].replace("Z", "+00:00"))).total_seconds() / 86400
+    evidence["age_days"] = round(age, 2)
+    if step is None:
+        return False, "the latest run has no deliberate test step", evidence
+    if step["conclusion"] != "success":
+        return False, f"the deliberate test concluded {step['conclusion']}", evidence
+    if age > max_age_days:
+        return False, f"the latest deliberate test is {age:.1f} days old, over {max_age_days}", evidence
+    return True, f"the deliberate test passed {age:.1f} days ago", evidence

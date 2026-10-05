@@ -1,0 +1,21 @@
+{
+  "id": "mla-evc-cfg-evaluates-plan-json",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The policy workflow renders each root's plan as JSON before the gate evaluates it: the gate reads plans, not source",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "policy.yml",
+    "assertion": "step_precedes",
+    "job": "evaluate",
+    "before": "render the plans as JSON",
+    "after": "evaluate the plans"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.verify.3",
+      "covers": "full"
+    }
+  ]
+}

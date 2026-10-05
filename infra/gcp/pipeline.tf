@@ -26,9 +26,21 @@ resource "google_service_account" "pipeline" {
 # an inline IAM policy for service identities, so the honest position is
 # narrow predefined roles scoped to single resources, with the difference
 # from the AWS side declared rather than papered over.
-resource "google_storage_bucket_iam_member" "pipeline_landing" {
+#
+# The job writes each load as a new, timestamped object and BigQuery's load
+# job reads it back as the job's identity: create and read, nothing more.
+# Until 2026-10-05 this was storage.objectAdmin, which also overwrites,
+# deletes and sets object ACLs; the policy gate's scanner found it (Trivy
+# GCP-0007, KSI-MLA-EVC).
+resource "google_storage_bucket_iam_member" "pipeline_landing_write" {
   bucket = google_storage_bucket.landing.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.pipeline.email}"
+}
+
+resource "google_storage_bucket_iam_member" "pipeline_landing_read" {
+  bucket = google_storage_bucket.landing.name
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.pipeline.email}"
 }
 

@@ -1,0 +1,24 @@
+{
+  "id": "mla-evc-ops-no-failed-push",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing, zero expected: no push to main whose policy evaluation failed, which would be a finding at or above the declared severity landed on main",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "github",
+    "resource": "pushes_evaluated",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
+    "workflow": "policy.yml",
+    "since": "2026-10-05",
+    "judge": "passed",
+    "grace_minutes": 60
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.validate.5",
+      "covers": "partial",
+      "gap": "The project pushes to main rather than merging pull requests, so each push is evaluated once it lands, not before: a failing evaluation is a finding to fix or except before the change is applied, not a blocked merge."
+    }
+  ]
+}

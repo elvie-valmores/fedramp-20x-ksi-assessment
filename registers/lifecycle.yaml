@@ -9,12 +9,12 @@
 
 stages:
   - name: pre-merge policy evaluation
-    control: Policy rules evaluated against the Terraform plan (KSI-MLA-EVC)
-    criterion: No rule at or above the declared severity fails
+    control: Policy rules evaluated against the Terraform plan of all three roots -- 20 authored rules (OPA) and the scanner's (Trivy) -- by policy.yml (KSI-MLA-EVC)
+    criterion: No finding at or above HIGH, unless an unexpired exception in policy/exceptions.yaml names it
     failure_stops: The change, before it is applied
-    status: not_built
-    evidence: []
-    note: Planned for the week of 2026-10-12. The project pushes to main, so it runs on every push rather than gating a merge
+    status: built
+    evidence: [mla-evc-cfg-evaluates-plan-json, mla-evc-ops-every-push-evaluated, mla-evc-ops-no-failed-push, mla-evc-ops-deliberate-test-passed]
+    note: Built 2026-10-05. The project pushes to main, so it runs on every push rather than gating a merge -- it judges a change after it lands and before it is applied
 
   - name: build
     control: Hashed, fully pinned manifests; dependency audit against OSV; images built and signed with cosign (KSI-SCR-MIT, KSI-SCR-MON, KSI-SVC-VRI)

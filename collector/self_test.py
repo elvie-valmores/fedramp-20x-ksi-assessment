@@ -612,6 +612,15 @@ def _running(age_minutes, window):
     return {"arn": "e", "started": (_JIT_NOW - _td(minutes=age_minutes)).isoformat(), "minutes": window}
 
 
+def _sha(c):
+    return (c * 40)[:40]
+
+
+def _push(before, after, minute):
+    return {"title": f"policy {_sha(before)}..{_sha(after)}", "head": _sha(after),
+            "created": f"2026-10-03T10:{minute}:00Z", "status": "completed", "conclusion": "success", "url": "u"}
+
+
 CFG_CASES = [
     ("evaluate_tls_only", lambda c: cfg.evaluate_tls_only(c), _tls(), {
         "no policy": None,
@@ -1039,6 +1048,27 @@ CFG_CASES = [
         "window past the longest, running": [{"arn": "a", "status": "RUNNING", "input": {"justification": "x" * 20, "minutes": 600}}],
         "no justification, stopped": [{"arn": "a", "status": "ABORTED", "input": {}}],
     }),
+    # KSI-MLA-EVC (2026-10-05).
+    ("evaluate_pushes_chained", lambda c: cfg.evaluate_pushes_chained(c[0], c[1], _JIT_NOW, 30),
+     ([_push("a", "b", "00"), _push("b", "c", "01")], {"sha": _sha("c"), "pushed": "2026-10-03T11:00:00Z"}), {
+        "a push skipped": ([_push("a", "b", "00"), _push("x", "c", "01")], {"sha": _sha("c"), "pushed": "2026-10-03T11:00:00Z"}),
+        "head never evaluated": ([_push("a", "b", "00")], {"sha": _sha("c"), "pushed": "2026-10-03T11:00:00Z"}),
+        "run without a range": ([{**_push("a", "b", "00"), "title": "policy"}], {"sha": _sha("b"), "pushed": "2026-10-03T11:00:00Z"}),
+        "no runs": ([], {"sha": _sha("b"), "pushed": "2026-10-03T11:00:00Z"}),
+    }),
+    ("evaluate_pushes_passed", cfg.evaluate_pushes_passed, [_push("a", "b", "00")], {
+        "a failed push": [_push("a", "b", "00"), {**_push("b", "c", "01"), "conclusion": "failure"}],
+        "cancelled": [{**_push("a", "b", "00"), "conclusion": "cancelled"}],
+        "nothing completed": [{**_push("a", "b", "00"), "status": "in_progress", "conclusion": None}],
+    }),
+    ("evaluate_deliberate_test", lambda c: cfg.evaluate_deliberate_test(*c, _JIT_NOW, 3),
+     ({"created": "2026-10-03T06:00:00Z"}, {"name": "run the deliberate test", "conclusion": "success"}), {
+        "failed": ({"created": "2026-10-03T06:00:00Z"}, {"name": "run the deliberate test", "conclusion": "failure"}),
+        "skipped": ({"created": "2026-10-03T06:00:00Z"}, {"name": "run the deliberate test", "conclusion": "skipped"}),
+        "stale": ({"created": "2026-09-28T06:00:00Z"}, {"name": "run the deliberate test", "conclusion": "success"}),
+        "step missing": ({"created": "2026-10-03T06:00:00Z"}, None),
+        "never ran": (None, None),
+    }),
 ]
 
 
@@ -1101,6 +1131,9 @@ CFG_RESOURCES = {
     "evaluate_elevation_backstop": "elevation_backstop",
     "evaluate_elevations_within_window": "elevations_within_window",
     "evaluate_elevations_justified": "elevations_justified",
+    "evaluate_pushes_chained": "pushes_evaluated",
+    "evaluate_pushes_passed": "pushes_evaluated",
+    "evaluate_deliberate_test": "deliberate_test",
     "evaluate_alarms_target": "alarms_target",
     "evaluate_registry_scanning": "registry_scanning",
     "evaluate_registries_immutable": "registries_immutable",
@@ -1184,6 +1217,19 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("register_read (policy_coverage)", lambda c: rr.evaluate_policy_coverage(*c),
+     ({"a.rego": 'violation("AWS-X-01", r, "m")'}, {"rules": {"AWS-X-01": {"severity": "HIGH", "determinations": ["KSI-A"]}}}), {
+        "a rule unmapped": ({"a.rego": 'violation("AWS-X-01", r, "m") violation("AWS-X-02", r, "m")'},
+                            {"rules": {"AWS-X-01": {"severity": "HIGH", "determinations": ["KSI-A"]}}}),
+        "a mapping with no rule": ({"a.rego": ""}, {"rules": {"AWS-X-01": {"severity": "HIGH", "determinations": ["KSI-A"]}}}),
+        "no determination": ({"a.rego": 'violation("AWS-X-01", r, "m")'}, {"rules": {"AWS-X-01": {"severity": "HIGH", "determinations": []}}}),
+    }),
+    ("register_read (policy_exceptions_bounded)", lambda c: rr.evaluate_policy_exceptions(c, _JIT_NOW.date()),
+     [{"rule": "R", "root": "aws", "address": "a", "reason": "r", "expires": _JIT_NOW.date().replace(year=2027)}], {
+        "no reason": [{"rule": "R", "root": "aws", "address": "a", "reason": "", "expires": _JIT_NOW.date().replace(year=2027)}],
+        "no expiry": [{"rule": "R", "root": "aws", "address": "a", "reason": "r"}],
+        "expired": [{"rule": "R", "root": "aws", "address": "a", "reason": "r", "expires": _JIT_NOW.date().replace(year=2025)}],
+    }),
     ("register_read (plan_covers_classes)", lambda c: rr.evaluate_plan_classes(c, ["key", "token", "secret"]), _PLAN, {
         "class missing": {"classes": {k: v for k, v in _PLAN["classes"].items() if k != "secret"}},
         "no interval and no deferral": _plan_without("token", "deferred"),

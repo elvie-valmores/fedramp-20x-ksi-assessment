@@ -1,0 +1,61 @@
+# The policy exception register: KSI-MLA-EVC verify row 4.
+#
+# Each entry excuses one finding -- a rule, authored or the scanner's, on
+# one plan address in one root -- with a reason and an expiry. An expired
+# entry stops applying, so the finding blocks again and the entry has to be
+# re-decided rather than silently renewed. An entry that matches nothing
+# also fails the gate: a stale exception would quietly excuse the finding
+# if it ever came back. Scanner rules are Trivy's IDs (AWS-0132); authored
+# ones are coverage.yaml's (AWS-S3-02).
+
+exceptions:
+  - rule: AWS-S3-02
+    root: aws
+    address: aws_s3_bucket_server_side_encryption_configuration.alb_logs
+    reason: "Platform limit: load balancer access log delivery supports only SSE-S3 (AWS ELB documentation; DECISIONS.md, 2026-10-02)"
+    expires: 2027-04-05
+  - rule: AWS-0132
+    root: aws
+    address: aws_s3_bucket_server_side_encryption_configuration.alb_logs
+    reason: The same platform limit, as the scanner reports it
+    expires: 2027-04-05
+  - rule: AWS-S3-02
+    root: bootstrap
+    address: aws_s3_bucket_server_side_encryption_configuration.tfstate
+    reason: The state bucket is SSE-S3 by a recorded exception (DECISIONS.md, 2026-09-23)
+    expires: 2027-04-05
+  - rule: AWS-SSO-01
+    root: aws
+    address: aws_ssoadmin_permission_set.interim_operator_admin
+    reason: Unassigned since 2026-10-05 and kept one session as the fallback if JIT elevation has to be backed out; deleted at the next session
+    expires: 2026-10-12
+  - rule: AWS-0053
+    root: aws
+    address: aws_lb.main
+    reason: The application's public entry point by design; only 80 (redirect) and 443 reach it (AWS-NET-01), behind WAF
+    expires: 2027-04-05
+  - rule: AWS-0132
+    root: aws
+    address: aws_s3_bucket.athena_results
+    reason: "Scanner false positive: the plan encrypts this bucket with aws:kms and a customer key ARN; Trivy 0.74 does not link the separate encryption resource to the bucket in plan form. AWS-S3-02 judges the same property against the plan and passes"
+    expires: 2027-01-05
+  - rule: AWS-0132
+    root: aws
+    address: aws_s3_bucket.config_delivery
+    reason: "Scanner false positive: the plan encrypts this bucket with aws:kms and a customer key ARN; Trivy 0.74 does not link the separate encryption resource to the bucket in plan form. AWS-S3-02 judges the same property against the plan and passes"
+    expires: 2027-01-05
+  - rule: AWS-0132
+    root: aws
+    address: aws_s3_bucket.extracts
+    reason: "Scanner false positive: the plan encrypts this bucket with aws:kms and a customer key ARN; Trivy 0.74 does not link the separate encryption resource to the bucket in plan form. AWS-S3-02 judges the same property against the plan and passes"
+    expires: 2027-01-05
+  - rule: AWS-0132
+    root: aws
+    address: aws_s3_bucket.log_store
+    reason: "Scanner false positive: the plan encrypts this bucket with aws:kms and a customer key ARN; Trivy 0.74 does not link the separate encryption resource to the bucket in plan form. AWS-S3-02 judges the same property against the plan and passes"
+    expires: 2027-01-05
+  - rule: AWS-0132
+    root: bootstrap
+    address: aws_s3_bucket.tfstate
+    reason: The state bucket's SSE-S3 exception (DECISIONS.md, 2026-09-23), as the scanner reports it
+    expires: 2027-04-05

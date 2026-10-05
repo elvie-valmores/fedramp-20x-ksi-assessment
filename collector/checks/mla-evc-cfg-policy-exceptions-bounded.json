@@ -1,0 +1,18 @@
+{
+  "id": "mla-evc-cfg-policy-exceptions-bounded",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every policy exception names its rule, root and address, with a reason and an expiry that has not passed",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "policy/exceptions.yaml",
+    "assertion": "policy_exceptions_bounded"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.verify.4",
+      "covers": "full"
+    }
+  ]
+}

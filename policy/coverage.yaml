@@ -1,0 +1,41 @@
+# The coverage mapping: KSI-MLA-EVC build row 1 and verify row 1.
+#
+# Every authored rule in rules/, with the determination it encodes and its
+# severity. gate.py fails if a rule in rules/ is missing here, or an entry
+# here names no rule, so the two cannot drift apart. The scanner's rules
+# (Trivy) are deliberately not mapped: they are breadth, written for no
+# project in particular, and mapping them would imply a traceability that
+# does not exist (DECISIONS.md, 2026-09-14).
+#
+# A finding at or above `block_at` fails the gate unless an unexpired entry
+# in exceptions.yaml covers it. Below it, findings are reported only.
+
+block_at: HIGH
+
+scanner:
+  tool: trivy
+  version: 0.74.0
+  rules: embedded in the pinned binary (--skip-check-update); never downloaded at run time
+  block_at: HIGH
+
+rules:
+  AWS-S3-01: {severity: HIGH, determinations: [KSI-CNA-MAT], rule: Every bucket has a public access block with all four switches on}
+  AWS-S3-02: {severity: HIGH, determinations: [KSI-SVC-SIN], rule: Every bucket is encrypted with a customer key}
+  AWS-S3-03: {severity: MEDIUM, determinations: [KSI-SVC-PRR], rule: Every bucket has a lifecycle}
+  AWS-KMS-01: {severity: HIGH, determinations: [KSI-SVC-SIN], rule: Every customer key rotates}
+  AWS-LOG-01: {severity: MEDIUM, determinations: [KSI-MLA-LET, KSI-SVC-PRR], rule: Every log group expires within 90 days and is under a customer key}
+  AWS-NET-01: {severity: CRITICAL, determinations: [KSI-CNA-RNT], rule: The internet reaches only the load balancer, on 80 and 443}
+  AWS-NET-02: {severity: HIGH, determinations: [KSI-CNA-RNT], rule: No egress to anywhere}
+  AWS-IAM-01: {severity: HIGH, determinations: [KSI-CNA-DFP], rule: No AWS-managed policy on a role}
+  AWS-IAM-02: {severity: CRITICAL, determinations: [KSI-IAM-SNU], rule: A web-identity trust pins audience and subject}
+  AWS-IAM-03: {severity: CRITICAL, determinations: [KSI-IAM-SNU], rule: No IAM users or access keys}
+  AWS-RDS-01: {severity: HIGH, determinations: [KSI-SVC-SIN, KSI-CNA-RNT], rule: The database is encrypted, private and IAM-authenticated}
+  AWS-ECR-01: {severity: HIGH, determinations: [KSI-SVC-VRI], rule: Image tags are immutable and every push is scanned}
+  AWS-LB-01: {severity: HIGH, determinations: [KSI-SVC-VCM], rule: A plain HTTP listener only redirects}
+  AWS-SSO-01: {severity: HIGH, determinations: [KSI-IAM-JIT, KSI-CNA-ULN], rule: No sign-in over four hours, no administrator sign-in over one}
+  GCP-GCS-01: {severity: HIGH, determinations: [KSI-SVC-SIN, KSI-CNA-MAT], rule: Every bucket is uniform, private and under a customer key}
+  GCP-BQ-01: {severity: HIGH, determinations: [KSI-SVC-SIN], rule: Every dataset defaults to a customer key}
+  GCP-IAM-01: {severity: HIGH, determinations: [KSI-IAM-ELP], rule: No basic role is granted by declaration}
+  GCP-IAM-02: {severity: CRITICAL, determinations: [KSI-IAM-SNU], rule: No service account keys}
+  GCP-RUN-01: {severity: HIGH, determinations: [KSI-SVC-VRI], rule: The job runs an image by digest}
+  GCP-KMS-01: {severity: MEDIUM, determinations: [KSI-SVC-SIN], rule: Every key rotates within a year}

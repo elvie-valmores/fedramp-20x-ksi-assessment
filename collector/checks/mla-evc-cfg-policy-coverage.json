@@ -1,0 +1,18 @@
+{
+  "id": "mla-evc-cfg-policy-coverage",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every authored policy rule is in the coverage mapping with a severity and the determinations it encodes, and every mapping names a rule",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "register": "policy/coverage.yaml",
+    "assertion": "policy_coverage"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.verify.1",
+      "covers": "full"
+    }
+  ]
+}

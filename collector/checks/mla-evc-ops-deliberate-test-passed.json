@@ -1,0 +1,33 @@
+{
+  "id": "mla-evc-ops-deliberate-test-passed",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "The policy workflow's deliberate test passed on main within three days: a fixture plan with a private range passes the gate, the same plan with 0.0.0.0/0 supplied through a variable is blocked, and a source scan of the fixture passes",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "github",
+    "resource": "deliberate_test",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
+    "workflow": "policy.yml",
+    "job": "test",
+    "step": "run the deliberate test",
+    "max_age_days": 3
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.validate.1",
+      "covers": "partial",
+      "gap": "A fixture plan stands in for a test pull request: the project pushes to main and has no pull requests to test with."
+    },
+    {
+      "row": "KSI-MLA-EVC.validate.2",
+      "covers": "partial",
+      "gap": "The same fixture, the compliant direction; not a pull request."
+    },
+    {
+      "row": "KSI-MLA-EVC.validate.3",
+      "covers": "full"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "mla-evc-cfg-actions-pinned-policy",
+  "indicator": "KSI-MLA-EVC",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "Every third-party action in the policy workflow is pinned to a commit SHA; the scanners themselves are downloaded at pinned versions and checked against their published SHA-256 sums",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "policy.yml",
+    "assertion": "actions_pinned_to_sha"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-EVC.verify.5",
+      "covers": "full"
+    }
+  ]
+}

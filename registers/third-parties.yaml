@@ -54,6 +54,18 @@ entries:
     comparison: {basis: "OSV advisories through pip-audit", automated: true}
     monitoring: {mechanism: "pip-audit against OSV at every build, failing it on a finding; images re-scanned continuously after", status: partial}
 
+  open_policy_agent:
+    what: Open Policy Agent, the engine that evaluates the authored rules against plans (policy.yml)
+    matches: [{release_download: open-policy-agent/opa}]
+    comparison: {basis: "The release's published SHA-256, checked at every download; the version pinned in policy.yml", automated: true}
+    monitoring: {mechanism: "None automated: releases and advisories are read by hand when the pin is moved, and a release is adopted only once it is two weeks old", status: unavailable}
+
+  aquasecurity_trivy:
+    what: Trivy, the breadth scanner over the same plans, with the rules embedded in its binary (policy.yml)
+    matches: [{release_download: aquasecurity/trivy}]
+    comparison: {basis: "The release's published SHA-256, checked at every download; rules never downloaded at run time (--skip-check-update)", automated: true}
+    monitoring: {mechanism: "None automated. A scanning action in this tool category was compromised in a March 2026 supply chain incident (DECISIONS.md, 2026-09-14), so a release is adopted only once it is two weeks old, by hand", status: unavailable}
+
   hashicorp_providers:
     what: Terraform and its providers from the HashiCorp registry, pinned in the lock files
     matches: [{terraform_provider: "registry.terraform.io/hashicorp/*"}]

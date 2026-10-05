@@ -250,7 +250,8 @@ or a recorded finding.
 2. **Week 2:**
    - ~~**JIT elevation (build).**~~ **Done 2026-10-05** (DECISIONS.md): standing access is
      `OperatorReadOnly`; changes go through `infra/aws/elevate.sh`. GCP's half (PAM) is not built.
-   - **Policy-as-code on every push (build).**
+   - ~~**Policy-as-code on every push (build).**~~ **Done 2026-10-05** (DECISIONS.md): `policy.yml`
+     evaluates all three plans with 20 authored rules and Trivy; exceptions in `policy/exceptions.yaml`.
    - **The signal-report generator.**
 3. **Week 3:**
    - **Two batched AWS sessions:** the deliberate tests, a timed restore that measures the database
@@ -329,6 +330,8 @@ AccessDenied.
 | Account default VPCs | **Deleted 2026-10-02** in all 17 regions. `cna-rnt-cfg-aws-no-undeclared-vpcs` passes |
 | Security Hub: 21 failing controls with no exception | **Closed 2026-10-05:** re-evaluation cleared the remediations. Config.1 then failed on its second half, recording scope, and is excepted under the 2026-09-05 cost decision. 100 of 117 pass outright, and `cna-ibp-ops-aws-failing-controls-excepted` passes |
 | `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). On 2026-10-05 it was the only cause left: Identity Center's service-linked role is now exempt. Investigate it if it still fails after that date |
+| `piy-rsd-cfg-lifecycle-controls` failing | **Closed 2026-10-05:** the pre-merge policy stage is built |
+| Policy gate exceptions | Ten, each with an expiry. `InterimOperatorAdmin`'s lapses 2026-10-12, the day the gate fails on it unless the set is deleted. Trivy's AWS-0132 false positives lapse 2027-01-05: re-test at the next Trivy upgrade |
 | JIT follow-ups | **Next session:** delete the unassigned `InterimOperatorAdmin` permission set, and drop it from `operator_role_patterns` and the five checks. **Week 3:** a deliberate backstop test, then trim the backstop's IAM removal rights; checks for JIT validate 3 to 5. **GCP:** PAM entitlements |
 | Standing change exception | **Narrowed 2026-10-05, for the operator's review:** humans apply only as ElevatedAdmin. It closes when CI applies declared state |
 | Retention with no expiry (4 entries) | **Decided 2026-10-03** (lean set): 30 or 90 days each. The Artifact Registry cleanup policy is in dry run until reviewed |

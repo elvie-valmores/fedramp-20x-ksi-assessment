@@ -8274,3 +8274,95 @@ Describe returns an execution's input, which is the justification.
 - **validate.3** (revocation observed by a check), **validate.4** (privileged actions correlated to
   grant windows) and **validate.5** (identity lanes) have no checks yet. Both tests' records show
   revocation firing, but no check reads them.
+
+## 2026-10-05 — Policy as code: the gate, its first finding, and its first silent failure
+
+KSI-MLA-EVC, week 2 of the finish-line plan. On every push to main, and daily, `policy.yml` plans all
+three roots, renders each plan as JSON, and runs `policy/gate.py` over them:
+
+| Evaluator | What it is | Mapped |
+|---|---|---|
+| Authored rules | 20 OPA rules in `policy/rules/`, each encoding a determination, with 23 Rego tests | Yes: `policy/coverage.yaml` gives each a severity and its determinations |
+| Scanner | Trivy 0.74.0's embedded rules, over the same plans | No, by the 2026-09-14 decision: breadth, not traceability |
+
+**How the gate decides:**
+- **What blocks:** a finding at HIGH or above, unless an unexpired entry in `policy/exceptions.yaml`
+  names it by rule, root and address.
+- **The register itself:** an expired entry stops applying, and an entry that matches nothing fails
+  the gate, because a stale exception would silently excuse a recurrence.
+- **Coverage:** the gate also fails if `coverage.yaml` and the rules fall out of step.
+
+**Plans, not source.** The workflow plans with `-refresh=false`. The question is the declaration,
+and drift is SVC-ACM's. Skipping the refresh also means a standing environment's secret version is
+never read, which the drift role is denied.
+
+**The deliberate test** (`policy/deliberate_test.py`, validate rows 1–3) plans a fixture offline,
+twice. The fixture is one security-group rule whose source range is a variable.
+
+| Case | Result |
+|---|---|
+| The private default | Passes the gate |
+| `-var allowed_cidr=0.0.0.0/0` | Blocked, by AWS-NET-01 and by Trivy's own AWS-0107, both reading the plan |
+| A Trivy scan of the fixture's source | Passes, because the misconfiguration exists only in the plan |
+
+All three hold locally, and CI repeats them on every run.
+
+**The scanner failed silently on the first try.** Trivy converts a plan to HCL before scanning it.
+Data sources still pending at plan time (IAM policy documents naming a role not yet created) became
+HCL it could not parse. It logged an error and reported the AWS plan with 51 successes and no
+failures, having scanned none of the resources. This is the ninth control in this project found
+configured, running and doing nothing.
+
+- **Fix:** the gate hands Trivy the plan without data sources, whose content is already inlined in
+  the resources that use them. That took the AWS plan to 28 findings.
+- **Safeguard:** the gate now fails on any Trivy parser error, and a test feeds it the exact log
+  line.
+
+**Pinning.**
+- **Versions:** OPA v1.20.2 and Trivy v0.74.0, each over two weeks old. v0.75.0 was four days old,
+  and this tool category had a supply-chain compromise in March 2026.
+- **Downloads:** both are checked against their published SHA-256 at download. Trivy runs with
+  `--skip-check-update`, so its rules are the ones embedded in the pinned binary, never downloaded
+  at run time.
+- **Discovery:** `third_parties_cover` now finds binaries a workflow downloads from GitHub releases.
+  OPA and Trivy are registered, with monitoring `unavailable`: upgrades are by hand.
+
+**What it found:**
+
+| Finding | Disposition |
+|---|---|
+| The analytics pipeline held `roles/storage.objectAdmin` on the landing bucket (Trivy GCP-0007) | **Fixed.** It writes new objects and BigQuery reads them back, so the grant is now `objectCreator` and `objectViewer`. `objectAdmin` also allowed overwrite, delete and ACL changes. Testing showed the rule passes either narrow role and fails `objectAdmin` |
+| The load balancer log bucket and the state bucket are SSE-S3 | Excepted under their existing records (platform limit, and the 2026-09-23 decision), until 2027-04-05 |
+| The load balancer is internet-facing (AWS-0053) | Excepted: by design, behind WAF, with 80 and 443 only (AWS-NET-01) |
+| AWS-0132 on four KMS-encrypted buckets | Excepted as a scanner false positive, until 2027-01-05. The plan shows `aws:kms` with a customer key; Trivy 0.74 does not link the separate encryption resource in plan form, and AWS-S3-02 judges the property correctly |
+| `InterimOperatorAdmin`'s PT4H admin session (AWS-SSO-01) | Excepted until 2026-10-12, when the set is deleted |
+
+**Seven checks:**
+
+| Check | Row | Covers |
+|---|---|---|
+| `mla-evc-cfg-policy-coverage` | verify 1 | full |
+| `mla-evc-cfg-evaluates-plan-json` | verify 3 | full |
+| `mla-evc-cfg-policy-exceptions-bounded` | verify 4 | full |
+| `mla-evc-cfg-actions-pinned-policy` | verify 5 | full |
+| `mla-evc-ops-deliberate-test-passed` | validate 1, 2 (partial: a fixture plan, not a test pull request) and 3 (full) | |
+| `mla-evc-ops-every-push-evaluated` | validate 4 | partial |
+| `mla-evc-ops-no-failed-push` | validate 5 | partial |
+
+The GitHub events API proved days behind: the 10-03 and 10-05 pushes were not in it. So each run
+names its push as `policy <before>..<after>`, and the collector walks the chain of runs. A run
+whose `before` is not the previous run's `after` is a push nobody evaluated.
+
+**Recorded as partial, by the 2026-10-03 decision.** The project pushes to main, so the gate judges a
+change after it lands and before it is applied, not before it merges. verify 2 (a merge gate that
+blocks) has no check. Branch protection requiring the check would stop direct pushes, which is the
+workflow this project uses.
+
+**Identity.**
+- **AWS:** the gate plans as the existing drift role.
+- **GCP:** the collector's read-only custom role, newly bound to `attribute.workflow/policy.yml`
+  (`github_policy`). Federated principals are granted per workflow file, so `policy.yml` gets its own
+  binding.
+
+The lifecycle register's pre-merge stage is now `built`, so `piy-rsd-cfg-lifecycle-controls`
+passes. Self-test: 101 assertions. Coverage: 102 full and 35 partial of 380 rows.

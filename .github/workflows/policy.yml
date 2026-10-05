@@ -1,0 +1,192 @@
+# Policy as code (KSI-MLA-EVC), on every push to main.
+#
+# The project pushes to main rather than merging pull requests, so this is
+# not a merge gate: it judges each push once it lands, and a red run is a
+# declared configuration that must be fixed or excepted before it is
+# applied (DECISIONS.md, 2026-10-05). Two jobs:
+#
+#   test      the rules' and the gate's own tests, and the deliberate test:
+#             a fixture planned offline both ways, which the gate must pass
+#             and block, and which a source scan must miss
+#   evaluate  plan all three roots, render each as JSON, and run the gate:
+#             the authored rules (OPA) and the scanner (Trivy) over the
+#             plans, never the source
+#
+# OPA and Trivy are downloaded at pinned versions and checked against their
+# published SHA-256 sums; Trivy's rules are the ones embedded in that binary.
+name: policy
+
+# The range each push carried, so the collector can walk the chain of runs
+# and find a push nobody evaluated (mla-evc-ops-every-push-evaluated).
+run-name: "policy ${{ github.event.before || 'none' }}..${{ github.sha }}"
+
+# Daily as well, so the deliberate test's evidence stays within its
+# three-day cadence through a week with no pushes, and an exception that
+# expires fails the day it does.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  OPA_VERSION: v1.20.2
+  OPA_SHA256: 69da5179ee403d10fa11bab6cfb4ffb0d23dba5f9b682fa977db772a1da5670f
+  TRIVY_VERSION: 0.74.0
+  TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: set up python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+
+      - name: install python dependencies
+        run: python -m pip install --require-hashes -r requirements.txt
+
+      - name: set up terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+
+      - name: install the policy tools, checksums verified
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP/bin"
+          curl -sSfL -o opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  opa" | sha256sum -c -
+          curl -sSfL -o trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
+          tar xzf trivy.tar.gz trivy
+          chmod +x opa trivy
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: test the rules
+        run: |
+          opa check --strict policy/rules
+          opa test policy/rules -v
+
+      - name: test the gate
+        working-directory: policy
+        run: python -m unittest test_gate.py
+
+      # validate rows 1-3: blocks a violating plan, passes a compliant one,
+      # and catches what only the plan shows.
+      - name: run the deliberate test
+        run: python policy/deliberate_test.py --out deliberate.json
+
+      - name: keep the deliberate test's record
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: policy-deliberate-${{ github.run_id }}
+          path: deliberate.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: set up python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+
+      - name: install python dependencies
+        run: python -m pip install --require-hashes -r requirements.txt
+
+      # The drift role: reads only, and the state lock it never takes here.
+      - name: assume the drift role
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_DRIFT_ROLE }}
+          aws-region: us-east-1
+          role-session-name: policy-${{ github.run_id }}
+
+      # The collector's read-only GCP role, granted to this workflow by name
+      # (github_federation.tf, github_policy).
+      - name: authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/921906217926/locations/global/workloadIdentityPools/github-actions/providers/github
+          project_id: fedramp-20x-ksi-assessment
+
+      - name: set up terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+
+      - name: install the policy tools, checksums verified
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP/bin"
+          curl -sSfL -o opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  opa" | sha256sum -c -
+          curl -sSfL -o trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
+          tar xzf trivy.tar.gz trivy
+          chmod +x opa trivy
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+
+      - name: initialise the roots
+        run: |
+          for root in aws gcp bootstrap; do
+            terraform -chdir=infra/$root init -input=false \
+              -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+              -backend-config="key=$root/terraform.tfstate" \
+              -backend-config="region=us-east-1" \
+              -backend-config="use_lockfile=true" \
+              -backend-config="encrypt=true"
+          done
+
+      # Every resource, the session environment included: what is declared
+      # is what is judged, whether or not it is standing. No refresh, since
+      # the question is the declaration, not the live state (drift is
+      # svc-acm's), and no lock, since nothing is written.
+      - name: render the plans as JSON
+        env:
+          TF_VAR_impersonate_service_account: ''
+          TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL }}
+          TF_VAR_billing_account_id: ${{ vars.GCP_BILLING_ACCOUNT_ID }}
+          TF_VAR_gcp_pipeline_sa_unique_id: ${{ vars.GCP_PIPELINE_SA_UNIQUE_ID }}
+          TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
+        run: |
+          mkdir -p plans
+          for root in aws gcp bootstrap; do
+            terraform -chdir=infra/$root plan -input=false -refresh=false -lock=false -out="$PWD/plans/$root.tfplan" > /dev/null
+            terraform -chdir=infra/$root show -json "$PWD/plans/$root.tfplan" > "plans/$root.json"
+            rm "plans/$root.tfplan"
+          done
+
+      - name: evaluate the plans
+        run: |
+          python policy/gate.py --out policy-result.json \
+            --plan aws=plans/aws.json --plan gcp=plans/gcp.json --plan bootstrap=plans/bootstrap.json
+
+      - name: keep the evaluation record
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: policy-evaluation-${{ github.run_id }}
+          path: policy-result.json
+          if-no-files-found: warn
+          retention-days: 90

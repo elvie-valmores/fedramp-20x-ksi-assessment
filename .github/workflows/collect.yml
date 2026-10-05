@@ -95,6 +95,7 @@ jobs:
           (cd collector && python self_test.py)
           (cd lambda/normalize_events && python -m unittest test_handler.py)
           (cd lambda/elevation && AWS_DEFAULT_REGION=us-east-1 python -m unittest test_handler.py)
+          (cd policy && python -m unittest test_gate.py)
           (cd sdr && python -m unittest test_metrics.py test_matrix_rows.py)
           python sdr/matrix_rows.py --check
 

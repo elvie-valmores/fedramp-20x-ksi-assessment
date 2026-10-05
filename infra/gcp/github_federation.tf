@@ -126,6 +126,15 @@ resource "google_project_iam_member" "github_collector" {
   member  = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.workflow/collect.yml"
 }
 
+# The policy gate (policy.yml, KSI-MLA-EVC) plans this root to evaluate
+# it, which needs exactly the reads the collector's drift plan does. The
+# same role, bound to that workflow by name, 2026-10-05.
+resource "google_project_iam_member" "github_policy" {
+  project = var.gcp_project_id
+  role    = google_project_iam_custom_role.collector.id
+  member  = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.workflow/policy.yml"
+}
+
 # Publishing the analytics image: build-and-push.yml, on the one Artifact
 # Registry repository, and nothing else. Enumerated, per CNA-DFP. Tags in the
 # repository are immutable, so this cannot move a published tag.
