@@ -104,6 +104,10 @@ data "aws_iam_policy_document" "github_drift" {
       "access-analyzer:ListFindings",
       "access-analyzer:ListTagsForResource",
       "acm:Describe*",
+      # The certificate data source (secrets.tf) reads the issued
+      # certificate's public body. Needed by the policy gate's full plan
+      # (policy.yml, 2026-10-05); the drift plan never reaches it.
+      "acm:GetCertificate",
       "acm:List*",
       # Athena's workgroup read. Absent entirely until 2026-09-22, which is
       # one of the four gaps that made every drift run error rather than
