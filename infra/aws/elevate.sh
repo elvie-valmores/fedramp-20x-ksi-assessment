@@ -5,11 +5,9 @@
 #   elevate.sh status                              the running elevation, if any
 #   elevate.sh release                             end it early
 #
-# Runs as the standing read-only profile. Once the grant is confirmed, use
-# the elevated profile: `aws ... --profile caliper-elevated`, or
-# `AWS_PROFILE=caliper-elevated terraform apply ...`. A new grant can take a
-# minute to reach the sign-in; run `aws sso login --profile caliper-elevated`
-# if the profile says the role is not assigned.
+# Runs as the standing read-only profile. It returns once the elevated
+# profile signs in: then use `aws ... --profile caliper-elevated`, or
+# `AWS_PROFILE=caliper-elevated terraform apply ...`.
 #
 # Release stops the workflow; the backstop removes the assignment within 15
 # minutes. Either way, a session already open lasts at most its hour.
@@ -54,8 +52,21 @@ case "${1:-}" in
       state=$(aws_ stepfunctions get-execution-history --execution-arn "$execution" --reverse-order \
         --max-results 1 --no-paginate --query 'events[0].type' --output text)
       if [[ "$state" == "WaitStateEntered" ]]; then
-        echo "granted for ${minutes} minutes. Use --profile caliper-elevated."
-        exit 0
+        # The assignment exists, but sign-in can take a minute to see it,
+        # and the CLI may still hold credentials for the role an earlier
+        # elevation provisioned, which Identity Center has since deleted.
+        # Both were met on 2026-10-05. Clear the CLI's role-credential cache
+        # (it refills from the SSO token) and wait for a working sign-in.
+        rm -f ~/.aws/cli/cache/*.json
+        for _ in $(seq 1 24); do
+          if aws sts get-caller-identity --profile caliper-elevated >/dev/null 2>&1; then
+            echo "granted for ${minutes} minutes, and signed in. Use --profile caliper-elevated."
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "granted for ${minutes} minutes, but the elevated sign-in is not working yet; retry shortly." >&2
+        exit 1
       fi
       sleep 3
     done
