@@ -1,0 +1,65 @@
+# The signal report's declaration: the shared signal report generator
+# (DECISIONS.md, 2026-09-14, "Periodic human review cycles cut; signal
+# generation kept"). One generator, a section per indicator that declares
+# signals, every signal computed over the period -- a zero is a result and
+# is reported as one. The human review of what the signals mean is out of
+# scope by that decision; generating them is not.
+#
+# generate.py computes each signal by its id. A declared signal it cannot
+# compute fails the report (register_read, signal_report_complete). What
+# would be a signal but has no source is listed under not_collected, with
+# why, rather than reported as a zero it is not.
+
+period_days: 90
+
+sections:
+  KSI-CMT-RVP:
+    purpose: Whether the change procedure works, not only whether it is followed (DECISIONS.md, 2026-09-14)
+    signals:
+      gate_runs: Runs and failures per pipeline gate (build-and-push, policy, drift, collect), from GitHub
+      gates_never_failed: Gates that ran in the period and failed nothing -- either protecting against nothing or passing everything
+      reverts: Commits on main that revert an earlier one -- changes that passed every gate and still had to be undone
+      emergency_modifications: In-place changes under the emergency category of registers/change-exceptions.yaml
+      policy_exceptions_live: Unexpired entries in policy/exceptions.yaml -- findings let through, each with a reason
+      finding_to_fix_days: For checks that went from failing to passing, the days it took
+  KSI-SCR-MIT:
+    purpose: Supply chain risk that is not a vulnerability, and its mitigation
+    signals:
+      supply_chain_risks: Entries in registers/supply-chain-risks.yaml, by disposition
+      risks_past_review: Risks whose review date has passed
+      third_parties_unmonitored: Third parties whose upstream monitoring is unavailable (registers/third-parties.yaml)
+      dependency_audit_failures: Builds whose dependency audit failed, from GitHub
+  KSI-RPL-RRO:
+    purpose: Recovery objectives declared, and measured against
+    signals:
+      objectives_declared: Resource classes with a recovery time objective (registers/resources.yaml)
+      objectives_measured: Recovery tests recorded in the period (registers/recovery-tests.yaml)
+      objectives_missed: Recorded tests whose measured recovery time exceeded the objective
+  KSI-RPL-ARP:
+    purpose: Whether the recovery paths are exercised
+    signals:
+      recovery_paths_encoded: Paths in registers/recovery-paths.yaml
+      recovery_paths_exercised: Distinct paths a recorded recovery test exercised in the period
+      backups_restorable_days: Days the backup restorability check passed, of the days it was judged
+  KSI-INR-RIR:
+    purpose: What the detection path raised, and what the response machinery did
+    signals:
+      alerts_published: Messages published to the detection topic (CloudWatch)
+      guardduty_findings: GuardDuty findings updated in the period, by severity
+      elevations_granted: Just-in-time elevations granted (log store, elevations/)
+      backstop_actions: Times the elevation backstop removed an assignment (log store, elevations/)
+    not_collected:
+      dispositions: The runbook records each alert's disposition in DECISIONS.md, as prose. Nothing counts them, so an undispositioned alert is not visible as a number
+  KSI-PIY-RVD:
+    purpose: The vulnerability disclosure program's function, since its effectiveness cannot be shown here
+    signals:
+      days_served: Days in the period the environment serving security.txt was standing, from the run history -- it is published only while the load balancer stands
+    not_collected:
+      reports_received: No intake is collected, and the published contact has no mail exchanger (PROJECT-CONTEXT open items). The count is not zero; it is unknown
+  KSI-PIY-RSD:
+    purpose: The Secure by Design posture's state, from the lifecycle register and the gates
+    signals:
+      lifecycle_stages: Deployment stages by status (registers/lifecycle.yaml)
+      principles: Secure by Design principles by status
+      policy_gate_failures: Pushes to main whose policy evaluation failed, of those evaluated
+      checks_passing: The share of judged checks passing on the latest day of the period

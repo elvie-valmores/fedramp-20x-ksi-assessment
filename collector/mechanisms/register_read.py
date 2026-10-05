@@ -27,6 +27,8 @@ import fnmatch
 from functools import lru_cache
 from pathlib import Path
 
+import json
+
 import yaml
 
 import _paths  # noqa: F401  (puts inventory/ on the import path)
@@ -79,6 +81,12 @@ class RegisterRead(Mechanism):
             rules = sorted((REPO / "policy" / "rules").glob("*.rego"))
             sources = {f.name: f.read_text() for f in rules if not f.name.endswith("_test.rego")}
             ok, detail, evidence = evaluate_policy_coverage(sources, register)
+        elif p["assertion"] == "signal_report_complete":
+            import datetime as dt
+            path = REPO / p["report"]
+            report = json.loads(path.read_text()) if path.exists() else None
+            ok, detail, evidence = evaluate_signal_report(report, register, dt.datetime.now(dt.timezone.utc),
+                                                          p["max_age_hours"], p.get("section"))
         elif p["assertion"] == "policy_exceptions_bounded":
             import datetime as dt
             ok, detail, evidence = evaluate_policy_exceptions(register.get("exceptions") or [], dt.date.today())
@@ -494,3 +502,44 @@ def evaluate_policy_exceptions(exceptions: list[dict], today) -> tuple[bool, str
     if expired:
         return False, f"{len(expired)} exception(s) past their expiry: {expired[0]}", evidence
     return True, f"{len(exceptions)} exception(s), each with a reason and a future expiry", evidence
+
+
+# --- The signal report (2026-10-05) ---
+
+def evaluate_signal_report(report: dict | None, declared: dict, now, max_age_hours: int,
+                           section: str | None = None) -> tuple[bool, str, dict]:
+    """Every declared section generated, every declared signal computed, recently.
+
+    A zero is a computed result and passes; a signal reported without a
+    value -- its source failed -- does not, nor does a section or a signal
+    the declaration names and the report lacks. With section, only that
+    indicator's section is judged.
+    """
+    import datetime as dt
+
+    if report is None:
+        return False, "no signal report -- the generator did not run before the checks", {}
+    wanted = {k: v for k, v in (declared.get("sections") or {}).items() if section in (None, k)}
+    sections = report.get("sections") or {}
+    problems = []
+    for ksi, spec in wanted.items():
+        got = (sections.get(ksi) or {}).get("signals")
+        if got is None:
+            problems.append(f"{ksi}: no section")
+            continue
+        for sid in spec.get("signals") or {}:
+            entry = got.get(sid)
+            if entry is None:
+                problems.append(f"{ksi}.{sid}: not in the report")
+            elif entry.get("value") is None:
+                problems.append(f"{ksi}.{sid}: not computed ({entry.get('error', 'no value')})")
+    generated = dt.datetime.fromisoformat(report["generated_at"])
+    age = (now - generated).total_seconds() / 3600
+    evidence = {"generated_at": report["generated_at"], "period": report.get("period"), "problems": problems,
+                "sections": {k: (sections.get(k) or {}) for k in wanted}}
+    if problems:
+        return False, f"{len(problems)} problem(s): {problems[0]}", evidence
+    if age > max_age_hours:
+        return False, f"the report is {age:.0f} hours old, over {max_age_hours}", evidence
+    count = sum(len(v.get("signals") or {}) for v in wanted.values())
+    return True, f"{len(wanted)} section(s), all {count} signals computed over {report['period']['days']} days", evidence

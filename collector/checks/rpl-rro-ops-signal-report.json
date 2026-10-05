@@ -1,0 +1,21 @@
+{
+  "id": "rpl-rro-ops-signal-report",
+  "indicator": "KSI-RPL-RRO",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "The shared signal report has a KSI-RPL-RRO section for the trailing 90 days, generated within the last day, with every declared signal computed -- zeros included -- and nothing reported without a value",
+  "required_cadence": "3 months",
+  "params": {
+    "register": "signals/signals.yaml",
+    "assertion": "signal_report_complete",
+    "report": "sdr/out/signal-report.json",
+    "section": "KSI-RPL-RRO",
+    "max_age_hours": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-RRO.validate.4",
+      "covers": "full"
+    }
+  ]
+}

@@ -612,6 +612,10 @@ def _running(age_minutes, window):
     return {"arn": "e", "started": (_JIT_NOW - _td(minutes=age_minutes)).isoformat(), "minutes": window}
 
 
+_SIG_DECL = {"sections": {"K": {"signals": {"a": "what"}}}}
+_SIG_OK = {"generated_at": "2026-10-03T06:00:00+00:00", "period": {"days": 90},
+           "sections": {"K": {"signals": {"a": {"value": 0}}}}}
+
 def _sha(c):
     return (c * 40)[:40]
 
@@ -1217,6 +1221,13 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("register_read (signal_report_complete)", lambda c: rr.evaluate_signal_report(c, _SIG_DECL, _JIT_NOW, 30), _SIG_OK, {
+        "no report": None,
+        "a section missing": {**_SIG_OK, "sections": {}},
+        "a signal not computed": {**_SIG_OK, "sections": {"K": {"signals": {"a": {"value": None, "error": "AccessDenied"}}}}},
+        "a signal absent": {**_SIG_OK, "sections": {"K": {"signals": {}}}},
+        "stale": {**_SIG_OK, "generated_at": "2026-09-30T12:00:00+00:00"},
+    }),
     ("register_read (policy_coverage)", lambda c: rr.evaluate_policy_coverage(*c),
      ({"a.rego": 'violation("AWS-X-01", r, "m")'}, {"rules": {"AWS-X-01": {"severity": "HIGH", "determinations": ["KSI-A"]}}}), {
         "a rule unmapped": ({"a.rego": 'violation("AWS-X-01", r, "m") violation("AWS-X-02", r, "m")'},

@@ -42,6 +42,9 @@ jobs:
     steps:
       - name: check out
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # The signal report counts reverts on main over 90 days.
+          fetch-depth: 0
 
       - name: set up python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -96,8 +99,21 @@ jobs:
           (cd lambda/normalize_events && python -m unittest test_handler.py)
           (cd lambda/elevation && AWS_DEFAULT_REGION=us-east-1 python -m unittest test_handler.py)
           (cd policy && python -m unittest test_gate.py)
+          (cd signals && python -m unittest test_generate.py)
           (cd sdr && python -m unittest test_metrics.py test_matrix_rows.py)
           python sdr/matrix_rows.py --check
+
+      # The shared signal report (signals/, DECISIONS.md 2026-10-05): every
+      # declared signal over the trailing 90 days, from the run history up
+      # to yesterday. Before the checks, so the *-ops-signal-report checks
+      # judge today's report. The history is fetched again after this run's
+      # record is stored, for the SDR.
+      - name: generate the signal report
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          aws s3 cp "s3://fedramp-20x-ksi-log-store-437672023758/collector-runs/" signal-history/ --recursive --only-show-errors
+          python signals/generate.py --history signal-history --out sdr/out/signal-report.json
 
       - name: run the checks
         id: checks

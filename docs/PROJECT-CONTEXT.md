@@ -252,7 +252,8 @@ or a recorded finding.
      `OperatorReadOnly`; changes go through `infra/aws/elevate.sh`. GCP's half (PAM) is not built.
    - ~~**Policy-as-code on every push (build).**~~ **Done 2026-10-05** (DECISIONS.md): `policy.yml`
      evaluates all three plans with 20 authored rules and Trivy; exceptions in `policy/exceptions.yaml`.
-   - **The signal-report generator.**
+   - ~~**The signal-report generator.**~~ **Done 2026-10-05:** `signals/generate.py`, daily in
+     `collect.yml`; 25 signals across 7 indicators. Week 2 is complete.
 3. **Week 3:**
    - **Two batched AWS sessions:** the deliberate tests, a timed restore that measures the database
      recovery objective, and the runtime-monitoring trial for GuardDuty.11 and .12 (review due

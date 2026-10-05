@@ -1,0 +1,15 @@
+# Recovery tests, as measured: KSI-RPL-RRO and KSI-RPL-ARP's signals.
+#
+# Started 2026-10-05, empty. Each timed restore or recovery exercise adds an
+# entry with what it measured, so the signal report can compare it against
+# the objective in registers/resources.yaml and count the recovery paths it
+# exercised. Week 3's timed database restore (infra/aws/restore_database.sh)
+# is the first.
+#
+#   date        when it ran
+#   path        the recovery path exercised (registers/recovery-paths.yaml)
+#   class       the resource class recovered
+#   measured    {rto_minutes, rpo_minutes}
+#   evidence    where the run's output is
+
+tests: []

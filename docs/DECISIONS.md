@@ -8382,3 +8382,73 @@ passes. Self-test: 101 assertions. Coverage: 102 full and 35 partial of 380 rows
   before evaluating, so `no-failed-push` is the check that catches that case.
 - **Live results:** all seven KSI-MLA-EVC checks pass. The analytics job, run once after the
   landing-bucket narrowing, landed its file and BigQuery loaded it.
+
+## 2026-10-05 — The shared signal report
+
+The generator the 2026-09-14 decision kept when it cut the periodic human reviews. One generator,
+with a section for each of the seven indicators that declare signals:
+
+- PIY-RVD and PIY-RSD
+- CMT-RVP
+- SCR-MIT
+- RPL-RRO and RPL-ARP
+- INR-RIR
+
+**How it works:**
+- **What it computes:** every signal `signals/signals.yaml` declares, over the trailing 90 days.
+- **Sources:**
+  - the collector's run history
+  - the registers
+  - GitHub's run records
+  - three AWS reads: the detection topic's publish count, GuardDuty findings, and the names of the
+    elevation records
+- **When:** `collect.yml` runs it daily, before the checks. Eight checks then judge it: one per
+  section (`*-ops-signal-report`), plus `cmt-rvp-cfg-signal-generation-scheduled`.
+
+**A zero counts as a result.** A signal with no value, because its source failed, fails its
+section's check. A quiet signal and a broken one must never read the same.
+
+**Signals with no source are named, not zeroed.** Two are listed under `not_collected`:
+
+- **INR-RIR's alert dispositions:** they are prose in `DECISIONS.md`, and nothing counts them.
+- **PIY-RVD's reports received:** the published contact has no mail exchanger. The count is unknown,
+  not zero.
+
+PIY-RVD's one computed signal is therefore the number of days `security.txt` was actually served:
+the days the phase-1 environment was standing, from the run history.
+
+**CMT-RVP's six signals, as declared on 2026-09-14:**
+
+- per-gate runs and failures
+- gates that never failed
+- reverts on main
+- emergency in-place changes
+- live policy exceptions
+- days from finding to fix
+
+The other six indicators had no enumerated signals. Theirs are drawn from records that already exist
+and named in the declaration.
+
+**New register: `registers/recovery-tests.yaml`.** It starts empty. RPL-RRO's "objectives measured"
+and RPL-ARP's "paths exercised" count its entries, and week 3's timed restore will add the first.
+Until then both read 0, and that zero is accurate.
+
+**First report, 2026-10-05:** 25 of 25 signals computed.
+
+| Signal | Value |
+|---|---|
+| Gates | Every one has failed something at least once, so none is decorative |
+| Recovery objectives | 21 declared, 0 measured |
+| Recovery paths | 7 encoded, 0 exercised |
+| `backups_restorable_days` | 0 of 4 days |
+| Alerts | 28 to the detection topic |
+| GuardDuty | 1 low finding |
+| Elevations | 3, and 0 backstop actions |
+| `security.txt` | served on 0 days of the CI history: CI runs while the environment is down |
+
+**Two details:**
+- The report is generated before the checks, from history up to the previous run. The SDR's own
+  history fetch still happens after the day's record is stored.
+- `collect.yml` now checks out full history. A shallow clone would have counted 0 reverts forever.
+
+Self-test: 102 assertions. Coverage: 110 full and 36 partial of 380 rows.

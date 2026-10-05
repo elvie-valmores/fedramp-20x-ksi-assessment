@@ -1,0 +1,22 @@
+{
+  "id": "cmt-rvp-cfg-signal-generation-scheduled",
+  "indicator": "KSI-CMT-RVP",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The daily collector workflow generates the signal report before it runs the checks",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "collect.yml",
+    "assertion": "step_precedes",
+    "job": "collect",
+    "before": "generate the signal report",
+    "after": "run the checks"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-RVP.verify.2",
+      "covers": "partial",
+      "gap": "The human review of what the signals mean was cut by decision (DECISIONS.md, 2026-09-14); generating them is what is checked."
+    }
+  ]
+}
