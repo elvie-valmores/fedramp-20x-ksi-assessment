@@ -10,7 +10,7 @@
     "resource": "pushes_evaluated",
     "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
     "workflow": "policy.yml",
-    "since": "2026-10-05",
+    "since": "2026-10-05T22:51:00Z",
     "judge": "passed",
     "grace_minutes": 60
   },

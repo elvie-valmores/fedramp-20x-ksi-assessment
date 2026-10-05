@@ -8366,3 +8366,19 @@ workflow this project uses.
 
 The lifecycle register's pre-merge stage is now `built`, so `piy-rsd-cfg-lifecycle-controls`
 passes. Self-test: 101 assertions. Coverage: 102 full and 35 partial of 380 rows.
+
+**First CI runs (2026-10-05).**
+
+- **Run 37384776997 failed before evaluating anything.** The drift role lacked `acm:GetCertificate`,
+  which the certificate data source needs in a full plan; the drift plan never reached it. The role
+  and the collector's copy of its reads now hold it. That call returns only the certificate's public
+  body.
+- **Run 37385102686 passed**, with the same verdict as locally: 0 blocking and 10 excepted. Its
+  `test` job ran the deliberate test, and all three outcomes held.
+- **The push history starts at 2026-10-05T22:51Z,** the first complete run. The failed run is
+  excluded because it was the gate's own setup, not a declaration that failed the rules. Left in, it
+  would have kept `mla-evc-ops-no-failed-push` red for three days for the wrong reason.
+- **A weakness to note:** `every-push-evaluated` counts a run as an evaluation even if it errors
+  before evaluating, so `no-failed-push` is the check that catches that case.
+- **Live results:** all seven KSI-MLA-EVC checks pass. The analytics job, run once after the
+  landing-bucket narrowing, landed its file and BigQuery loaded it.
