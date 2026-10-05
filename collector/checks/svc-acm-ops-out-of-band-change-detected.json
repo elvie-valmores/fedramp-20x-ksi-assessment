@@ -1,0 +1,19 @@
+{
+  "id": "svc-acm-ops-out-of-band-change-detected",
+  "indicator": "KSI-SVC-ACM",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (out_of_band_change_detected): Tag a persistent log group outside Terraform and run the drift workflow, which must fail on it; remove the tag and run it again, which must pass. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "out_of_band_change_detected",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-ACM.validate.3",
+      "covers": "partial",
+      "gap": "Run every 30 days by the operator and recorded, not every 3: the test changes or provokes the account, so it does not run unattended."
+    }
+  ]
+}

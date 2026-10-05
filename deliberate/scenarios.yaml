@@ -1,0 +1,50 @@
+# The deliberate test catalogue: the shared deliberate test harness.
+#
+# Each scenario does something a control should stop or catch, observes
+# whether it did, and records the outcome in the log store under
+# deliberate-tests/scenario=<id>/, Object Locked and under the evidence key.
+# The collector's deliberate_test mechanism judges the latest record: it
+# must exist, must have passed, and must be younger than cadence_days.
+#
+#   rows          the matrix rows the scenario answers
+#   requires      what must be standing: persistent, aws-phase1, aws-phase2
+#   cadence_days  how often it is run, declared. Most rows ask for three
+#                 days; a test that changes things runs per session or per
+#                 month, and the check's matrix link says so
+#   runs_as       the profile it needs. elevated scenarios change the account
+
+scenarios:
+  object_lock_rejects_change:
+    rows: [KSI-SVC-SIN.validate.4, KSI-MLA-OSM.validate.1]
+    requires: persistent
+    cadence_days: 30
+    runs_as: elevated
+    what: As an administrator, delete a locked log object version and shorten its retention. Both must be refused, and the version must still be there
+
+  out_of_band_change_detected:
+    rows: [KSI-SVC-ACM.validate.3]
+    requires: persistent
+    cadence_days: 30
+    runs_as: elevated
+    what: Tag a persistent log group outside Terraform and run the drift workflow, which must fail on it; remove the tag and run it again, which must pass
+
+  delivery_failure_alerts:
+    rows: [KSI-MLA-OSM.validate.5]
+    requires: persistent
+    cadence_days: 30
+    runs_as: elevated
+    what: Invoke the log normalizer with an event it cannot process, so the log delivery path fails; its error alarm must enter ALARM, which notifies the detection topic
+
+  prior_state_recoverable:
+    rows: [KSI-RPL-ABO.validate.3]
+    requires: persistent
+    cadence_days: 30
+    runs_as: readonly
+    what: Read back the oldest retained version of the AWS root's Terraform state and confirm it parses as a prior baseline (older serial, its own lineage); read back the oldest retained api task definition
+
+  historical_advisory_surfaced:
+    rows: [KSI-SCR-MON.validate.2]
+    requires: persistent
+    cadence_days: 30
+    runs_as: readonly
+    what: Audit a manifest that pins urllib3, a package the worker uses, at 1.26.4, with the pinned pip-audit; CVE-2021-33503 (GHSA-q2q7-5pp4-w6pg) must be reported

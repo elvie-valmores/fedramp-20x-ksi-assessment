@@ -32,6 +32,7 @@ from base import CheckDefinition
 import environments as env
 import mechanisms.cloud_api_config_read as cfg
 import mechanisms.inventory_reconciliation as inv
+import mechanisms.deliberate_test as dt_mech
 import mechanisms.log_query as lq
 import mechanisms.register_read as rr
 import mechanisms.declared_versus_live_comparison as dvl
@@ -615,6 +616,8 @@ def _running(age_minutes, window):
 _SIG_DECL = {"sections": {"K": {"signals": {"a": "what"}}}}
 _SIG_OK = {"generated_at": "2026-10-03T06:00:00+00:00", "period": {"days": 90},
            "sections": {"K": {"signals": {"a": {"value": 0}}}}}
+
+_TEST_OK = {"scenario": "s", "passed": True, "expected": "e", "started_at": "2026-10-02T12:00:00+00:00"}
 
 def _sha(c):
     return (c * 40)[:40]
@@ -1221,6 +1224,13 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("deliberate_test", lambda c: dt_mech.evaluate_test_record(c, "s", _JIT_NOW, 35, 1), _TEST_OK, {
+        "never run": None,
+        "latest failed": {**_TEST_OK, "passed": False},
+        "errored": {**_TEST_OK, "passed": None, "error": "Traceback"},
+        "too old": {**_TEST_OK, "started_at": "2026-08-01T00:00:00+00:00"},
+        "another scenario's record": {**_TEST_OK, "scenario": "other"},
+    }),
     ("register_read (signal_report_complete)", lambda c: rr.evaluate_signal_report(c, _SIG_DECL, _JIT_NOW, 30), _SIG_OK, {
         "no report": None,
         "a section missing": {**_SIG_OK, "sections": {}},

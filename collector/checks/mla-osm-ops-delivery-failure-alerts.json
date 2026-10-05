@@ -1,0 +1,19 @@
+{
+  "id": "mla-osm-ops-delivery-failure-alerts",
+  "indicator": "KSI-MLA-OSM",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (delivery_failure_alerts): Invoke the log normalizer with an event it cannot process, so the log delivery path fails; its error alarm must enter ALARM, which notifies the detection topic. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "delivery_failure_alerts",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-OSM.validate.5",
+      "covers": "partial",
+      "gap": "Run every 30 days by the operator and recorded, not every 3: the test changes or provokes the account, so it does not run unattended."
+    }
+  ]
+}

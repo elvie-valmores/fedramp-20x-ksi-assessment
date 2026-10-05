@@ -25,13 +25,6 @@ class _NotYetBuilt(Mechanism):
         )
 
 
-class DeliberateTest(_NotYetBuilt):
-    """Would break something on purpose and confirm the control catches it."""
-
-    name = "deliberate_test"
-    depends_on = "the deliberate test harness"
-
-
 class RecordStore(_NotYetBuilt):
     """Would confirm a required record exists with the right fields."""
 

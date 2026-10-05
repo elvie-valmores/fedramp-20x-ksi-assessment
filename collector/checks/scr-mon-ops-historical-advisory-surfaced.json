@@ -1,0 +1,19 @@
+{
+  "id": "scr-mon-ops-historical-advisory-surfaced",
+  "indicator": "KSI-SCR-MON",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (historical_advisory_surfaced): Audit a manifest that pins urllib3, a package the worker uses, at 1.26.4, with the pinned pip-audit; CVE-2021-33503 (GHSA-q2q7-5pp4-w6pg) must be reported. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "historical_advisory_surfaced",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SCR-MON.validate.2",
+      "covers": "partial",
+      "gap": "Run every 30 days by the operator and recorded, not every 3: the test changes or provokes the account, so it does not run unattended."
+    }
+  ]
+}

@@ -10,8 +10,8 @@ from mechanisms.cloud_api_config_read import CloudAPIConfigRead
 from mechanisms.declared_versus_live_comparison import DeclaredVersusLiveComparison
 from mechanisms.inventory_reconciliation import InventoryReconciliation
 from mechanisms.log_query import LogQuery
+from mechanisms.deliberate_test import DeliberateTest
 from mechanisms.not_yet_built import (
-    DeliberateTest,
     EffectiveAccessAnalysis,
     RecordStore,
 )
@@ -26,9 +26,9 @@ MECHANISMS = {
     "log_query": LogQuery(),
     "pipeline_config_read": PipelineConfigRead(),
     "register_read": RegisterRead(),  # since 2026-10-03
+    "deliberate_test": DeliberateTest(),  # since 2026-10-05
     # Registered, not yet implemented -- each waits on infrastructure
     # that does not exist yet. See mechanisms/not_yet_built.py.
-    "deliberate_test": DeliberateTest(),
     "record_store": RecordStore(),
     "effective_access_analysis": EffectiveAccessAnalysis(),
 }

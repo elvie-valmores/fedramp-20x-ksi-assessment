@@ -1,0 +1,24 @@
+{
+  "id": "svc-sin-ops-object-lock-rejects-change",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (object_lock_rejects_change): As an administrator, delete a locked log object version and shorten its retention. Both must be refused, and the version must still be there. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "object_lock_rejects_change",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.4",
+      "covers": "partial",
+      "gap": "Run every 30 days by the operator and recorded, not every 3: the test changes or provokes the account, so it does not run unattended."
+    },
+    {
+      "row": "KSI-MLA-OSM.validate.1",
+      "covers": "partial",
+      "gap": "Run every 30 days by the operator and recorded, not every 3: the test changes or provokes the account, so it does not run unattended."
+    }
+  ]
+}

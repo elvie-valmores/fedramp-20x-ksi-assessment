@@ -1,0 +1,19 @@
+{
+  "id": "rpl-abo-ops-prior-state-recoverable",
+  "indicator": "KSI-RPL-ABO",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (prior_state_recoverable): Read back the oldest retained version of the AWS root's Terraform state and confirm it parses as a prior baseline (older serial, its own lineage); read back the oldest retained api task definition. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "prior_state_recoverable",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-ABO.validate.3",
+      "covers": "partial",
+      "gap": "Recoverability is shown by reading back the oldest state version and task definition, not by applying them, and it is run every 30 days, not 3. The declared depth is 90 days; the state bucket holds 17, all it has existed."
+    }
+  ]
+}
