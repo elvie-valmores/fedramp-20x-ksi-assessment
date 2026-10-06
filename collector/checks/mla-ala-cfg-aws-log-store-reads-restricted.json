@@ -15,8 +15,7 @@
       "arn:aws:iam::437672023758:role/fedramp-20x-ksi-run-detection-query",
       "arn:aws:iam::437672023758:role/fedramp-20x-ksi-github-collector",
       "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_OperatorReadOnly_*",
-      "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_ElevatedAdmin_*",
-      "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_InterimOperatorAdmin_*"
+      "arn:aws:iam::437672023758:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_ElevatedAdmin_*"
     ]
   },
   "matrix_rows": [

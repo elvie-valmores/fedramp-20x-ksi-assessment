@@ -48,3 +48,47 @@ scenarios:
     cadence_days: 30
     runs_as: readonly
     what: Audit a manifest that pins urllib3, a package the worker uses, at 1.26.4, with the pinned pip-audit; CVE-2021-33503 (GHSA-q2q7-5pp4-w6pg) must be reported
+
+  # --- With the environment standing (week 3's sessions) ---
+
+  waf_blocks_and_allows:
+    rows: [KSI-CNA-RVP.validate.1, KSI-CNA-RVP.validate.2, KSI-CNA-RVP.validate.3]
+    requires: aws-phase1
+    cadence_days: 30
+    runs_as: elevated
+    what: Through the load balancer, a legitimate request is answered, a SQL injection pattern is blocked by the managed rules, and a flood past 2,000 requests from one address is blocked by the rate rule
+
+  task_internet_egress_blocked:
+    rows: [KSI-CNA-RNT.validate.3]
+    requires: aws-phase2
+    cadence_days: 30
+    runs_as: elevated
+    what: A one-off task in the worker's subnets and security group tries to open a connection to an internet address; it must fail
+
+  permissive_group_still_no_egress:
+    rows: [KSI-CNA-ULN.validate.4]
+    requires: aws-phase2
+    cadence_days: 30
+    runs_as: elevated
+    what: The same probe from a task under a disposable security group that allows all egress; the private subnets' routes must still stop it. The group is deleted after
+
+  service_to_service_refused:
+    rows: [KSI-CNA-MAT.validate.1]
+    requires: aws-phase2
+    cadence_days: 30
+    runs_as: elevated
+    what: A one-off task in the worker's network position tries to reach a running api task on 8443; no flow declares it, so it must fail
+
+  failing_deploy_rolls_back:
+    rows: [KSI-CMT-VTD.validate.2]
+    requires: aws-phase2
+    cadence_days: 30
+    runs_as: elevated
+    what: Deploy an api revision that runs but never serves, so it fails the load balancer's health checks; the deployment circuit breaker must roll the service back to the prior revision. The test revision is deregistered after
+
+  timed_point_in_time_restore:
+    rows: [KSI-CNA-OFA.validate.3, KSI-RPL-TRC.validate.2, KSI-RPL-TRC.validate.3]
+    requires: aws-phase1
+    cadence_days: 30
+    runs_as: elevated
+    what: Restore the database to a chosen moment into a disposable instance, timed to available against the 60-minute objective; the instance is deleted after

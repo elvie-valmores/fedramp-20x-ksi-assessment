@@ -1,0 +1,19 @@
+{
+  "id": "cna-mat-ops-service-to-service-refused",
+  "indicator": "KSI-CNA-MAT",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (service_to_service_refused): A one-off task in the worker's network position tries to reach a running api task on 8443; no flow declares it, so it must fail. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "service_to_service_refused",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-MAT.validate.1",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

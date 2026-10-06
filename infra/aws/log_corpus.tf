@@ -150,7 +150,7 @@ data "aws_iam_policy_document" "log_store_bucket" {
   #   run_detection_query  its Athena query reads the corpus as this role
   #   github_collector     its Athena query, and the run history it fetches
   #   the operator         investigation and break-glass: the read-only and
-  #                        elevated roles, and the interim one until it goes
+  #                        elevated roles
   #
   # The key alone did not close this. Objects written before the evidence key
   # (2026-09-19 to 2026-09-30) are SSE-S3, which anyone holding s3:GetObject

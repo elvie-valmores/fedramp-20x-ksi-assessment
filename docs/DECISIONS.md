@@ -8452,3 +8452,80 @@ Until then both read 0, and that zero is accurate.
 - `collect.yml` now checks out full history. A shallow clone would have counted 0 reverts forever.
 
 Self-test: 102 assertions. Coverage: 110 full and 36 partial of 380 rows.
+
+## 2026-10-05/06 — The deliberate test harness, and week 3's first session
+
+**The harness** (`deliberate/`), the shared component the matrix calls "deliberate test harness":
+
+- **`scenarios.yaml`:** each scenario's rows, what it needs standing, and its declared cadence.
+- **`scenarios.py`:** each scenario does something a control should stop or catch, and passes only
+  on the opposite of what a broken control would produce.
+- **`run.py`:** writes every outcome, failures included, to the log store under
+  `deliberate-tests/scenario=<id>/`. The records are Object Locked, so a recorded failure cannot be
+  withdrawn and a pass cannot be edited into existence.
+- **The collector's `deliberate_test` mechanism** is no longer a stub. It judges the newest record:
+  it must exist, be this scenario's, have passed, and be younger than the cadence. Five negative
+  controls cover it.
+
+**Cadence.** Most rows ask for three days. These tests provoke or change the account, so they are
+run by the operator and declared at 30 days. Each row they answer is linked as partial, with that
+gap stated. The restore rows say "per declared cadence", so those three are full.
+
+**Persistent scenarios, 2026-10-05, run elevated, all passed:**
+
+| Scenario | Rows | Observed |
+|---|---|---|
+| `object_lock_rejects_change` | SVC-SIN v4, MLA-OSM v1 | As admin: deleting a locked version, deleting it while bypassing governance, and shortening its retention were each refused with AccessDenied. The version and its retention were unchanged |
+| `out_of_band_change_detected` | SVC-ACM v3 | A hand-added tag on a persistent log group failed the next drift run, which named the resource. The run after removing the tag passed. "1.6 minutes" covers both runs, an upper bound; the scenario now times the first alone |
+| `delivery_failure_alerts` | MLA-OSM v5 | The normalizer, fed a missing object, failed. Its alarm entered ALARM 1.2 minutes later, notifying the detection topic |
+| `prior_state_recoverable` | RPL-ABO v3 | The oldest of 130 AWS state versions (2026-09-18, serial 1, same lineage) and api task definition revision 1 are both retrievable. The depth is 17 days, all the state bucket has existed, against a declared 90 |
+| `historical_advisory_surfaced` | SCR-MON v2 | The pinned pip-audit reports CVE-2021-33503 for urllib3 1.26.4, a package the worker uses, and exits non-zero |
+
+**Environment scenarios, 2026-10-06 session, all passed:**
+
+| Scenario | Rows | Observed |
+|---|---|---|
+| `waf_blocks_and_allows` | CNA-RVP v1–3 | A legitimate request got 200 and a SQL injection got 403. A 2,300-request flood all landed, since the rate rule acts after the fact, and further requests were blocked 31 seconds later |
+| `task_internet_egress_blocked` | CNA-RNT v3 | A probe task in the worker's position could not reach 1.1.1.1:443 |
+| `permissive_group_still_no_egress` | CNA-ULN v4 | The same probe failed again with a disposable allow-all-egress group added. That group sat alongside the worker's own, because the registry endpoints admit only declared groups and a task that cannot pull its image would "fail" for the wrong reason. The group was deleted |
+| `service_to_service_refused` | CNA-MAT v1 | The worker's position could not open 8443 to a running api task |
+| `timed_point_in_time_restore` | CNA-OFA v3, RPL-TRC v2, v3 | A restore to 00:52:39Z was available in **15.7 minutes** against the 60-minute objective: encrypted under the persistent database key, private, and deleted after. It is entered in `registers/recovery-tests.yaml`, the first measured recovery objective. The recovery point is reachable, but how much it lost is not measured |
+| `failing_deploy_rolls_back` | CMT-VTD v2 | An api revision that runs but never serves failed the load balancer's health checks. The circuit breaker rolled back to revision 5 in 6.4 minutes. The test revision is deregistered |
+
+**The rollback scenario's first run had a bug.** It waited to see the failed deployment and the
+restored revision at the same moment, but ECS drops the failed deployment once the rollback
+completes. ECS rolled back correctly at 01:21Z, and the test would have recorded a false FAIL at its
+timeout.
+- **What happened to that run:** it was stopped by hand before the timeout, so it recorded nothing,
+  and its cleanup ran.
+- **The fix:** the scenario now remembers the failure once seen, and also accepts ECS's own "rolling
+  back" event.
+- **The record:** the rerun is the one recorded.
+
+**An apply ran under the wrong elevation's justification.** At the session's start, `elevate.sh start`
+refused because the 45-minute deliberate-test elevation was still running. The refusal went unnoticed,
+and the stand-up apply ran on that elevation's credentials before it expired. The apply itself was
+correct and is in CloudTrail, but its recorded justification is the deliberate tests. The session
+elevation was started afterwards. The resume block now says to check `elevate.sh status` first.
+
+**`InterimOperatorAdmin` deleted** in the same apply, along with:
+- its role patterns in the evidence key and log-store policies
+- its entries in three checks
+- its policy-gate exception
+
+Its exemption in the `iam-elp` query stays until its 2026-10-03 activity ages out of the window.
+
+**What standing the environment showed:**
+
+- **Seven Security Hub controls fail on session-only resources:** ECS.12, ELB.6, RDS.5, RDS.6,
+  RDS.8, RDS.23 and SecretsManager.1. They are evaluated only while the environment stands, so this
+  is their first appearance. Recommendations are in PROJECT-CONTEXT, awaiting the operator.
+- **`svc-asm-ops-secrets-owned` failed on a register typo.** The pattern read
+  `fedramp-20x-ksi-task-tls*`, but the secret is `fedramp-20x-ksi/task-tls`. It was written on
+  2026-10-03 with the environment down and never matched anything. Corrected.
+- **Drift cannot judge a standing environment as the read-only role.** Refreshing the TLS secret's
+  version reads its value. Recorded as an open item.
+- **Teardown verified:** 292 persistent and 0 ephemeral; no cluster, database, load balancer, VPC,
+  NAT gateway, endpoint or active task definition left.
+
+Coverage: 113 full and 49 partial of 380 rows, across 157 checks. Self-test: 103 assertions.

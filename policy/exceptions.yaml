@@ -24,11 +24,6 @@ exceptions:
     address: aws_s3_bucket_server_side_encryption_configuration.tfstate
     reason: The state bucket is SSE-S3 by a recorded exception (DECISIONS.md, 2026-09-23)
     expires: 2027-04-05
-  - rule: AWS-SSO-01
-    root: aws
-    address: aws_ssoadmin_permission_set.interim_operator_admin
-    reason: Unassigned since 2026-10-05 and kept one session as the fallback if JIT elevation has to be backed out; deleted at the next session
-    expires: 2026-10-12
   - rule: AWS-0053
     root: aws
     address: aws_lb.main

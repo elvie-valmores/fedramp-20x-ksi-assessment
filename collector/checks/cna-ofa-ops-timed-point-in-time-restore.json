@@ -1,0 +1,26 @@
+{
+  "id": "cna-ofa-ops-timed-point-in-time-restore",
+  "indicator": "KSI-CNA-OFA",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (timed_point_in_time_restore): Restore the database to a chosen moment into a disposable instance, timed to available against the 60-minute objective; the instance is deleted after. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "timed_point_in_time_restore",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-OFA.validate.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-TRC.validate.2",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-TRC.validate.3",
+      "covers": "full"
+    }
+  ]
+}

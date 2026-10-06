@@ -31,7 +31,8 @@ The design phase is closed. What remains is the build.
 
 ## Where the build has reached
 
-The build is in progress, and `README.md` carries the current status table. As of 2026-10-02:
+The build is in progress, and `README.md` carries the current status table. Mostly as of 2026-10-02;
+"Resume here" below is current to 2026-10-06:
 
 - **Persisting between sessions**: 277 AWS resource instances (91 resources plus 186 disabled
   Security Hub controls) and 30 GCP ones. On AWS: the log store, CloudTrail,
@@ -39,7 +40,7 @@ The build is in progress, and `README.md` carries the current status table. As o
   provider, drift role, build role), the cross-cloud role, the container registry, the extract bucket,
   the artifacts key, the posture services (GuardDuty, Security Hub, Inspector) and the account-level
   S3 public access block, and the operator's Identity Center permission sets and the JIT elevation
-  workflow (294 AWS instances since 2026-10-05). On GCP:
+  workflow (292 AWS instances since 2026-10-06). On GCP:
   everything, phase 2 included. "Resume here" below has the detail.
 - **Built and verified, but not standing**: the AWS application environment, both phases. It applies
   in about fifteen minutes and is torn down after each session. Both phases last ran on 2026-10-02,
@@ -72,39 +73,51 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-10-01 (evening)
+## Resume here — state at the end of 2026-10-06 (about 02:00 UTC)
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
-deployed and internally consistent, and still does nothing. Eight have now been found, three of them
-on 2026-10-01, and every one by running the thing rather than reading it. Check against the live
-accounts.
+deployed and internally consistent, and still does nothing. Nine have now been found, every one by
+running the thing rather than reading it (the ninth: Trivy scanning nothing, 2026-10-05). Check
+against the live accounts.
 
-Sessions 2026-09-29 to 2026-10-01 moved the operator to single sign-on, scoped Security Hub, put the
-evidence stores under a customer key, fixed the normalizer's sign-in classification, and built
-collector checks for SVC-SIN rows 1 and 6. The session was closed out at about 01:07 UTC on
-2026-10-01. This block was rewritten then. Read `DECISIONS.md` from 2026-09-29 on for the detail.
+**Where it stands.** Weeks 1 and 2 of the finish-line plan are done, and week 3's first session ran.
+Read `DECISIONS.md` from 2026-10-05 on for the detail:
+
+- **Done:**
+  - **JIT elevation:** your standing access is read-only.
+  - **Policy-as-code:** `policy.yml`, on every push and daily.
+  - **The signal report:** in `collect.yml`.
+  - **The deliberate test harness,** with 11 scenarios, all passed and recorded.
+- **Week 3, session 1 (2026-10-06):**
+  - **The run:** phases 1 and 2 stood up, six environment tests ran, then teardown.
+  - **The first measured recovery objective:** a point-in-time restore, available in 15.7 minutes
+    against the 60-minute objective.
+  - **Teardown verified:** 292 persistent, 0 ephemeral, and no cluster, database, load balancer, VPC
+    or endpoint left.
+- **Coverage:** 113 full and 49 partial of 380 rows, across 157 checks. Self-test: 103 assertions.
 
 ### First actions for the next session
 
-1. **Sign in.** Click the Identity Center tile in Google's app grid as `alex@`, then run
-   `aws sso login --profile caliper-readonly` (since 2026-10-05; `caliper-admin` has no assignment). The AWS-started sign-in worked once, on 10-01, after
-   failing five times, so the tile is the reliable path. Every command below needs
-   `AWS_PROFILE=caliper-readonly`, and anything that changes the account needs an elevation (`infra/aws/elevate.sh`). The user's `~/.zshrc` may still set `caliper-admin`; it is set in the user's `~/.zshrc`, but a shell started earlier may
-   not have it. There are no static AWS credentials anywhere, and no IAM users.
+1. **Sign in:** `aws sso login --profile caliper-readonly`. If it fails, click the Identity Center
+   tile in Google's app grid as `alex@` first.
+   - `AWS_PROFILE=caliper-readonly` is the default in `~/.zshrc`.
+   - Anything that changes the account needs `infra/aws/elevate.sh start "<why>" [minutes]`, then
+     `AWS_PROFILE=caliper-elevated`.
+   - **Only one elevation runs at a time.** `elevate.sh start` refuses while one is running, so
+     check `elevate.sh status` before starting. On 2026-10-06 a refused start went unnoticed, and an
+     apply ran under the previous elevation's justification.
 2. **Verify, do not trust:**
-   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. The scheduled run (05:30 UTC, but GitHub has started it hours late) is
-     expected to be red **only** on the one known finding below. Open its log: the self-test says
-     22 of 22, and the SDR line shows a clean version (no `-dirty`). The artifact
-     `evidence-<run id>` holds `results.json` and the SDR.
-   - `infra/aws/boundary.py --persistent | wc -l` gives **277**, and `--ephemeral` gives 0.
-   - The API sweep in the 2026-09-25 entry of `DECISIONS.md` gives all zeros.
-   - `gh run list --workflow drift.yml -L 3`: green.
-   - Locally, `cd collector && ../.venv/bin/python run_checks.py` with the variables under "Running
-     things" gives **35 of 35**, or 34 while Config catches up on an implicit deletion
-     (`inventory_current`, which clears by itself; see the 2026-10-02 lag correction).
-3. **Then the build**, at "The next thing to do". The detection chain and the Security Hub recount
-   were both done on 2026-10-01 evening.
+   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. It is expected red
+     only on `svc-sin-cfg-aws-backups-restorable` (clears 2026-10-09), and on `iam-elp` until about
+     2026-10-06 18:00 UTC (the root MFA change ages out). Its log should show "signal report: 25 of
+     25" and the self-test's 103 assertions.
+   - **The policy gate:** `gh run list --workflow policy.yml -L 3`, green.
+   - **Drift:** `gh run list --workflow drift.yml -L 3`, green.
+   - **The persistence boundary:** `infra/aws/boundary.py --persistent | wc -l` gives **292**, and
+     `--ephemeral` gives 0.
+3. **Then "The next thing to do"** below. Start with the decision waiting on you, the seven Security
+   Hub controls.
 
 ### Waiting on the user
 
@@ -145,8 +158,11 @@ The persistent set, by file (`boundary.py --files`, 17 files):
   identity pool, its GitHub provider pinned to the repository's immutable IDs and `main`, and the
   custom role `fedrampKsiCollector` granted to the federated principal. `collect.yml` runs daily at
   05:30 UTC and emits the SDR. Bootstrap's state is in the state bucket since 2026-10-01.
-- **Operator access:** the `InterimOperatorAdmin` permission set (4-hour sessions,
-  AdministratorAccess) assigned to `alex@`, under the 2026-09-19 exception.
+- **Operator access** (since 2026-10-05):
+  - **Standing:** `OperatorReadOnly`, 4-hour sessions.
+  - **Per elevation only:** `ElevatedAdmin`, 1-hour sessions in us-east-1. It is assigned by the
+    Step Functions workflow and removed by the workflow or its 15-minute backstop.
+  - **`InterimOperatorAdmin`** was deleted on 2026-10-06.
 
 **Standing cost:** measured, not estimated. All three posture services are still in trial, so the
 real bill is about 0.05 USD a day plus the key (1 USD a month). After the trials, the projection is
@@ -255,9 +271,35 @@ or a recorded finding.
    - ~~**The signal-report generator.**~~ **Done 2026-10-05:** `signals/generate.py`, daily in
      `collect.yml`; 25 signals across 7 indicators. Week 2 is complete.
 3. **Week 3:**
-   - **Two batched AWS sessions:** the deliberate tests, a timed restore that measures the database
-     recovery objective, and the runtime-monitoring trial for GuardDuty.11 and .12 (review due
-     2026-11-03).
+   - ~~**Session 1.**~~ **Done 2026-10-06:**
+     - **The tests:** 11 deliberate scenarios passed and recorded. Five ran on persistent
+       resources, and six with the environment up, including the 15.7-minute timed restore.
+     - **The cleanup:** `InterimOperatorAdmin` was deleted, so its policy exception is gone.
+   - **Next, with no session needed:**
+     1. **Decide the seven Security Hub controls.** They fail only while the environment stands,
+        so a session was the first time they were evaluated. My recommendations, to confirm or
+        change:
+
+        | Control | Recommendation | Why |
+        |---|---|---|
+        | ELB.6, RDS.8 | Except | Deletion protection: the environment is destroyed every session by design, and the restore path is tested |
+        | RDS.5 | Except | Multi-AZ: the database's availability position in `registers/resources.yaml` |
+        | RDS.6 | Except | Enhanced monitoring needs a role carrying an AWS-managed policy, which CNA-DFP bars |
+        | RDS.23 | Except | The default port: obscurity only, since three security groups already confine 5432 |
+        | SecretsManager.1 | Except | Rotation: the TLS secret is regenerated at every session |
+        | ECS.12 | Remediate | Container Insights: cheap for session-long clusters, and real runtime metrics |
+
+        Then `cna-ibp-ops-aws-failing-controls-excepted` passes again at the next session.
+     2. **Drop `InterimOperatorAdmin` from the `iam-elp` query's exemptions** once its 2026-10-03
+        activity has aged out (after 2026-10-06).
+     3. **Write deliberate scenarios for the remaining test rows.** They are listed in
+        DECISIONS.md, 2026-10-06. Some can't be done as written and get recorded as gaps instead,
+        such as SVC-VRI v2: nothing verifies a signature at deploy.
+   - **Session 2:**
+     - **The GuardDuty runtime-monitoring trial** (GuardDuty.11 and .12, review due 2026-11-03).
+       Decide first: on Fargate, GuardDuty creates its own VPC endpoint and security group, which
+       could block `teardown.sh` from deleting the VPC.
+     - **Rerun any environment scenario** past its 30-day cadence.
    - **Review queries.**
 4. **Week 4:**
    - **Descoping rationales for the responder and SCIM.**
@@ -332,8 +374,10 @@ AccessDenied.
 | Security Hub: 21 failing controls with no exception | **Closed 2026-10-05:** re-evaluation cleared the remediations. Config.1 then failed on its second half, recording scope, and is excepted under the 2026-09-05 cost decision. 100 of 117 pass outright, and `cna-ibp-ops-aws-failing-controls-excepted` passes |
 | `iam-elp-ops-aws-iam-mutations-by-platform-engineer` failing | **Expected until 2026-10-06:** it caught the operator's root MFA change of 2026-10-03, which was authorized (DECISIONS.md, 2026-10-03). On 2026-10-05 it was the only cause left: Identity Center's service-linked role is now exempt. Investigate it if it still fails after that date |
 | `piy-rsd-cfg-lifecycle-controls` failing | **Closed 2026-10-05:** the pre-merge policy stage is built |
-| Policy gate exceptions | Ten, each with an expiry. `InterimOperatorAdmin`'s lapses 2026-10-12, the day the gate fails on it unless the set is deleted. Trivy's AWS-0132 false positives lapse 2027-01-05: re-test at the next Trivy upgrade |
-| JIT follow-ups | **Next session:** delete the unassigned `InterimOperatorAdmin` permission set, and drop it from `operator_role_patterns` and the five checks. **Week 3:** a deliberate backstop test, then trim the backstop's IAM removal rights; checks for JIT validate 3 to 5. **GCP:** PAM entitlements |
+| Policy gate exceptions | Nine, each with an expiry; `InterimOperatorAdmin`'s went with the set (2026-10-06). Trivy's AWS-0132 false positives lapse 2027-01-05: re-test them at the next Trivy upgrade |
+| Seven Security Hub controls on session resources | **Decision waiting on the operator** (ECS.12, ELB.6, RDS.5, RDS.6, RDS.8, RDS.23, SecretsManager.1). Recommendations under "The next thing to do" |
+| Drift check cannot judge a standing environment as the read-only role | Refreshing `aws_secretsmanager_secret_version.task_tls` reads the secret, which read-only access is correctly denied. In CI the environment is always down, so this only bites in sessions. Options: take the version out of state, or run session drift elevated |
+| JIT follow-ups | ~~Delete `InterimOperatorAdmin`~~ done 2026-10-06, apart from the `iam-elp` exemption (after 2026-10-06). **Week 3:** a deliberate backstop test, then trim the backstop's IAM removal rights; checks for JIT validate 3 to 5. **GCP:** PAM entitlements |
 | Standing change exception | **Narrowed 2026-10-05, for the operator's review:** humans apply only as ElevatedAdmin. It closes when CI applies declared state |
 | Retention with no expiry (4 entries) | **Decided 2026-10-03** (lean set): 30 or 90 days each. The Artifact Registry cleanup policy is in dry run until reviewed |
 | Recovery objectives declared from the design | **For the operator's review.** Database RTO 60 minutes and RPO 5 minutes, among others (registers/resources.yaml). Unmeasured until RPL-TRC |

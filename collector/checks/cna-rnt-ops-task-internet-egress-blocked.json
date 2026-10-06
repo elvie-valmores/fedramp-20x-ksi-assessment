@@ -1,0 +1,19 @@
+{
+  "id": "cna-rnt-ops-task-internet-egress-blocked",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (task_internet_egress_blocked): A one-off task in the worker's subnets and security group tries to open a connection to an internet address; it must fail. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "task_internet_egress_blocked",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.validate.3",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

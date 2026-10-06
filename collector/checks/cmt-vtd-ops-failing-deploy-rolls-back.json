@@ -1,0 +1,19 @@
+{
+  "id": "cmt-vtd-ops-failing-deploy-rolls-back",
+  "indicator": "KSI-CMT-VTD",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (failing_deploy_rolls_back): Deploy an api revision that runs but never serves, so it fails the load balancer's health checks; the deployment circuit breaker must roll the service back to the prior revision. The test revision is deregistered after. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "failing_deploy_rolls_back",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-VTD.validate.2",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

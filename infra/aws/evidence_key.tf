@@ -40,10 +40,10 @@ locals {
   # The operator's Identity Center roles. Matched by pattern because the
   # suffix is Identity Center's to choose and changes if the permission set
   # is reprovisioned. The standing read-only role and the elevated one
-  # (elevation.tf); InterimOperatorAdmin (identity_center.tf) until its
-  # assignment is removed.
+  # (elevation.tf). InterimOperatorAdmin's was dropped with the permission
+  # set (2026-10-05).
   operator_role_patterns = [
-    for set in ["OperatorReadOnly", "ElevatedAdmin", "InterimOperatorAdmin"] :
+    for set in ["OperatorReadOnly", "ElevatedAdmin"] :
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_${set}_*"
   ]
 }

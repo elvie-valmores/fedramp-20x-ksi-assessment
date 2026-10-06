@@ -12,4 +12,10 @@
 #   measured    {rto_minutes, rpo_minutes}
 #   evidence    where the run's output is
 
-tests: []
+tests:
+  - date: 2026-10-06
+    path: restore_database
+    class: AWS::RDS::DBInstance
+    measured: {rto_minutes: 15.7, rpo_minutes: null}
+    note: Point-in-time restore to 2026-10-06T00:52:39Z, five minutes before the latest restorable time, into a disposable db.t4g.small; available, encrypted under the persistent database key and private, then deleted. The recovery point is not measured -- restoring to a chosen moment shows it is reachable, not how much was lost
+    evidence: s3://fedramp-20x-ksi-log-store-437672023758/deliberate-tests/scenario=timed_point_in_time_restore/20261006T010026Z.json

@@ -1,0 +1,19 @@
+{
+  "id": "cna-uln-ops-permissive-group-still-no-egress",
+  "indicator": "KSI-CNA-ULN",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (permissive_group_still_no_egress): The same probe from a task under a disposable security group that allows all egress; the private subnets' routes must still stop it. The group is deleted after. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "permissive_group_still_no_egress",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-ULN.validate.4",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "cna-rvp-ops-waf-blocks-and-allows",
+  "indicator": "KSI-CNA-RVP",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (waf_blocks_and_allows): Through the load balancer, a legitimate request is answered, a SQL injection pattern is blocked by the managed rules, and a flood past 2,000 requests from one address is blocked by the rate rule. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "waf_blocks_and_allows",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RVP.validate.1",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    },
+    {
+      "row": "KSI-CNA-RVP.validate.2",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    },
+    {
+      "row": "KSI-CNA-RVP.validate.3",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

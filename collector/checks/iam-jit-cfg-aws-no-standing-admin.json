@@ -3,7 +3,7 @@
   "indicator": "KSI-IAM-JIT",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "CFG",
-  "description": "Every Identity Center assignment in the account, users and groups alike, is to the standing read-only set; the elevated set counts only while an elevation runs. Fails while InterimOperatorAdmin is still assigned",
+  "description": "Every Identity Center assignment in the account, users and groups alike, is to the standing read-only set; the elevated set counts only while an elevation runs",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
