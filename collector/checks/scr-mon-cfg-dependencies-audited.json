@@ -24,6 +24,11 @@
         "svc-eis-cfg-aws-registry-scanning",
         "svc-eis-cfg-gcp-container-scanning"
       ]
+    },
+    {
+      "row": "KSI-CNA-MAT.verify.5",
+      "covers": "partial",
+      "gap": "Dependency scanning (pip-audit) in the build, and IaC scanning in the policy gate (Trivy); no static analysis of the application code."
     }
   ]
 }

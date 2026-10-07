@@ -1,0 +1,27 @@
+{
+  "id": "cna-rvp-cfg-aws-waf-managed-groups",
+  "indicator": "KSI-CNA-RVP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The web ACL runs the three AWS managed rule groups -- common, known bad inputs, SQL injection -- blocking, and on the vendor's current version rather than a pinned one",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "waf",
+    "region": "us-east-1",
+    "load_balancer": "fedramp-20x-ksi",
+    "assertion": "managed_groups",
+    "managed_groups": [
+      "AWSManagedRulesCommonRuleSet",
+      "AWSManagedRulesKnownBadInputsRuleSet",
+      "AWSManagedRulesSQLiRuleSet"
+    ]
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RVP.verify.2",
+      "covers": "full"
+    }
+  ]
+}

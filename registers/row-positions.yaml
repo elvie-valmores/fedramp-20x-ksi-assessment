@@ -8,6 +8,9 @@
 #   manual    the evidence exists but is gathered by a person; `evidence`
 #             says where
 #   gap       nothing evidences it, and the row says why and what that risks
+#   inapplicable  the row's premise does not hold in this architecture (a
+#             Cloud Run service where there is only a job, an organization
+#             where there is none); the risk says what that leaves
 #
 # sdr/matrix_rows.py --check fails on a position for a row the matrix lacks,
 # one without its reason or risk, and one on a row a check now covers.

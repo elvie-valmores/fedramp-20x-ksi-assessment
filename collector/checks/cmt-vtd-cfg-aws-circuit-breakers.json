@@ -1,0 +1,22 @@
+{
+  "id": "cmt-vtd-cfg-aws-circuit-breakers",
+  "indicator": "KSI-CMT-VTD",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every ECS service has the deployment circuit breaker on, with rollback",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "ecs_services",
+    "region": "us-east-1",
+    "cluster": "fedramp-20x-ksi",
+    "assertion": "circuit_breaker"
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-VTD.verify.2",
+      "covers": "full"
+    }
+  ]
+}

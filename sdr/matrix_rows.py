@@ -44,7 +44,7 @@ SNAPSHOT = REPO / "docs" / "matrix-rows.json"
 REPORT = REPO / "docs" / "MATRIX-COVERAGE.md"
 CHECKS = REPO / "collector" / "checks"
 POSITIONS = REPO / "registers" / "row-positions.yaml"
-KINDS = ("descoped", "manual", "gap")
+KINDS = ("descoped", "manual", "gap", "inapplicable")
 TABLES = ("VERIFY", "VALIDATE")
 
 

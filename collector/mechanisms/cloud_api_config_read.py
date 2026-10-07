@@ -154,6 +154,16 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
+        if provider == "aws" and resource == "waf":
+            return self._aws_waf(check)
+        if provider == "aws" and resource == "ecs_services":
+            return self._aws_ecs_services(check)
+        if provider == "aws" and resource == "password_policy":
+            return self._aws_password_policy(check)
+        if provider == "aws" and resource == "root_credentials":
+            return self._aws_root_credentials(check)
+        if provider == "aws" and resource == "workload_managed_policies":
+            return self._aws_workload_managed_policies(check)
         if provider == "aws" and resource in ELEVATION_RESOURCES:
             return self._aws_elevation(check)
         if provider == "github" and resource == "pushes_evaluated":
@@ -1192,6 +1202,95 @@ class CloudAPIConfigRead(Mechanism):
             latest and {"created": latest["created_at"], "url": latest["html_url"], "head": latest["head_sha"]},
             step and {"name": step["name"], "conclusion": step["conclusion"]},
             datetime.now(timezone.utc), p["max_age_days"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_waf(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-RVP verify 1-4: the load balancer's web ACL, as declared.
+
+        Requires params: region, load_balancer, assertion ("associated",
+        "managed_groups", "rate_rule" or "logging"), and per assertion
+        managed_groups (names), rate_limit, log_destination_prefix.
+        """
+        p = check.params
+        elb = boto3.client("elbv2", region_name=p["region"])
+        waf = boto3.client("wafv2", region_name=p["region"])
+        lb = elb.describe_load_balancers(Names=[p["load_balancer"]])["LoadBalancers"][0]["LoadBalancerArn"]
+        acl = (waf.get_web_acl_for_resource(ResourceArn=lb).get("WebACL") or None)
+        logging = None
+        if acl:
+            try:
+                logging = waf.get_logging_configuration(ResourceArn=acl["ARN"])["LoggingConfiguration"]
+            except waf.exceptions.WAFNonexistentItemException:
+                logging = None
+        ok, detail, evidence = evaluate_waf(acl, logging, p)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_ecs_services(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CMT-VTD verify 2, CNA-OFA verify 1, CNA-MAT verify 3: the running services.
+
+        Requires params: region, cluster, assertion ("circuit_breaker",
+        "spread" or "distinct_identity"), and for spread, multi_task (the
+        services meant to run more than one task).
+        """
+        p = check.params
+        ecs = boto3.client("ecs", region_name=p["region"])
+        ec2 = boto3.client("ec2", region_name=p["region"])
+        arns = [a for page in ecs.get_paginator("list_services").paginate(cluster=p["cluster"]) for a in page["serviceArns"]]
+        services = []
+        for i in range(0, len(arns), 10):
+            for svc in ecs.describe_services(cluster=p["cluster"], services=arns[i:i + 10])["services"]:
+                net = svc["networkConfiguration"]["awsvpcConfiguration"]
+                td = ecs.describe_task_definition(taskDefinition=svc["taskDefinition"])["taskDefinition"]
+                zones = sorted({s["AvailabilityZone"] for s in ec2.describe_subnets(SubnetIds=net["subnets"])["Subnets"]})
+                services.append({
+                    "name": svc["serviceName"], "desired": svc["desiredCount"], "running": svc["runningCount"],
+                    "zones": zones, "security_groups": sorted(net["securityGroups"]),
+                    "task_role": td.get("taskRoleArn"),
+                    "circuit_breaker": (svc.get("deploymentConfiguration") or {}).get("deploymentCircuitBreaker") or {},
+                })
+        ok, detail, evidence = evaluate_ecs_services(services, p["assertion"], p.get("multi_task", []))
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_password_policy(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-APM verify 4: the account password policy, as declared.
+
+        Requires param: expected (the policy's fields as IAM returns them).
+        Applies to the fallback lane only: root, since there are no IAM users.
+        """
+        iam = boto3.client("iam")
+        try:
+            policy = iam.get_account_password_policy()["PasswordPolicy"]
+        except iam.exceptions.NoSuchEntityException:
+            policy = None
+        ok, detail, evidence = evaluate_password_policy(policy, check.params["expected"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_root_credentials(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-APM verify 3, root enumerated separately: MFA on, by hardware, no keys."""
+        iam = boto3.client("iam")
+        summary = iam.get_account_summary()["SummaryMap"]
+        virtual = [d for page in iam.get_paginator("list_virtual_mfa_devices").paginate(AssignmentStatus="Assigned")
+                   for d in page["VirtualMFADevices"] if (d.get("User") or {}).get("Arn", "").endswith(":root")]
+        ok, detail, evidence = evaluate_root_credentials(summary, len(virtual))
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_workload_managed_policies(self, check: CheckDefinition) -> CheckResult:
+        """KSI-CNA-DFP verify 2: no workload role carries an AWS-managed policy.
+
+        Requires params: excluded_paths (role paths that are AWS's to define,
+        such as Identity Center's and service-linked roles'), exceptions
+        ([{role, policy, reason}]).
+        """
+        iam = boto3.client("iam")
+        attached = {}
+        for page in iam.get_paginator("list_roles").paginate():
+            for role in page["Roles"]:
+                if any(role["Path"].startswith(p) for p in check.params["excluded_paths"]):
+                    continue
+                policies = [a["PolicyArn"] for pg in iam.get_paginator("list_attached_role_policies").paginate(
+                    RoleName=role["RoleName"]) for a in pg["AttachedPolicies"]]
+                attached[role["RoleName"]] = policies
+        ok, detail, evidence = evaluate_workload_managed_policies(attached, check.params.get("exceptions", []))
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_elevation(self, check: CheckDefinition) -> CheckResult:
@@ -2414,7 +2513,25 @@ def _container_problems(c: dict, assertion: str) -> list[str]:
         ) if not present]
     if assertion == "digest_pinned":
         return [] if "@sha256:" in c.get("image", "") else [f"image by tag: {c.get('image')}"]
+    if assertion == "no_literal_secrets":
+        # Secret material reaches a task through `secrets` (a Secrets
+        # Manager reference), never as a literal in `environment`, where it
+        # would sit in the task definition for anyone who can describe it.
+        problems = []
+        for e in c.get("environment") or []:
+            name, value = str(e.get("name", "")), str(e.get("value", ""))
+            if value and _SECRET_NAME.search(name):
+                problems.append(f"{name} set as a literal")
+            elif _SECRET_VALUE.search(value):
+                problems.append(f"{name} holds what looks like key material")
+        return problems
     raise ValueError(f"unknown assertion {assertion!r}")
+
+
+import re as _re
+
+_SECRET_NAME = _re.compile(r"PASSWORD|PASSWD|SECRET|TOKEN|PRIVATE_KEY|API_KEY|CREDENTIAL", _re.I)
+_SECRET_VALUE = _re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(AKIA|ASIA)[0-9A-Z]{16}\b")
 
 
 def evaluate_task_definitions(definitions: dict[str, list[dict]], assertion: str) -> tuple[bool, str, dict]:
@@ -3133,3 +3250,124 @@ def evaluate_deliberate_test(run: dict | None, step: dict | None, now: datetime,
     if age > max_age_days:
         return False, f"the latest deliberate test is {age:.1f} days old, over {max_age_days}", evidence
     return True, f"the deliberate test passed {age:.1f} days ago", evidence
+
+
+# --- Credentials and policies, persistent (2026-10-06) ---
+
+def evaluate_password_policy(policy: dict | None, expected: dict) -> tuple[bool, str, dict]:
+    """Every expected field holds; minimums and reuse may be stricter, ages shorter."""
+    if policy is None:
+        return False, "no account password policy -- AWS defaults apply", {"policy": None}
+    stricter_up = {"MinimumPasswordLength", "PasswordReusePrevention"}
+    stricter_down = {"MaxPasswordAge"}
+    wrong = {}
+    for field, want in expected.items():
+        have = policy.get(field)
+        if field in stricter_up:
+            ok = isinstance(have, int) and have >= want
+        elif field in stricter_down:
+            ok = isinstance(have, int) and 0 < have <= want
+        else:
+            ok = have == want
+        if not ok:
+            wrong[field] = {"expected": want, "found": have}
+    evidence = {"policy": policy, "wrong": wrong}
+    if wrong:
+        return False, f"{len(wrong)} field(s) off the declared policy: {', '.join(wrong)}", evidence
+    return True, f"the password policy holds all {len(expected)} declared fields", evidence
+
+
+def evaluate_root_credentials(summary: dict, root_virtual_devices: int) -> tuple[bool, str, dict]:
+    evidence = {"AccountMFAEnabled": summary.get("AccountMFAEnabled"),
+                "AccountAccessKeysPresent": summary.get("AccountAccessKeysPresent"),
+                "root_virtual_mfa_devices": root_virtual_devices}
+    problems = []
+    if summary.get("AccountMFAEnabled") != 1:
+        problems.append("root has no MFA")
+    elif root_virtual_devices:
+        problems.append("root's MFA is a virtual device, not hardware")
+    if summary.get("AccountAccessKeysPresent"):
+        problems.append("root has access keys")
+    if problems:
+        return False, "; ".join(problems), evidence
+    return True, "root has hardware MFA and no access keys", evidence
+
+
+def evaluate_workload_managed_policies(attached: dict[str, list[str]], exceptions: list[dict]) -> tuple[bool, str, dict]:
+    excused = {(e["role"], e["policy"]) for e in exceptions}
+    found = [{"role": r, "policy": p} for r, ps in sorted(attached.items()) for p in ps
+             if p.startswith("arn:aws:iam::aws:policy/") and (r, p) not in excused]
+    evidence = {"roles": len(attached), "aws_managed": found, "excepted": exceptions}
+    if not attached:
+        return False, "no workload roles found -- nothing to judge", evidence
+    if found:
+        return False, f"{len(found)} AWS-managed attachment(s): " + ", ".join(f"{f['role']} {f['policy'].rsplit('/', 1)[1]}" for f in found[:4]), evidence
+    return True, f"none of {len(attached)} workload roles carries an AWS-managed policy", evidence
+
+
+# --- The session environment's edge and services (2026-10-06) ---
+
+def evaluate_waf(acl: dict | None, logging: dict | None, p: dict) -> tuple[bool, str, dict]:
+    assertion = p["assertion"]
+    evidence = {"web_acl": acl and acl.get("Name"), "rules": [r["Name"] for r in (acl or {}).get("Rules", [])]}
+    if acl is None:
+        return False, "no web ACL is associated with the load balancer", evidence
+    if assertion == "associated":
+        return True, f"web ACL {acl['Name']} is associated with the load balancer", evidence
+    if assertion == "managed_groups":
+        present = {}
+        for r in acl.get("Rules", []):
+            g = (r.get("Statement") or {}).get("ManagedRuleGroupStatement")
+            if g:
+                present[g["Name"]] = {"vendor": g["VendorName"], "version": g.get("Version", "default (vendor-managed)"),
+                                      "override": list((r.get("OverrideAction") or {}).keys())}
+        evidence["managed_groups"] = present
+        missing = [n for n in p["managed_groups"] if n not in present]
+        counting = [n for n, g in present.items() if "Count" in g["override"]]
+        pinned = [n for n, g in present.items() if g["version"] != "default (vendor-managed)"]
+        problems = [f"missing {', '.join(missing)}"] * bool(missing) + [f"counting only: {', '.join(counting)}"] * bool(counting) \
+            + [f"pinned to an old version: {', '.join(pinned)}"] * bool(pinned)
+        if problems:
+            return False, "; ".join(problems), evidence
+        return True, f"all {len(p['managed_groups'])} managed groups present, blocking, on the vendor's current version", evidence
+    if assertion == "rate_rule":
+        rates = [(r["Name"], r["Statement"]["RateBasedStatement"]["Limit"], list(r["Action"].keys()))
+                 for r in acl.get("Rules", []) if "RateBasedStatement" in (r.get("Statement") or {})]
+        evidence["rate_rules"] = rates
+        ok = any(limit <= p["rate_limit"] and "Block" in action for _, limit, action in rates)
+        return (ok, f"a blocking rate rule at {p['rate_limit']} or below" if ok
+                else f"no blocking rate rule at or below {p['rate_limit']}", evidence)
+    if assertion == "logging":
+        destinations = (logging or {}).get("LogDestinationConfigs", [])
+        evidence["log_destinations"] = destinations
+        ok = any(p["log_destination_prefix"] in d for d in destinations)
+        return (ok, "the web ACL logs to the declared destination" if ok else "the web ACL does not log to the declared destination",
+                evidence)
+    raise ValueError(f"unknown waf assertion {assertion!r}")
+
+
+def evaluate_ecs_services(services: list[dict], assertion: str, multi_task: list[str]) -> tuple[bool, str, dict]:
+    evidence = {"services": services}
+    if not services:
+        return False, "no services -- nothing to judge", evidence
+    if assertion == "circuit_breaker":
+        bad = [s["name"] for s in services if not (s["circuit_breaker"].get("enable") and s["circuit_breaker"].get("rollback"))]
+        return (not bad, f"circuit breaker with rollback off on {', '.join(bad)}" if bad
+                else f"all {len(services)} services roll back a failed deployment", evidence)
+    if assertion == "spread":
+        bad = [s["name"] for s in services if s["name"] in multi_task and (s["desired"] < 2 or len(s["zones"]) < 2)]
+        absent = [n for n in multi_task if n not in {s["name"] for s in services}]
+        problems = [f"{n}: fewer than two tasks or zones" for n in bad] + [f"{n}: not running" for n in absent]
+        return (not problems, "; ".join(problems) or f"{', '.join(multi_task)} run two or more tasks across two or more zones",
+                evidence)
+    if assertion == "distinct_identity":
+        groups = [tuple(s["security_groups"]) for s in services]
+        roles = [s["task_role"] for s in services]
+        problems = []
+        if len(set(groups)) != len(groups):
+            problems.append("two services share a security group set")
+        if None in roles or len(set(roles)) != len(roles):
+            problems.append("a service has no task role, or two share one")
+        return (not problems, "; ".join(problems) or f"each of {len(services)} services has its own security group and task role",
+                evidence)
+    raise ValueError(f"unknown ecs_services assertion {assertion!r}")

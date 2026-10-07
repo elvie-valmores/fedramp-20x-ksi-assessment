@@ -1,0 +1,23 @@
+{
+  "id": "cna-rvp-cfg-aws-waf-rate-rule",
+  "indicator": "KSI-CNA-RVP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The web ACL has a blocking rate rule at the declared 2,000 requests per address or below",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "waf",
+    "region": "us-east-1",
+    "load_balancer": "fedramp-20x-ksi",
+    "assertion": "rate_rule",
+    "rate_limit": 2000
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RVP.verify.3",
+      "covers": "full"
+    }
+  ]
+}

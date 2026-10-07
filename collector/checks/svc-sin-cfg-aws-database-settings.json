@@ -28,6 +28,11 @@
       "row": "KSI-SVC-VCM.verify.2",
       "covers": "partial",
       "gap": "IAM authentication is read from RDS; that password authentication is disabled for the application user is a database role attribute, which this does not connect to read."
+    },
+    {
+      "row": "KSI-RPL-ABO.verify.1",
+      "covers": "partial",
+      "gap": "The database's automated backup retention, judged while phase 1 stands; object versioning on the stores is checked elsewhere (state bucket, Object Lock) and not joined to the declared windows here."
     }
   ],
   "requires_environment": "aws-phase1"

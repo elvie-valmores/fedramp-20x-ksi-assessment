@@ -19,6 +19,11 @@
         "svc-acm-cfg-drift-init-locks-state",
         "svc-acm-cfg-collect-init-locks-state"
       ]
+    },
+    {
+      "row": "KSI-RPL-ABO.verify.2",
+      "covers": "partial",
+      "gap": "State versioning is checked; that superseded versions are kept the declared 90 days is shown by the prior-state deliberate test, not here. Registry and task definition retention are the lifecycle and teardown settings, not checked."
     }
   ]
 }

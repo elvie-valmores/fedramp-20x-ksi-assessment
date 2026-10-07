@@ -92,3 +92,10 @@ scenarios:
     cadence_days: 30
     runs_as: elevated
     what: Restore the database to a chosen moment into a disposable instance, timed to available against the 60-minute objective; the instance is deleted after
+
+  stopped_task_replaced:
+    rows: [KSI-CNA-EIS.validate.3, KSI-CNA-OFA.validate.1]
+    requires: aws-phase2
+    cadence_days: 30
+    runs_as: elevated
+    what: Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting

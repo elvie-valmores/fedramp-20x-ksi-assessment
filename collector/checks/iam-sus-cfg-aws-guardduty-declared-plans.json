@@ -24,6 +24,11 @@
       "row": "KSI-IAM-SUS.verify.1",
       "covers": "partial",
       "gap": "Two optional plans are on by recorded decision (S3 and RDS Protection, DECISIONS.md 2026-09-30), where the row says optional plans off; the check holds them to the declared set instead. GCP's Security Command Center settings are not read: the project has no organization."
+    },
+    {
+      "row": "KSI-CNA-EIS.verify.1",
+      "covers": "partial",
+      "gap": "GuardDuty alone. AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
     }
   ]
 }

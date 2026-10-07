@@ -18,6 +18,16 @@
     {
       "row": "KSI-CNA-IBP.verify.1",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-EIS.verify.1",
+      "covers": "partial",
+      "gap": "Security Hub's standards; Config, GuardDuty and Inspector are judged by their own checks. AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
+    },
+    {
+      "row": "KSI-SVC-EIS.verify.2",
+      "covers": "partial",
+      "gap": "AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
     }
   ]
 }

@@ -13,6 +13,10 @@
     {
       "row": "KSI-PIY-RSD.verify.1",
       "covers": "full"
+    },
+    {
+      "row": "KSI-PIY-RSD.validate.1",
+      "covers": "full"
     }
   ]
 }

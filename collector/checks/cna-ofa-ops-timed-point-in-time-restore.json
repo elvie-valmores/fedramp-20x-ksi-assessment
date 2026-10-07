@@ -21,6 +21,14 @@
     {
       "row": "KSI-RPL-TRC.validate.3",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-OFA.validate.4",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-RRO.validate.5",
+      "covers": "full"
     }
   ]
 }

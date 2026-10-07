@@ -17,6 +17,11 @@
       "row": "KSI-IAM-ELP.validate.3",
       "covers": "partial",
       "gap": "AWS only: GCP's SetIamPolicy events are in Cloud Audit Logs, which are not in the corpus."
+    },
+    {
+      "row": "KSI-SVC-ACM.validate.4",
+      "covers": "partial",
+      "gap": "IAM mutations outside the platform engineer surface through ELP's standing query; unused permissions (the other half of privilege drift) are not surfaced."
     }
   ]
 }

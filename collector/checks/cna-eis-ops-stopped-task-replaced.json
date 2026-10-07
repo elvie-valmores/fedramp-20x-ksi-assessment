@@ -1,0 +1,24 @@
+{
+  "id": "cna-eis-ops-stopped-task-replaced",
+  "indicator": "KSI-CNA-EIS",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (stopped_task_replaced): Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "stopped_task_replaced",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-EIS.validate.3",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    },
+    {
+      "row": "KSI-CNA-OFA.validate.1",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    }
+  ]
+}

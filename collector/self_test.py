@@ -619,6 +619,25 @@ _SIG_OK = {"generated_at": "2026-10-03T06:00:00+00:00", "period": {"days": 90},
 
 _TEST_OK = {"scenario": "s", "passed": True, "expected": "e", "started_at": "2026-10-02T12:00:00+00:00"}
 
+_PWD_EXPECTED = {"MinimumPasswordLength": 14, "RequireSymbols": True, "RequireNumbers": True,
+                 "RequireUppercaseCharacters": True, "RequireLowercaseCharacters": True,
+                 "PasswordReusePrevention": 24, "MaxPasswordAge": 90, "AllowUsersToChangePassword": True}
+_PWD_OK = dict(_PWD_EXPECTED)
+
+
+def _mg(name, version=None):
+    g = {"VendorName": "AWS", "Name": name, **({"Version": version} if version else {})}
+    return {"Name": name, "Statement": {"ManagedRuleGroupStatement": g}, "OverrideAction": {"None": {}}}
+
+
+def _rate(limit, action):
+    return {"Name": "rate", "Statement": {"RateBasedStatement": {"Limit": limit}}, "Action": {action: {}}}
+
+
+def _svc(name):
+    return {"name": name, "desired": 2, "running": 2, "zones": ["a", "b"], "security_groups": [f"sg-{name}"],
+            "task_role": f"role-{name}", "circuit_breaker": {"enable": True, "rollback": True}}
+
 def _sha(c):
     return (c * 40)[:40]
 
@@ -1076,6 +1095,68 @@ CFG_CASES = [
         "step missing": ({"created": "2026-10-03T06:00:00Z"}, None),
         "never ran": (None, None),
     }),
+    # Persistent credential and policy checks (2026-10-06).
+    ("evaluate_password_policy", lambda c: cfg.evaluate_password_policy(c, _PWD_EXPECTED), _PWD_OK, {
+        "no policy": None,
+        "shorter minimum": {**_PWD_OK, "MinimumPasswordLength": 8},
+        "no symbols": {**_PWD_OK, "RequireSymbols": False},
+        "longer max age": {**_PWD_OK, "MaxPasswordAge": 365},
+        "less reuse prevention": {**_PWD_OK, "PasswordReusePrevention": 5},
+    }),
+    ("evaluate_root_credentials", lambda c: cfg.evaluate_root_credentials(*c),
+     ({"AccountMFAEnabled": 1, "AccountAccessKeysPresent": 0}, 0), {
+        "no MFA": ({"AccountMFAEnabled": 0, "AccountAccessKeysPresent": 0}, 0),
+        "virtual MFA": ({"AccountMFAEnabled": 1, "AccountAccessKeysPresent": 0}, 1),
+        "root keys": ({"AccountMFAEnabled": 1, "AccountAccessKeysPresent": 1}, 0),
+    }),
+    ("evaluate_workload_managed_policies", lambda c: cfg.evaluate_workload_managed_policies(c, [{"role": "x", "policy": "arn:aws:iam::aws:policy/Y", "reason": "r"}]),
+     {"api": ["arn:aws:iam::1:policy/mine"], "x": ["arn:aws:iam::aws:policy/Y"]}, {
+        "AWS-managed on a workload": {"api": ["arn:aws:iam::aws:policy/AdministratorAccess"]},
+        "excepted role, other policy": {"x": ["arn:aws:iam::aws:policy/Z"]},
+        "no roles": {},
+    }),
+    ("evaluate_task_definitions (no_literal_secrets)", lambda c: cfg.evaluate_task_definitions(c, "no_literal_secrets"),
+     {"api": [{"name": "api", "environment": [{"name": "DB_HOST", "value": "db"}], "secrets": [{"name": "DB_PASSWORD"}]}]}, {
+        "password literal": {"api": [{"name": "api", "environment": [{"name": "DB_PASSWORD", "value": "hunter2"}]}]},
+        "access key in a value": {"api": [{"name": "api", "environment": [{"name": "X", "value": "AKIAABCDEFGHIJKLMNOP"}]}]},
+        "pem in a value": {"api": [{"name": "api", "environment": [{"name": "CERT", "value": "-----BEGIN RSA PRIVATE KEY-----x"}]}]},
+    }),
+    ("evaluate_waf (managed_groups)", lambda c: cfg.evaluate_waf(c, None, {"assertion": "managed_groups", "managed_groups": ["A", "B"]}),
+     {"Name": "acl", "Rules": [_mg("A"), _mg("B")]}, {
+        "no ACL": None,
+        "a group missing": {"Name": "acl", "Rules": [_mg("A")]},
+        "a group only counting": {"Name": "acl", "Rules": [_mg("A"), {**_mg("B"), "OverrideAction": {"Count": {}}}]},
+        "a group pinned": {"Name": "acl", "Rules": [_mg("A"), _mg("B", "Version_1.0")]},
+    }),
+    ("evaluate_waf (rate_rule)", lambda c: cfg.evaluate_waf(c, None, {"assertion": "rate_rule", "rate_limit": 2000}),
+     {"Name": "acl", "Rules": [_rate(2000, "Block")]}, {
+        "limit too high": {"Name": "acl", "Rules": [_rate(10000, "Block")]},
+        "counting": {"Name": "acl", "Rules": [_rate(2000, "Count")]},
+        "no rate rule": {"Name": "acl", "Rules": [_mg("A")]},
+    }),
+    ("evaluate_waf (logging)", lambda c: cfg.evaluate_waf({"Name": "acl", "Rules": []}, c, {"assertion": "logging", "log_destination_prefix": "aws-waf-logs-x"}),
+     {"LogDestinationConfigs": ["arn:aws:logs:r:1:log-group:aws-waf-logs-x"]}, {
+        "no logging": None,
+        "elsewhere": {"LogDestinationConfigs": ["arn:aws:s3:::other"]},
+    }),
+    ("evaluate_ecs_services (circuit_breaker)", lambda c: cfg.evaluate_ecs_services(c, "circuit_breaker", []),
+     [_svc("api"), _svc("worker")], {
+        "rollback off": [_svc("api"), {**_svc("worker"), "circuit_breaker": {"enable": True, "rollback": False}}],
+        "breaker off": [{**_svc("api"), "circuit_breaker": {}}],
+        "no services": [],
+    }),
+    ("evaluate_ecs_services (spread)", lambda c: cfg.evaluate_ecs_services(c, "spread", ["api"]),
+     [_svc("api"), {**_svc("worker"), "desired": 1, "zones": ["a"]}], {
+        "one task": [{**_svc("api"), "desired": 1}],
+        "one zone": [{**_svc("api"), "zones": ["a"]}],
+        "not running": [_svc("worker")],
+    }),
+    ("evaluate_ecs_services (distinct_identity)", lambda c: cfg.evaluate_ecs_services(c, "distinct_identity", []),
+     [_svc("api"), _svc("worker")], {
+        "shared group": [_svc("api"), {**_svc("worker"), "security_groups": ["sg-api"]}],
+        "shared role": [_svc("api"), {**_svc("worker"), "task_role": "role-api"}],
+        "no role": [{**_svc("api"), "task_role": None}],
+    }),
 ]
 
 
@@ -1141,6 +1222,16 @@ CFG_RESOURCES = {
     "evaluate_pushes_chained": "pushes_evaluated",
     "evaluate_pushes_passed": "pushes_evaluated",
     "evaluate_deliberate_test": "deliberate_test",
+    "evaluate_password_policy": "password_policy",
+    "evaluate_waf (managed_groups)": "waf",
+    "evaluate_waf (rate_rule)": "waf",
+    "evaluate_waf (logging)": "waf",
+    "evaluate_ecs_services (circuit_breaker)": "ecs_services",
+    "evaluate_ecs_services (spread)": "ecs_services",
+    "evaluate_ecs_services (distinct_identity)": "ecs_services",
+    "evaluate_root_credentials": "root_credentials",
+    "evaluate_workload_managed_policies": "workload_managed_policies",
+    "evaluate_task_definitions (no_literal_secrets)": "task_definitions",
     "evaluate_alarms_target": "alarms_target",
     "evaluate_registry_scanning": "registry_scanning",
     "evaluate_registries_immutable": "registries_immutable",

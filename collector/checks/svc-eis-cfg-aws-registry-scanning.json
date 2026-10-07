@@ -18,6 +18,11 @@
         "svc-eis-cfg-gcp-container-scanning",
         "scr-mon-cfg-dependencies-audited"
       ]
+    },
+    {
+      "row": "KSI-CNA-EIS.verify.1",
+      "covers": "partial",
+      "gap": "Inspector's ECR scanning alone. AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
     }
   ]
 }

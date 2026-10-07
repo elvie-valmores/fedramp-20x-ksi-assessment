@@ -23,6 +23,11 @@
     {
       "row": "KSI-CNA-ULN.verify.2",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-ULN.verify.1",
+      "covers": "partial",
+      "gap": "The app and data tiers' routes are private, so nothing placed there is public; each workload's subnet is not reconciled against the inventory."
     }
   ],
   "requires_environment": "aws-phase1"

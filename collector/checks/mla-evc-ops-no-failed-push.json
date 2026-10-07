@@ -19,6 +19,10 @@
       "row": "KSI-MLA-EVC.validate.5",
       "covers": "partial",
       "gap": "The project pushes to main rather than merging pull requests, so each push is evaluated once it lands, not before: a failing evaluation is a finding to fix or except before the change is applied, not a blocked merge."
+    },
+    {
+      "row": "KSI-PIY-RSD.validate.4",
+      "covers": "full"
     }
   ]
 }

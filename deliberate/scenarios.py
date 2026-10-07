@@ -383,9 +383,32 @@ def timed_point_in_time_restore(session) -> tuple[bool, str, dict]:
             observed)
 
 
+def stopped_task_replaced(session) -> tuple[bool, str, dict]:
+    ecs = session.client("ecs", region_name=REGION)
+    desired = ecs.describe_services(cluster=CLUSTER, services=["api"])["services"][0]["desiredCount"]
+    before = set(ecs.list_tasks(cluster=CLUSTER, serviceName="api", desiredStatus="RUNNING")["taskArns"])
+    victim = sorted(before)[0]
+    stopped_at = _now()
+    ecs.stop_task(cluster=CLUSTER, task=victim, reason="deliberate test: stopped_task_replaced")
+    replaced, running, replacement = None, [], None
+    for _ in range(60):  # up to 10 minutes
+        time.sleep(10)
+        running = ecs.list_tasks(cluster=CLUSTER, serviceName="api", desiredStatus="RUNNING")["taskArns"]
+        new = [t for t in running if t not in before]
+        if new and victim not in running:
+            states = ecs.describe_tasks(cluster=CLUSTER, tasks=running)["tasks"]
+            if len([t for t in states if t["lastStatus"] == "RUNNING"]) >= desired:
+                replaced, replacement = _now(), new[0]
+                break
+    observed = {"desired": desired, "stopped": victim, "replacement": replacement,
+                "running_after": len(running), "minutes_to_restore": replaced and round((replaced - stopped_at).total_seconds() / 60, 1)}
+    return (replaced is not None, "a replacement task starts and the service returns to its desired count unattended",
+            observed)
+
+
 SCENARIOS = {f.__name__: f for f in (object_lock_rejects_change, out_of_band_change_detected,
                                        delivery_failure_alerts, prior_state_recoverable,
                                        historical_advisory_surfaced, waf_blocks_and_allows,
                                        task_internet_egress_blocked, permissive_group_still_no_egress,
                                        service_to_service_refused, failing_deploy_rolls_back,
-                                       timed_point_in_time_restore)}
+                                       timed_point_in_time_restore, stopped_task_replaced)}

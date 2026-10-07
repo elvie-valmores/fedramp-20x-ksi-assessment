@@ -1,0 +1,24 @@
+{
+  "id": "cna-rvp-cfg-aws-waf-logging",
+  "indicator": "KSI-CNA-RVP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The web ACL logs every request to its declared log group",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "waf",
+    "region": "us-east-1",
+    "load_balancer": "fedramp-20x-ksi",
+    "assertion": "logging",
+    "log_destination_prefix": "aws-waf-logs-fedramp-20x-ksi"
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RVP.verify.4",
+      "covers": "partial",
+      "gap": "WAF logs go to a CloudWatch log group under the logs key, not to the central log store: one of the sources the event type list records as outside it (registers/event-sources.yaml)."
+    }
+  ]
+}

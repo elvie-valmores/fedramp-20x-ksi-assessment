@@ -1,0 +1,26 @@
+{
+  "id": "cna-ofa-cfg-aws-tasks-spread",
+  "indicator": "KSI-CNA-OFA",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The api service runs two or more tasks across two or more availability zones",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "ecs_services",
+    "region": "us-east-1",
+    "cluster": "fedramp-20x-ksi",
+    "assertion": "spread",
+    "multi_task": [
+      "api"
+    ]
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-OFA.verify.1",
+      "covers": "partial",
+      "gap": "The worker runs one task, deliberately: it is a single extractor whose landed high-water mark turns a gap during replacement into latency, not lost data (registers/resources.yaml)."
+    }
+  ]
+}

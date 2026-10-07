@@ -1,0 +1,22 @@
+{
+  "id": "cna-rvp-cfg-aws-waf-associated",
+  "indicator": "KSI-CNA-RVP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "A web ACL is associated with the load balancer",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "waf",
+    "region": "us-east-1",
+    "load_balancer": "fedramp-20x-ksi",
+    "assertion": "associated"
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RVP.verify.1",
+      "covers": "full"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "cna-mat-cfg-aws-distinct-service-identity",
+  "indicator": "KSI-CNA-MAT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Each ECS service runs under its own security group and its own task role",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "ecs_services",
+    "region": "us-east-1",
+    "cluster": "fedramp-20x-ksi",
+    "assertion": "distinct_identity"
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-MAT.verify.3",
+      "covers": "full"
+    }
+  ]
+}

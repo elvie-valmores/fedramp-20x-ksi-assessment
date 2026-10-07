@@ -1,0 +1,24 @@
+{
+  "id": "cna-dfp-cfg-aws-no-managed-policies-on-workloads",
+  "indicator": "KSI-CNA-DFP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "No workload role -- every role outside Identity Center's and AWS's service-linked paths -- carries an AWS-managed policy; each holds enumerated policies only (the 2026-09-05 decision)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "workload_managed_policies",
+    "excluded_paths": [
+      "/aws-reserved/",
+      "/aws-service-role/"
+    ],
+    "exceptions": []
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-DFP.verify.2",
+      "covers": "partial",
+      "gap": "AWS only. GCP workload identities hold narrow predefined roles scoped to single resources, a recorded difference: GCP has no practical inline policy for service identities (infra/gcp/pipeline.tf)."
+    }
+  ]
+}
