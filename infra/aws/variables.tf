@@ -35,3 +35,9 @@ variable "security_policy_url" {
   type        = string
   default     = ""
 }
+
+variable "database_instance_class" {
+  description = "The database's instance class. db.t4g.small as declared; override for one session only when RDS lacks capacity for it (2026-10-07)."
+  type        = string
+  default     = "db.t4g.small"
+}

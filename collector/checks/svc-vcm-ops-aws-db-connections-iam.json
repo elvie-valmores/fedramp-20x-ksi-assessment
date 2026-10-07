@@ -3,7 +3,7 @@
   "indicator": "KSI-SVC-VCM",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "OPS",
-  "description": "Standing check, zero expected: every application connection the database authenticated in the last six hours used PAM -- the IAM token path -- not a password",
+  "description": "Standing check, zero expected: every application connection the database authenticated in the last six hours used PAM -- the IAM token path. The migration's master user is the one declared password use, reported, not failed; RDS's own local agents (method=peer) are not the application's",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
@@ -12,14 +12,17 @@
     "assertion": "db_connections",
     "judge": "iam",
     "log_group": "/aws/rds/instance/fedramp-20x-ksi/postgresql",
-    "hours": 6
+    "hours": 6,
+    "password_users": {
+      "rds_master": "The migration task creates the schema and the two IAM-only application roles as the RDS-managed master user, by password -- the one declared password use (app/api/migrate.py; the database_in_place category, registers/change-exceptions.yaml)"
+    }
   },
   "requires_environment": "aws-phase2",
   "matrix_rows": [
     {
       "row": "KSI-SVC-VCM.validate.2",
       "covers": "partial",
-      "gap": "Judged in sessions. RDS's own rdsadmin connections are excluded; the master credential exists, RDS-managed, and its use would show here as a password authentication."
+      "gap": "Judged in sessions. One password authentication is declared and expected: the migration's master user, which creates the IAM-only roles. The application's own roles hold rds_iam and cannot use a password."
     }
   ]
 }

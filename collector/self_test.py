@@ -1140,6 +1140,7 @@ CFG_CASES = [
         "password literal": {"api": [{"name": "api", "environment": [{"name": "DB_PASSWORD", "value": "hunter2"}]}]},
         "access key in a value": {"api": [{"name": "api", "environment": [{"name": "X", "value": "AKIAABCDEFGHIJKLMNOP"}]}]},
         "pem in a value": {"api": [{"name": "api", "environment": [{"name": "CERT", "value": "-----BEGIN RSA PRIVATE KEY-----x"}]}]},
+        "a secret-named literal that only looks like an ARN": {"api": [{"name": "api", "environment": [{"name": "DB_SECRET", "value": "arn-ish-but-not:hunter2"}]}]},
     }),
     ("evaluate_waf (managed_groups)", lambda c: cfg.evaluate_waf(c, None, {"assertion": "managed_groups", "managed_groups": ["A", "B"]}),
      {"Name": "acl", "Rules": [_mg("A"), _mg("B")]}, {
@@ -1269,6 +1270,11 @@ CFG_CASES = [
     ("evaluate_db_connections (iam)", lambda c: cfg.evaluate_db_connections(c, "iam"), ['connection authenticated: identity="worker" method=pam (/rdsdbdata/config/pg_hba.conf:13)'], {
         "password": ['connection authenticated: identity="api" method=scram-sha-256'],
         "md5": ['connection authenticated: identity="api" method=md5'],
+        # A declared password user passes only for itself (cfg call below declares none).
+    }),
+    ("evaluate_db_connections (iam, declared)", lambda c: cfg.evaluate_db_connections(c, "iam", {"rds_master": "the migration"}),
+     ['connection authenticated: identity="rds_master" method=scram-sha-256', 'connection authenticated: identity="rdsmon" method=peer', 'connection authenticated: identity=\"worker\" method=pam'], {
+        "an undeclared password user": ['connection authenticated: identity="api_service" method=scram-sha-256'],
     }),
 ]
 
@@ -1342,6 +1348,7 @@ CFG_RESOURCES = {
     "evaluate_build_integrity": "build_integrity",
     "evaluate_db_connections (tls)": "session",
     "evaluate_db_connections (iam)": "session",
+    "evaluate_db_connections (iam, declared)": "session",
     "evaluate_security_txt": "session",
     "evaluate_health_config": "session",
     "evaluate_enis_grouped": "session",

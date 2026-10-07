@@ -8766,3 +8766,59 @@ declared-inventory checks, and bills after the trial.
 - **What GuardDuty still watches:** CloudTrail, DNS, VPC flow, S3 data, RDS login and Lambda network
   signals.
 - **CNA-DFP validate 3 (process observation)** stays a recorded gap, now citing this decision.
+
+## 2026-10-07 — Week 3, session 2: every session check proven; a capacity detour
+
+**Capacity.** The stand-up failed at the database twice. RDS had no `db.t4g.small` capacity in the
+subnets' zones (us-east-1a and 1b); AWS named 1c and 1f as the only zones that did.
+
+- **The choice** (option A, approved): the instance class became a variable, defaulting to the
+  declared `db.t4g.small`. This session ran `db.t3.small`, the same size on x86, which AWS offered
+  in 1a.
+- **What it is:** a one-session deviation. The declared class is unchanged.
+- **What it cost:** the first failure left phase 1 standing without the database.
+
+**A mistake of mine.** The first command block did not stop when the apply failed. It ran the
+migration, which failed, and then the tests. So `stopped_task_replaced` ran with no services, failed,
+and was recorded, since records cannot be withdrawn. Its passing rerun supersedes it. Later blocks
+chain with `&&` and wait for the services to be stable.
+
+**Deliberate tests, all passed and recorded:**
+
+| Scenario | Rows | Observed |
+|---|---|---|
+| `mis_scoped_token_rejected` | SVC-VCM v4 | A Google ID token with the pipeline role's pinned audience and Terraform Admin's subject was refused (`AccessDenied`) |
+| `idle_connection_closed` | CNA-ULN v2 | The load balancer closed a silent TLS connection at 60.0 seconds, its idle timeout |
+| `stopped_task_replaced` | CNA-EIS v3, CNA-OFA v1 | A stopped api task was replaced and the desired count restored in 1.4 minutes, unattended |
+
+**Every environment-gated check passes: 31 of 31.** That includes the session checks written on
+2026-10-07, all proven for the first time:
+
+- **WAF:** association, the three managed groups, the rate rule, logging.
+- **Services:** circuit breakers, the api spread across zones, a distinct identity per service.
+- **The edge:** `security.txt` (89 days to expiry), the 60-second idle timeout, health configuration.
+- **The network:** 18 interfaces each with a declared group, and 14 group references resolving.
+- **Secrets:** rotation, and versions.
+- **Running images:** the declared digests, signed, and each traced to its commit on GitHub.
+- **The database:** TLS on all 6 application connections, and IAM authentication from its own log.
+
+**Four first runs failed, and each was the check's error, not the environment's:**
+
+- **`security.txt`, 403.** The probe sent no User-Agent, and the WAF's common rule set blocks such
+  requests, as it should. The probe now sends one.
+- **`no_literal_secrets`.** It flagged `TLS_SECRET_ARN` and `MASTER_SECRET_ARN`, which hold a
+  secret's ARN, a reference resolved at run time. Secrets Manager and SSM ARNs are now references.
+- **`secret_versions`.** `list_secret_version_ids` has no paginator; the check now pages by token.
+- **`db_connections` (iam).**
+  - RDS's own agents (`rdsmon`, `rdshm`) authenticate locally by `method=peer`; they are now
+    excluded.
+  - The migration authenticates as `rds_master` by password, by design: it creates the IAM-only
+    application roles (app/api/migrate.py). It is declared in the check as the one password user,
+    reported and not failed. SVC-VCM validate 2 stays partial on that account.
+
+**Teardown verified:** 292 persistent, 0 ephemeral, and no cluster, database, load balancer, VPC,
+endpoint or active task definition left.
+
+**Open: a stall in the full run.** The full collector run with the environment up stalled for over
+30 minutes on an AWS HTTPS read, and was stopped. Run one at a time with a 2-minute limit, no
+environment check hung. The persistent checks are being timed one by one to find it.

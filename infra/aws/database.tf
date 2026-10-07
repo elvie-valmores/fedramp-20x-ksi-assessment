@@ -138,7 +138,10 @@ resource "aws_db_instance" "main" {
   # the major version declares what this project depends on and lets the
   # managed service do the patching KSI-SVC-EIS measures.
   engine_version = "17"
-  instance_class = "db.t4g.small"
+  # A variable since 2026-10-07, when RDS had no db.t4g.small capacity in
+  # the subnets' zones and session 2 ran on db.t3.small, the same size on
+  # x86. The declared class is the default.
+  instance_class = var.database_instance_class
 
   db_name  = local.db_name
   username = "rds_master"

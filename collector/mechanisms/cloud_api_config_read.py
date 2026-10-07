@@ -1236,7 +1236,10 @@ class CloudAPIConfigRead(Mechanism):
             dns = elb.describe_load_balancers(Names=[p["load_balancer"]])["LoadBalancers"][0]["DNSName"]
             with socket.create_connection((socket.gethostbyname(dns), 443), timeout=10) as raw:
                 with ssl.create_default_context().wrap_socket(raw, server_hostname=p["host"]) as tls:
-                    tls.sendall(f"GET /.well-known/security.txt HTTP/1.1\r\nHost: {p['host']}\r\nConnection: close\r\n\r\n".encode())
+                    # With a User-Agent: the WAF's common rule set blocks a
+                    # request without one, as it should (403 on 2026-10-07).
+                    tls.sendall(f"GET /.well-known/security.txt HTTP/1.1\r\nHost: {p['host']}\r\n"
+                                f"User-Agent: fedramp-20x-ksi-collector\r\nConnection: close\r\n\r\n".encode())
                     body = b""
                     while chunk := tls.recv(4096):
                         body += chunk
@@ -1273,8 +1276,17 @@ class CloudAPIConfigRead(Mechanism):
             if a == "secret_rotation":
                 ok, detail, evidence = evaluate_secret_rotation(secrets, p["plan"], datetime.now(timezone.utc))
             else:
-                versions = {x["Name"]: [v for page in sm.get_paginator("list_secret_version_ids").paginate(SecretId=x["ARN"], IncludeDeprecated=True)
-                                        for v in page["Versions"]] for x in secrets}
+                # list_secret_version_ids has no paginator; paged by token.
+                versions = {}
+                for x in secrets:
+                    found, token = [], None
+                    while True:
+                        page = sm.list_secret_version_ids(SecretId=x["ARN"], IncludeDeprecated=True, **({"NextToken": token} if token else {}))
+                        found += page["Versions"]
+                        token = page.get("NextToken")
+                        if not token:
+                            break
+                    versions[x["Name"]] = found
                 ok, detail, evidence = evaluate_secret_versions(versions, datetime.now(timezone.utc), p["max_superseded_days"])
         elif a == "db_connections":
             logs = boto3.client("logs", region_name=region)
@@ -1288,7 +1300,7 @@ class CloudAPIConfigRead(Mechanism):
                     break
                 _time.sleep(2)
             lines = [next(f["value"] for f in row if f["field"] == "@message") for row in res.get("results", [])]
-            ok, detail, evidence = evaluate_db_connections(lines, p["judge"])
+            ok, detail, evidence = evaluate_db_connections(lines, p["judge"], p.get("password_users", {}))
         elif a == "running_images":
             ok, detail, evidence = self._running_images(ecs, boto3.client("ecr", region_name=region), p)
         else:
@@ -2790,6 +2802,10 @@ def _container_problems(c: dict, assertion: str) -> list[str]:
         problems = []
         for e in c.get("environment") or []:
             name, value = str(e.get("name", "")), str(e.get("value", ""))
+            # A secret's ARN is a reference the task resolves at run time,
+            # not the secret (found 2026-10-07: TLS_SECRET_ARN, MASTER_SECRET_ARN).
+            if value.startswith(("arn:aws:secretsmanager:", "arn:aws:ssm:")):
+                continue
             if value and _SECRET_NAME.search(name):
                 problems.append(f"{name} set as a literal")
             elif _SECRET_VALUE.search(value):
@@ -3865,26 +3881,38 @@ def evaluate_build_integrity(jobs: list[dict]) -> tuple[bool, str, dict]:
     return True, f"{len(jobs)} build job(s); none recorded a digest after a failed verification", evidence
 
 
-def evaluate_db_connections(lines: list[str], judge: str) -> tuple[bool, str, dict]:
+def evaluate_db_connections(lines: list[str], judge: str, password_users: dict | None = None) -> tuple[bool, str, dict]:
     """The database's own connection log: "tls" -- every authorized connection used SSL;
     "iam" -- every authenticated one used PAM, which is how RDS IAM tokens arrive.
-    RDS's own rdsadmin connections are not the application's and are left out."""
+
+    Left out as not the application's: RDS's own rdsadmin connections, and
+    method=peer -- local-socket connections by RDS's agents inside the
+    instance (rdsmon, rdshm), found 2026-10-07. password_users names the
+    users declared to authenticate by password, with why (the migration's
+    master user); they are reported, not failed.
+    """
     import re
 
-    mine = [l for l in lines if "rdsadmin" not in l]
+    password_users = password_users or {}
+    mine = [l for l in lines if "rdsadmin" not in l and "method=peer" not in l]
     if judge == "tls":
         relevant = [l for l in mine if "connection authorized" in l]
         bad = [l for l in relevant if "SSL enabled" not in l]
         what = "used TLS"
     elif judge == "iam":
         relevant = [l for l in mine if "connection authenticated" in l]
-        bad = [l for l in relevant if not re.search(r"method=pam\b", l)]
+        declared = [l for l in relevant if any(f'identity="{u}"' in l for u in password_users)]
+        bad = [l for l in relevant if not re.search(r"method=pam\b", l) and l not in declared]
         what = "authenticated by IAM token (PAM)"
     else:
         raise ValueError(f"unknown db_connections judge {judge!r}")
-    evidence = {"lines": len(relevant), "failing": bad[:20]}
+    evidence = {"lines": len(relevant), "failing": bad[:20],
+                **({"declared_password_use": {"users": password_users, "lines": len(declared)}} if judge == "iam" else {})}
     if not relevant:
         return False, "no connection lines in the window -- nothing to judge", evidence
     if bad:
         return False, f"{len(bad)} of {len(relevant)} connections were not {what}", evidence
+    if judge == "iam" and declared:
+        return True, (f"{len(relevant) - len(declared)} application connection(s) {what}; "
+                      f"{len(declared)} by the declared password user(s) {', '.join(password_users)}"), evidence
     return True, f"all {len(relevant)} application connections {what}", evidence
