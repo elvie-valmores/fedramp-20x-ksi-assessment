@@ -8670,3 +8670,20 @@ Deployed 2026-10-07 at 00:24 UTC by an elevated apply: the Lambda's code, and th
 **Tested before relying on it.** The query was re-run over three days of history, with an
 operation-name test standing in for the not-yet-populated `read_only`. It returned nothing. Over the
 same days without the allowlist it returns every change, so the lanes are what excuse them.
+
+**More checks, 2026-10-07:**
+
+| Check | Row | Result |
+|---|---|---|
+| `scr-mon-cfg-every-manifest-audited` | SCR-MON v3 | Found the root `requirements.txt` -- the collector's own dependencies, running in CI with cloud credentials -- audited nowhere. Clean today; now audited in `policy.yml` on every push |
+| `iam-elp-ops-aws-project-roles-not-denied` | ELP v1, DFP v2 | Red on two real denials: the drift role's certificate read (fixed 2026-10-05) and a flow-logs `CreateLogStream` during the session's start-up, most likely IAM propagation. Both age out by about 2026-10-09. The flow-log service's routine attempt to create its declared log group is excluded by name |
+| `cmt-lmc-ops-aws-changes-attributed` | LMC v3 | Passes |
+| `iam-elp-cfg-aws-iam-mutation-principals` | ELP v5 | IAM simulation: only the elevated role can create roles or change policies and trusts. The elevation workflow's rights are confined to the reserved path, outside the simulated target |
+| `iam-snu-cfg-aws-roles-last-used` | SNU v4 | No role unused for more than 90 days |
+| `svc-eis-cfg-aws-image-scan-coverage` | EIS v1 | Passes, after a fix described below |
+| `iam-elp-ops-identities-placed` | ELP v1 and v5, JIT v5, SNU v3, AAM v4, APM v3 | One reconciliation of the new identity register (`registers/identities.yaml`) against the inventory's 27 identities |
+
+**The image scan coverage fix.** The check's first run reported all six images unscanned. A tag names
+a multi-platform index, which Inspector reports as `UNSUPPORTED_MEDIA_TYPE`; Inspector scans the
+platform images inside it. The check now resolves each index through `ecr:BatchGetImage`, granted to
+the CI read roles by an elevated apply. That call returns manifests only, not layers.

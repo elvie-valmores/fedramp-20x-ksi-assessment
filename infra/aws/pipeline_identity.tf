@@ -133,6 +133,10 @@ data "aws_iam_policy_document" "github_drift" {
       "ec2:GetEbsDefaultKmsKeyId",
       "ec2:GetEbsEncryptionByDefault",
       "ecr:Describe*",
+      # An image index's manifest, to find the platform images inside it
+      # that Inspector actually scans (svc-eis-cfg-aws-image-scan-coverage,
+      # 2026-10-07). Manifests only; layers need GetDownloadUrlForLayer.
+      "ecr:BatchGetImage",
       "ecr:Get*",
       "ecr:List*",
       "ecs:Describe*",

@@ -1,0 +1,22 @@
+{
+  "id": "cmt-lmc-ops-aws-changes-attributed",
+  "indicator": "KSI-CMT-LMC",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no successful AWS change in the last three days without an attributable principal -- a name or ARN -- in its CloudTrail record. api.read_only exists from 2026-10-07 00:25 UTC, so the window fills over three days",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, actor.user.type AS type, api.service.name AS service, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND status = 'Success' AND api.read_only = false AND actor.user.type <> 'AWSService' AND coalesce(actor.user.name, '') = '' AND coalesce(actor.user.uid, '') = '' GROUP BY 1,2,3,4 ORDER BY 1 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-LMC.validate.3",
+      "covers": "partial",
+      "gap": "AWS changes only; GitHub commits carry GitHub's account attribution, unsigned (SVC-VRI verify 3), and GCP's changes are not in the corpus."
+    }
+  ]
+}

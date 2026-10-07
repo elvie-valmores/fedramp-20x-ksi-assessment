@@ -154,6 +154,12 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
+        if provider == "aws" and resource == "iam_mutation_principals":
+            return self._aws_iam_mutation_principals(check)
+        if provider == "aws" and resource == "roles_last_used":
+            return self._aws_roles_last_used(check)
+        if provider == "aws" and resource == "image_scan_coverage":
+            return self._aws_image_scan_coverage(check)
         if provider == "aws" and resource == "waf":
             return self._aws_waf(check)
         if provider == "aws" and resource == "ecs_services":
@@ -1202,6 +1208,84 @@ class CloudAPIConfigRead(Mechanism):
             latest and {"created": latest["created_at"], "url": latest["html_url"], "head": latest["head_sha"]},
             step and {"name": step["name"], "conclusion": step["conclusion"]},
             datetime.now(timezone.utc), p["max_age_days"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _project_roles(self, iam, excluded_paths: list[str]) -> list[dict]:
+        return [r for page in iam.get_paginator("list_roles").paginate() for r in page["Roles"]
+                if not any(r["Path"].startswith(p) for p in excluded_paths)]
+
+    def _aws_iam_mutation_principals(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-ELP verify 5: who can change IAM, by simulation.
+
+        Requires params: actions, excluded_paths, allowed (role name
+        patterns). Each role's identity policies are simulated for the
+        actions on an arbitrary role outside Identity Center's reserved path;
+        a role allowed any of them must be declared. Permission boundaries
+        and SCPs are not in play here.
+        """
+        iam = boto3.client("iam")
+        account = boto3.client("sts").get_caller_identity()["Account"]
+        target = f"arn:aws:iam::{account}:role/deliberate-simulation-target"
+        capable = {}
+        for role in self._project_roles(iam, check.params["excluded_paths"]):
+            result = iam.simulate_principal_policy(PolicySourceArn=role["Arn"], ActionNames=check.params["actions"],
+                                                   ResourceArns=[target])["EvaluationResults"]
+            allowed = [r["EvalActionName"] for r in result if r["EvalDecision"] == "allowed"]
+            if allowed:
+                capable[role["RoleName"]] = allowed
+        ok, detail, evidence = evaluate_iam_mutation_principals(capable, check.params["allowed"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_roles_last_used(self, check: CheckDefinition) -> CheckResult:
+        """KSI-IAM-SNU validate 4: every role's last use, surfaced by name.
+
+        Requires params: excluded_paths, max_unused_days, grace_days (a role
+        younger than this has not had a chance to be used).
+        """
+        iam = boto3.client("iam")
+        now = datetime.now(timezone.utc)
+        roles = []
+        for r in self._project_roles(iam, check.params["excluded_paths"]):
+            last = iam.get_role(RoleName=r["RoleName"])["Role"].get("RoleLastUsed", {}).get("LastUsedDate")
+            roles.append({"role": r["RoleName"], "created_days": (now - r["CreateDate"]).days,
+                          "unused_days": None if last is None else (now - last).days})
+        ok, detail, evidence = evaluate_roles_last_used(roles, check.params["max_unused_days"], check.params["grace_days"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_image_scan_coverage(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-EIS validate 1: Inspector covers every recent deployable image.
+
+        Requires params: region, repositories, recent (how many git- tagged
+        images per repository count as deployable).
+        """
+        p = check.params
+        ecr = boto3.client("ecr", region_name=p["region"])
+        insp = boto3.client("inspector2", region_name=p["region"])
+        wanted = {}
+        for repo in p["repositories"]:
+            images = [i for page in ecr.get_paginator("describe_images").paginate(repositoryName=repo)
+                      for i in page["imageDetails"] if any(t.startswith("git-") for t in i.get("imageTags", []))]
+            for i in sorted(images, key=lambda i: i["imagePushedAt"], reverse=True)[:p["recent"]]:
+                tag = [t for t in i["imageTags"] if t.startswith("git-")][0]
+                # A tag names a multi-platform index, which Inspector does not
+                # scan (UNSUPPORTED_MEDIA_TYPE); it scans the platform images
+                # the index lists. Build attestations ride along as entries
+                # with an "unknown" platform and are not images to scan.
+                manifest = json.loads(ecr.batch_get_image(repositoryName=repo, imageIds=[{"imageDigest": i["imageDigest"]}],
+                                                          acceptedMediaTypes=[i.get("imageManifestMediaType", "")])
+                                      ["images"][0]["imageManifest"])
+                children = [m for m in manifest.get("manifests", [])
+                            if (m.get("platform") or {}).get("architecture") not in (None, "unknown")]
+                for m in children or [{"digest": i["imageDigest"], "platform": {}}]:
+                    arch = (m.get("platform") or {}).get("architecture", "")
+                    wanted[m["digest"]] = f"{repo}:{tag}" + (f" ({arch})" if arch else "")
+        coverage = {}
+        for page in insp.get_paginator("list_coverage").paginate(
+                filterCriteria={"resourceType": [{"comparison": "EQUALS", "value": "AWS_ECR_CONTAINER_IMAGE"}]}):
+            for c in page["coveredResources"]:
+                digest = ((c.get("resourceMetadata") or {}).get("ecrImage") or {}).get("imageDigest") or c["resourceId"].rsplit("/", 1)[-1]
+                coverage[digest] = c["scanStatus"]["statusCode"]
+        ok, detail, evidence = evaluate_image_scan_coverage(wanted, coverage)
         return CheckResult(check.id, ok, evidence, detail)
 
     def _aws_waf(self, check: CheckDefinition) -> CheckResult:
@@ -3419,3 +3503,35 @@ def evaluate_elevations_revoked(keys: list[str], running: set[str]) -> tuple[boo
     if unrevoked:
         return False, f"{len(unrevoked)} granted elevation(s) without their own revocation; the backstop swept {swept} time(s) -- check it covered them", evidence
     return True, f"all {len(granted)} granted elevation(s) were revoked, each recorded", evidence
+
+
+# --- Who can change IAM, idle roles, image scan coverage (2026-10-07) ---
+
+def evaluate_iam_mutation_principals(capable: dict[str, list[str]], allowed: list[str]) -> tuple[bool, str, dict]:
+    undeclared = {r: a for r, a in capable.items() if not any(fnmatch.fnmatchcase(r, p) for p in allowed)}
+    evidence = {"capable": capable, "allowed_patterns": allowed, "undeclared": undeclared}
+    if undeclared:
+        return False, f"{len(undeclared)} undeclared role(s) can change IAM: {', '.join(sorted(undeclared))}", evidence
+    return True, (f"only {', '.join(sorted(capable))} can change IAM" if capable
+                  else "no role can change IAM now -- the elevated role exists only during an elevation"), evidence
+
+
+def evaluate_roles_last_used(roles: list[dict], max_unused_days: int, grace_days: int) -> tuple[bool, str, dict]:
+    idle = [r for r in roles if r["created_days"] > grace_days
+            and (r["unused_days"] is None or r["unused_days"] > max_unused_days)]
+    evidence = {"roles": sorted(roles, key=lambda r: r["role"]), "idle": idle}
+    if not roles:
+        return False, "no roles -- nothing to judge", evidence
+    if idle:
+        return False, f"{len(idle)} role(s) unused past {max_unused_days} days: {', '.join(r['role'] for r in idle)}", evidence
+    return True, f"all {len(roles)} roles used within {max_unused_days} days, or too new to judge", evidence
+
+
+def evaluate_image_scan_coverage(wanted: dict[str, str], coverage: dict[str, str]) -> tuple[bool, str, dict]:
+    uncovered = {d: name for d, name in wanted.items() if coverage.get(d) != "ACTIVE"}
+    evidence = {"images": wanted, "status": {d: coverage.get(d) for d in wanted}, "not_actively_scanned": uncovered}
+    if not wanted:
+        return False, "no deployable images found -- nothing to judge", evidence
+    if uncovered:
+        return False, f"{len(uncovered)} image(s) not actively scanned: {', '.join(uncovered.values())}", evidence
+    return True, f"all {len(wanted)} recent deployable images actively scanned by Inspector", evidence

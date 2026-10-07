@@ -645,6 +645,9 @@ _REC_OK = {"started_at": "2026-10-03T05:30:00+00:00", "run": {"runtime": "ci"},
 _IDS = {"workloads": {"match": {"resource_type": "AWS::IAM::Role", "name": "*-task"}, "kind": "workload",
                       "lane": "app", "credential": "task role", "declared_in": "compute.tf"}}
 
+_AUDITS = {"a/requirements.txt": {"workflow": "build.yml", "evidence": "--requirement a"},
+           "requirements.txt": {"workflow": "policy.yml", "evidence": "--requirement requirements.txt"}}
+
 def _sha(c):
     return (c * 40)[:40]
 
@@ -1171,6 +1174,23 @@ CFG_CASES = [
         "revocation failed": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoke-failed-101500.json"], set()),
         "unrevoked despite a sweep": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/sweep-swept-120000.json"], set()),
     }),
+    ("evaluate_iam_mutation_principals", lambda c: cfg.evaluate_iam_mutation_principals(c, ["AWSReservedSSO_ElevatedAdmin_*"]),
+     {"AWSReservedSSO_ElevatedAdmin_ab12": ["iam:CreateRole"]}, {
+        "a workload can": {"AWSReservedSSO_ElevatedAdmin_ab12": ["iam:CreateRole"], "app-task": ["iam:PutRolePolicy"]},
+        "the read-only role can": {"AWSReservedSSO_OperatorReadOnly_cd34": ["iam:AttachRolePolicy"]},
+    }),
+    ("evaluate_roles_last_used", lambda c: cfg.evaluate_roles_last_used(c, 90, 7),
+     [{"role": "a", "created_days": 30, "unused_days": 1}, {"role": "new", "created_days": 2, "unused_days": None}], {
+        "never used": [{"role": "a", "created_days": 30, "unused_days": None}],
+        "idle": [{"role": "a", "created_days": 400, "unused_days": 120}],
+        "no roles": [],
+    }),
+    ("evaluate_image_scan_coverage", lambda c: cfg.evaluate_image_scan_coverage(c[0], c[1]),
+     ({"sha256:a": "api:git-1"}, {"sha256:a": "ACTIVE"}), {
+        "not covered": ({"sha256:a": "api:git-1"}, {}),
+        "inactive": ({"sha256:a": "api:git-1"}, {"sha256:a": "INACTIVE"}),
+        "no images": ({}, {}),
+    }),
 ]
 
 
@@ -1238,6 +1258,9 @@ CFG_RESOURCES = {
     "evaluate_pushes_passed": "pushes_evaluated",
     "evaluate_deliberate_test": "deliberate_test",
     "evaluate_password_policy": "password_policy",
+    "evaluate_iam_mutation_principals": "iam_mutation_principals",
+    "evaluate_roles_last_used": "roles_last_used",
+    "evaluate_image_scan_coverage": "image_scan_coverage",
     "evaluate_waf (managed_groups)": "waf",
     "evaluate_waf (rate_rule)": "waf",
     "evaluate_waf (logging)": "waf",
@@ -1330,6 +1353,13 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("register_read (manifests_audited)", lambda c: rr.evaluate_manifests_audited(c[0], _AUDITS, c[1]),
+     (["a/requirements.txt", "requirements.txt"], {"build.yml": "--requirement a", "policy.yml": "--requirement requirements.txt"}), {
+        "a manifest audited nowhere": (["a/requirements.txt", "requirements.txt", "b/requirements.txt"],
+                                       {"build.yml": "--requirement a", "policy.yml": "--requirement requirements.txt"}),
+        "the audit step removed": (["a/requirements.txt", "requirements.txt"], {"build.yml": "--requirement a", "policy.yml": ""}),
+        "nothing tracked": ([], {}),
+    }),
     ("register_read (identities_cover_inventory)", lambda c: rr.evaluate_identities(c, _IDS),
      [{"resource_type": "AWS::IAM::Role", "name": "app-task", "resource_id": "r1"}], {
         "an unplaced role": [{"resource_type": "AWS::IAM::Role", "name": "someone-made-this", "resource_id": "r2"}],

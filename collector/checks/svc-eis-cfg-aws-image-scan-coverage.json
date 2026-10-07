@@ -1,0 +1,25 @@
+{
+  "id": "svc-eis-cfg-aws-image-scan-coverage",
+  "indicator": "KSI-SVC-EIS",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Inspector actively scans the three most recent deployable (git- tagged) images in each ECR repository",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "image_scan_coverage",
+    "region": "us-east-1",
+    "repositories": [
+      "fedramp-20x-ksi/api",
+      "fedramp-20x-ksi/worker"
+    ],
+    "recent": 3
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-EIS.validate.1",
+      "covers": "partial",
+      "gap": "ECR images, by coverage status, not by a scan date against a declared interval; Inspector rescans on new advisories rather than on a clock. The analytics image in Artifact Registry is scanned by Container Scanning, not read here."
+    }
+  ]
+}

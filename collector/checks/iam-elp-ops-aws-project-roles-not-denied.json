@@ -1,0 +1,27 @@
+{
+  "id": "iam-elp-ops-aws-project-roles-not-denied",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no project role -- workload, pipeline, platform -- was denied an AWS call in the last three days. A denial is a role reaching for something its declared policy prohibits. The VPC flow-log service's attempt to create its already-declared log group is excluded: AWS makes it on every delivery start",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, regexp_replace(coalesce(actor.user.name, ''), '^arn:aws:sts::\\d+:assumed-role/([^/]+)/.*$', '$1') AS actor, api.service.name AS service, api.operation AS operation, status_detail, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND status = 'Failure' AND regexp_like(coalesce(status_detail, ''), 'AccessDenied|UnauthorizedOperation|Forbidden|NotAuthorized') AND regexp_like(coalesce(actor.user.name, ''), 'assumed-role/fedramp-20x-ksi-') AND NOT (regexp_like(actor.user.name, 'assumed-role/fedramp-20x-ksi-flow-logs/') AND api.operation = 'CreateLogGroup') GROUP BY 1,2,3,4,5 ORDER BY 1 DESC, 6 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-ELP.validate.1",
+      "covers": "partial",
+      "gap": "AWS only, and by attempt: a call the role's policy prohibits is denied and logged, which is what is counted. Access a policy allows but the role model would not is not detected here; the policies themselves are held to the model by declaration."
+    },
+    {
+      "row": "KSI-CNA-DFP.validate.2",
+      "covers": "partial",
+      "gap": "A call outside a workload's enumerated policy is denied by IAM, and the denial is what this counts; a successful call is by construction within the policy."
+    }
+  ]
+}

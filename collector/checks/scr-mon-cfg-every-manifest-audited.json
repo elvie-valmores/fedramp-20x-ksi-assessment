@@ -1,0 +1,36 @@
+{
+  "id": "scr-mon-cfg-every-manifest-audited",
+  "indicator": "KSI-SCR-MON",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "Every dependency manifest tracked in the repository is audited against OSV by pip-audit in a workflow: the three application manifests in the build, and the collector's own root manifest in the policy workflow (added 2026-10-07, when it was found audited nowhere)",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "assertion": "manifests_audited",
+    "audits": {
+      "app/api/requirements.txt": {
+        "workflow": "build-and-push.yml",
+        "evidence": "--requirement \"app/${{ matrix.service }}/requirements.txt\""
+      },
+      "app/worker/requirements.txt": {
+        "workflow": "build-and-push.yml",
+        "evidence": "--requirement \"app/${{ matrix.service }}/requirements.txt\""
+      },
+      "app/analytics/requirements.txt": {
+        "workflow": "build-and-push.yml",
+        "evidence": "--requirement \"app/${{ matrix.service }}/requirements.txt\""
+      },
+      "requirements.txt": {
+        "workflow": "policy.yml",
+        "evidence": "pip-audit --requirement requirements.txt"
+      }
+    }
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SCR-MON.validate.3",
+      "covers": "partial",
+      "gap": "Python manifests only. Terraform providers are pinned by lock-file hash but not correlated with advisories, and the build's matrix values are trusted rather than expanded: a service added to the repository but not the matrix would still fail here, since its manifest is undeclared."
+    }
+  ]
+}

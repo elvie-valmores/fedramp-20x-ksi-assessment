@@ -77,6 +77,14 @@ jobs:
       # KSI-SVC-ASM validate 4, the repository half: no secret material in
       # any tracked file. Trivy's secret rules are embedded in the pinned
       # binary. Terraform state is not scanned here (see row-positions).
+      # The collector's own dependencies -- the root manifest -- run in CI
+      # with cloud credentials and were audited nowhere until 2026-10-07;
+      # the build audits only the application manifests.
+      - name: audit the collector's dependencies
+        run: |
+          python -m pip install --disable-pip-version-check pip-audit==2.10.1
+          pip-audit --requirement requirements.txt --require-hashes --disable-pip --strict --desc --format columns
+
       - name: scan the repository for secrets
         run: trivy fs --scanners secret --skip-version-check --exit-code 1 --quiet .
 

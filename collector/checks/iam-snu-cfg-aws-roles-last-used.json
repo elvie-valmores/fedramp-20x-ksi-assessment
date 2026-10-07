@@ -1,0 +1,24 @@
+{
+  "id": "iam-snu-cfg-aws-roles-last-used",
+  "indicator": "KSI-IAM-SNU",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every role outside AWS's service-linked path, its last use surfaced by name in the evidence; a role unused for more than 90 days -- or never, once a week old -- fails",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "roles_last_used",
+    "excluded_paths": [
+      "/aws-service-role/"
+    ],
+    "max_unused_days": 90,
+    "grace_days": 7
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-SNU.validate.4",
+      "covers": "partial",
+      "gap": "AWS roles; GCP service accounts' last authentication is not read. Session roles exist only during sessions, so they are judged only then."
+    }
+  ]
+}

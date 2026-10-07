@@ -1,0 +1,34 @@
+{
+  "id": "iam-elp-cfg-aws-iam-mutation-principals",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "By IAM simulation of every role outside AWS's service-linked path, only the operator's elevated role can create a role, attach or put a policy, or rewrite a trust on an arbitrary role. The elevation workflow and its backstop hold such rights only on Identity Center's reserved path, which the simulated target is outside",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "iam_mutation_principals",
+    "excluded_paths": [
+      "/aws-service-role/"
+    ],
+    "actions": [
+      "iam:CreateRole",
+      "iam:AttachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:CreatePolicyVersion",
+      "iam:CreateUser",
+      "iam:CreateAccessKey"
+    ],
+    "allowed": [
+      "AWSReservedSSO_ElevatedAdmin_*"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-ELP.verify.5",
+      "covers": "partial",
+      "gap": "AWS identity policies only: GCP's Policy Analyzer needs an organization, and the project owner holds IAM change in GCP standing. Organization policy mutation does not apply -- there is no AWS organization policy in use."
+    }
+  ]
+}

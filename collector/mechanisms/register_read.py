@@ -45,7 +45,7 @@ class RegisterRead(Mechanism):
 
     def run(self, check: CheckDefinition) -> CheckResult:
         p = check.params
-        register = yaml.safe_load((REPO / p["register"]).read_text())
+        register = yaml.safe_load((REPO / p["register"]).read_text()) if p.get("register") else {}
         if p["assertion"] == "covers_inventory":
             counts = _class_counts(p["region"], p["project_id"])
             existing = {f.stem for f in CHECKS.glob("*.json")}
@@ -80,6 +80,10 @@ class RegisterRead(Mechanism):
         elif p["assertion"] == "identities_cover_inventory":
             members = [r for r in _inventory(p["region"], p["project_id"]) if r["resource_type"] in p["types"]]
             ok, detail, evidence = evaluate_identities(members, register.get("identities") or {})
+        elif p["assertion"] == "manifests_audited":
+            tracked = subprocess_lines(["git", "-C", str(REPO), "ls-files", "*requirements*.txt"])
+            workflows = {w.name: w.read_text() for w in (REPO / ".github" / "workflows").glob("*.yml")}
+            ok, detail, evidence = evaluate_manifests_audited(tracked, p["audits"], workflows)
         elif p["assertion"] == "policy_coverage":
             rules = sorted((REPO / "policy" / "rules").glob("*.rego"))
             sources = {f.name: f.read_text() for f in rules if not f.name.endswith("_test.rego")}
@@ -573,3 +577,31 @@ def evaluate_identities(members: list[dict], identities: dict) -> tuple[bool, st
     if unplaced:
         return False, f"{len(unplaced)} identit(ies) the register cannot place: {', '.join(unplaced[:4])}", evidence
     return True, f"all {len(members)} identities placed, each with a lane, credential and declaration", evidence
+
+
+# --- Dependency manifests, all audited (2026-10-07) ---
+
+def subprocess_lines(cmd: list[str]) -> list[str]:
+    import subprocess
+    return [l for l in subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.splitlines() if l]
+
+
+def evaluate_manifests_audited(tracked: list[str], audits: dict[str, dict], workflows: dict[str, str]) -> tuple[bool, str, dict]:
+    """Every tracked manifest is declared audited, and each declared audit is in its workflow.
+
+    audits: {manifest: {workflow, evidence}}, where evidence is text that
+    must appear in the workflow -- the pip-audit argument that names it.
+    """
+    unaudited = [m for m in tracked if m not in audits]
+    broken = [m for m, a in audits.items() if a["evidence"] not in workflows.get(a["workflow"], "")]
+    stale = [m for m in audits if m not in tracked]
+    evidence = {"tracked": tracked, "unaudited": unaudited, "declared_but_missing": broken, "declared_but_untracked": stale}
+    if not tracked:
+        return False, "no manifests found -- nothing to judge", evidence
+    if unaudited:
+        return False, f"{len(unaudited)} manifest(s) audited nowhere: {', '.join(unaudited)}", evidence
+    if broken:
+        return False, f"{len(broken)} declared audit(s) not in their workflow: {', '.join(broken)}", evidence
+    if stale:
+        return False, f"declared audits for manifests that no longer exist: {', '.join(stale)}", evidence
+    return True, f"all {len(tracked)} manifests audited: " + ", ".join(sorted({a['workflow'] for a in audits.values()})), evidence
