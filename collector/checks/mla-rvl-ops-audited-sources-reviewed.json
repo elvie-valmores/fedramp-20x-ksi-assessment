@@ -13,6 +13,15 @@
     {
       "row": "KSI-MLA-RVL.validate.5",
       "covers": "full"
+    },
+    {
+      "row": "KSI-MLA-RVL.verify.2",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-MLA-RVL.verify.1",
+      "covers": "partial",
+      "gap": "Reviewed per audited source, each naming its versioned standing queries; not reconciled against the mapped control categories one by one, and the sources outside the central store have no query (registers/event-sources.yaml)."
     }
   ]
 }

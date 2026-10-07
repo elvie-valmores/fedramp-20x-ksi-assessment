@@ -1,0 +1,21 @@
+{
+  "id": "mla-rvl-ops-review-queries-recorded",
+  "indicator": "KSI-MLA-RVL",
+  "mechanism": "record_store",
+  "evidence_type": "OPS",
+  "description": "The newest CI run record in the log store is under 30 hours old and holds an outcome for every standing log query, nil results and failures alike: each review query ran within its interval with a record",
+  "required_cadence": "3 days",
+  "params": {
+    "assertion": "latest_complete",
+    "mechanisms": [
+      "log_query"
+    ],
+    "max_age_hours": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-RVL.validate.1",
+      "covers": "full"
+    }
+  ]
+}

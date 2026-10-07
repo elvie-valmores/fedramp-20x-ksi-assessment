@@ -1,0 +1,20 @@
+{
+  "id": "mla-rvl-cfg-review-record-destination",
+  "indicator": "KSI-MLA-RVL",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The collector workflow stores each run's record, every review query's outcome included, in the log store",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "collect.yml",
+    "assertion": "step_present",
+    "job": "collect",
+    "step": "store this run's record"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-RVL.verify.4",
+      "covers": "full"
+    }
+  ]
+}

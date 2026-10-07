@@ -25,13 +25,6 @@ class _NotYetBuilt(Mechanism):
         )
 
 
-class RecordStore(_NotYetBuilt):
-    """Would confirm a required record exists with the right fields."""
-
-    name = "record_store"
-    depends_on = "a chosen record store, not yet selected"
-
-
 class EffectiveAccessAnalysis(_NotYetBuilt):
     """Would compute who can actually reach what, beyond what's declared."""
 

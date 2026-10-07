@@ -1,0 +1,19 @@
+{
+  "id": "mla-rvl-ops-review-windows-continuous",
+  "indicator": "KSI-MLA-RVL",
+  "mechanism": "record_store",
+  "evidence_type": "OPS",
+  "description": "Over the last 30 days, no gap between consecutive CI run records -- or since the newest -- exceeds the standing queries' three-day window, so no stretch of events went unreviewed",
+  "required_cadence": "3 days",
+  "params": {
+    "assertion": "continuous",
+    "max_gap_days": 3,
+    "lookback_days": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-RVL.validate.2",
+      "covers": "full"
+    }
+  ]
+}

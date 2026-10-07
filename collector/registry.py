@@ -11,10 +11,8 @@ from mechanisms.declared_versus_live_comparison import DeclaredVersusLiveCompari
 from mechanisms.inventory_reconciliation import InventoryReconciliation
 from mechanisms.log_query import LogQuery
 from mechanisms.deliberate_test import DeliberateTest
-from mechanisms.not_yet_built import (
-    EffectiveAccessAnalysis,
-    RecordStore,
-)
+from mechanisms.not_yet_built import EffectiveAccessAnalysis
+from mechanisms.record_store import RecordStore
 from mechanisms.pipeline_config_read import PipelineConfigRead
 from mechanisms.register_read import RegisterRead
 
@@ -27,8 +25,8 @@ MECHANISMS = {
     "pipeline_config_read": PipelineConfigRead(),
     "register_read": RegisterRead(),  # since 2026-10-03
     "deliberate_test": DeliberateTest(),  # since 2026-10-05
+    "record_store": RecordStore(),  # since 2026-10-06
     # Registered, not yet implemented -- each waits on infrastructure
     # that does not exist yet. See mechanisms/not_yet_built.py.
-    "record_store": RecordStore(),
     "effective_access_analysis": EffectiveAccessAnalysis(),
 }

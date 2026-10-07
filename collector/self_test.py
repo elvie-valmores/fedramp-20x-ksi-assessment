@@ -33,6 +33,7 @@ import environments as env
 import mechanisms.cloud_api_config_read as cfg
 import mechanisms.inventory_reconciliation as inv
 import mechanisms.deliberate_test as dt_mech
+import mechanisms.record_store as rs_mech
 import mechanisms.log_query as lq
 import mechanisms.register_read as rr
 import mechanisms.declared_versus_live_comparison as dvl
@@ -637,6 +638,9 @@ def _rate(limit, action):
 def _svc(name):
     return {"name": name, "desired": 2, "running": 2, "zones": ["a", "b"], "security_groups": [f"sg-{name}"],
             "task_role": f"role-{name}", "circuit_breaker": {"enable": True, "rollback": True}}
+
+_REC_OK = {"started_at": "2026-10-03T05:30:00+00:00", "run": {"runtime": "ci"},
+           "outcomes": [{"check": {"id": "q1"}, "status": "PASS"}, {"check": {"id": "q2"}, "status": "FAIL"}]}
 
 def _sha(c):
     return (c * 40)[:40]
@@ -1323,6 +1327,18 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("record_store (latest_complete)", lambda c: rs_mech.evaluate_latest_complete(c, ["q1", "q2"], _JIT_NOW, 30), _REC_OK, {
+        "no record": None,
+        "a query missing": {**_REC_OK, "outcomes": [{"check": {"id": "q1"}, "status": "PASS"}]},
+        "stale": {**_REC_OK, "started_at": "2026-10-01T05:30:00+00:00"},
+        "a workstation run": {**_REC_OK, "run": {"runtime": "local"}},
+    }),
+    ("record_store (continuous)", lambda c: rs_mech.evaluate_continuity(c, _JIT_NOW, 3),
+     [_JIT_NOW - _td(days=d) for d in (6, 4, 2, 1)], {
+        "a four-day gap": [_JIT_NOW - _td(days=d) for d in (9, 5, 1)],
+        "silent since": [_JIT_NOW - _td(days=d) for d in (8, 7, 5)],
+        "nothing": [],
+    }),
     ("deliberate_test (catalogue)", dt_mech.evaluate_catalogue, {"a": (True, "passed"), "b": (True, "passed")}, {
         "one lapsed": {"a": (True, "passed"), "b": (False, "too old")},
         "empty catalogue": {},

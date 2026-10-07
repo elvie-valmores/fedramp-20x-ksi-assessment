@@ -1,0 +1,19 @@
+{
+  "id": "mla-rvl-cfg-review-scheduled",
+  "indicator": "KSI-MLA-RVL",
+  "mechanism": "pipeline_config_read",
+  "evidence_type": "CFG",
+  "description": "The collector workflow, which runs every standing review query, is scheduled; each query reads a three-day window, so daily runs overlap their windows",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "workflow": "collect.yml",
+    "assertion": "scheduled"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-RVL.verify.3",
+      "covers": "partial",
+      "gap": "The schedule is checked; that each query's window is three days is in its SQL, not compared with the schedule here. mla-rvl-ops-review-windows-continuous shows the overlap held in practice."
+    }
+  ]
+}
