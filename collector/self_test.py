@@ -642,6 +642,9 @@ def _svc(name):
 _REC_OK = {"started_at": "2026-10-03T05:30:00+00:00", "run": {"runtime": "ci"},
            "outcomes": [{"check": {"id": "q1"}, "status": "PASS"}, {"check": {"id": "q2"}, "status": "FAIL"}]}
 
+_IDS = {"workloads": {"match": {"resource_type": "AWS::IAM::Role", "name": "*-task"}, "kind": "workload",
+                      "lane": "app", "credential": "task role", "declared_in": "compute.tf"}}
+
 def _sha(c):
     return (c * 40)[:40]
 
@@ -1327,6 +1330,12 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("register_read (identities_cover_inventory)", lambda c: rr.evaluate_identities(c, _IDS),
+     [{"resource_type": "AWS::IAM::Role", "name": "app-task", "resource_id": "r1"}], {
+        "an unplaced role": [{"resource_type": "AWS::IAM::Role", "name": "someone-made-this", "resource_id": "r2"}],
+        "a name match of another type": [{"resource_type": "iam.googleapis.com/ServiceAccount", "name": "app-task", "resource_id": "s1"}],
+        "nothing": [],
+    }),
     ("record_store (latest_complete)", lambda c: rs_mech.evaluate_latest_complete(c, ["q1", "q2"], _JIT_NOW, 30), _REC_OK, {
         "no record": None,
         "a query missing": {**_REC_OK, "outcomes": [{"check": {"id": "q1"}, "status": "PASS"}]},

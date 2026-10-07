@@ -1,0 +1,23 @@
+{
+  "id": "iam-elp-ops-identities-placed",
+  "indicator": "KSI-IAM-ELP",
+  "mechanism": "register_read",
+  "evidence_type": "OPS",
+  "description": "Every identity in the live inventory -- IAM roles and users, GCP service accounts -- is placed by the identity register in exactly the role model's terms: its kind, lane, credential and where it is declared",
+  "required_cadence": "3 days",
+  "params": {
+    "register": "registers/identities.yaml",
+    "assertion": "identities_cover_inventory",
+    "types": ["AWS::IAM::Role", "AWS::IAM::User", "iam.googleapis.com/ServiceAccount"],
+    "region": "us-east-1",
+    "project_id": "fedramp-20x-ksi-assessment"
+  },
+  "matrix_rows": [
+    {"row": "KSI-IAM-ELP.validate.5", "covers": "full"},
+    {"row": "KSI-IAM-ELP.verify.1", "covers": "partial", "gap": "Each identity maps to one register entry, and so to one lane; the entry's lane is not compared with the identity's live permissions."},
+    {"row": "KSI-IAM-JIT.validate.5", "covers": "full"},
+    {"row": "KSI-IAM-SNU.validate.3", "covers": "partial", "gap": "Every non-user identity has a recorded credential position; there is no periodic credential review beyond the daily checks on keys, trusts and sessions."},
+    {"row": "KSI-IAM-AAM.validate.4", "covers": "partial", "gap": "Attribution to Terraform is by the register's declared_in; three identities are not Terraform's -- AWS's service-linked roles, Google's default compute account, and the hand-made GCP Terraform Admin, each said so. There is no SCIM."},
+    {"row": "KSI-IAM-APM.validate.3", "covers": "partial", "gap": "Non-human identities only. The human identities -- the Identity Center user, the Google account, root -- are not inventoried types; the register lists them, and the APM checks judge their credentials."}
+  ]
+}

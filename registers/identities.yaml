@@ -1,0 +1,153 @@
+# The identity register: every non-human and human identity, its lane in
+# the role model, its credential, and where it is declared.
+#
+# Started 2026-10-07. register_read's identities_cover_inventory reconciles
+# the live inventory's identities -- IAM roles and users, GCP service
+# accounts -- against these entries: one the register cannot place fails.
+# It answers, as one reconciliation, rows that each ask whether every
+# identity appears somewhere: the credential inventory (IAM-APM v3), the
+# credential review (IAM-SNU v3), the role mapping (IAM-ELP v1, v5), a lane
+# (IAM-JIT v5) and attribution to declared state (IAM-AAM v4).
+#
+#   kind         human | workload | pipeline | platform | provider
+#   lane         the role it plays, from the role model
+#   credential   how it authenticates, and why no long-lived secret exists
+#   declared_in  the Terraform that declares it, or who owns it
+#
+# Humans are not in the inventory (Identity Center users and Google accounts
+# are not inventoried types); they are listed for completeness and judged by
+# the IAM-APM and IAM-JIT checks instead.
+
+identities:
+  operator_read_only:
+    match: {resource_type: "AWS::IAM::Role", name: "AWSReservedSSO_OperatorReadOnly_*"}
+    kind: human
+    lane: Operator, standing -- read-only, starts elevations
+    credential: Identity Center session through Google's SAML and 2-step verification; 4 hours
+    declared_in: infra/aws/elevation.tf
+
+  operator_elevated:
+    match: {resource_type: "AWS::IAM::Role", name: "AWSReservedSSO_ElevatedAdmin_*"}
+    kind: human
+    lane: Operator, elevated -- administration under a justified, time-bound elevation
+    credential: Identity Center session, 1 hour, only while the elevation's assignment exists
+    declared_in: infra/aws/elevation.tf
+
+  aws_service_linked:
+    match: {resource_type: "AWS::IAM::Role", name: "AWSServiceRoleFor*"}
+    kind: provider
+    lane: AWS service acting for the account (Config, GuardDuty, Security Hub, ECS, RDS, Identity Center and others)
+    credential: Assumed only by its AWS service; AWS defines and owns the role and its policy
+    declared_in: AWS (service-linked); Config's is declared in infra/aws/inventory.tf
+
+  github_drift:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-github-drift"}
+    kind: pipeline
+    lane: CI read -- plans declared state for drift and for the policy gate
+    credential: GitHub OIDC web identity, pinned to the repository's IDs and main; 1 hour
+    declared_in: infra/aws/pipeline_identity.tf
+
+  github_collector:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-github-collector"}
+    kind: pipeline
+    lane: CI read -- the evidence collector; writes only its own run records
+    credential: GitHub OIDC web identity, pinned as above; 1 hour
+    declared_in: infra/aws/collector_identity.tf
+
+  github_build:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-github-build"}
+    kind: pipeline
+    lane: CI build -- pushes and signs images
+    credential: GitHub OIDC web identity, pinned as above
+    declared_in: infra/aws/pipeline.tf
+
+  gcp_pipeline_into_aws:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-gcp-pipeline"}
+    kind: workload
+    lane: Cross-cloud workload -- reads extracts for the analytics pipeline
+    credential: Google-issued ID token for the pipeline service account, by numeric ID
+    declared_in: infra/aws/cross_cloud.tf
+
+  elevation_workflow:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-elevation-workflow"}
+    kind: platform
+    lane: Elevation -- assigns and removes ElevatedAdmin, provisions its reserved role
+    credential: Assumed only by Step Functions in this account
+    declared_in: infra/aws/elevation.tf
+
+  elevation_function:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-elevation"}
+    kind: platform
+    lane: Elevation -- records, confirms, alerts, and the backstop's revocation
+    credential: Lambda execution role
+    declared_in: infra/aws/elevation.tf
+
+  log_pipeline:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-normalize-events"}
+    kind: platform
+    lane: Log pipeline -- normalizes CloudTrail into the corpus
+    credential: Lambda execution role
+    declared_in: infra/aws/log_normalization.tf
+
+  detection:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-run-detection-query"}
+    kind: platform
+    lane: Detection -- runs the daily query, publishes alerts
+    credential: Lambda execution role
+    declared_in: infra/aws/detection.tf
+
+  session_workloads:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-*-task"}
+    kind: workload
+    lane: Application workload -- api, worker or migration task, each its own role
+    credential: ECS task role; the database by IAM token, no stored password
+    declared_in: infra/aws/compute.tf (session environment)
+
+  session_task_execution:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-task-execution"}
+    kind: platform
+    lane: ECS agent -- pulls images, fetches the tasks' secret references, writes their logs
+    credential: ECS task execution role
+    declared_in: infra/aws/compute.tf (session environment)
+
+  session_flow_logs:
+    match: {resource_type: "AWS::IAM::Role", name: "fedramp-20x-ksi-flow-logs"}
+    kind: platform
+    lane: Network logging -- delivers VPC flow logs
+    credential: Assumed only by the VPC flow logs service
+    declared_in: infra/aws/network.tf (session environment)
+
+  gcp_pipeline:
+    match: {resource_type: "iam.googleapis.com/ServiceAccount", name: "Analytics pipeline job"}
+    kind: workload
+    lane: Analytics workload -- runs the Cloud Run job, loads BigQuery, federates into AWS
+    credential: Attached to the job; no user-managed keys (iam-snu-cfg-gcp-no-user-managed-sa-keys)
+    declared_in: infra/gcp/pipeline.tf
+
+  gcp_scheduler:
+    match: {resource_type: "iam.googleapis.com/ServiceAccount", name: "Invokes the analytics pipeline job"}
+    kind: platform
+    lane: Scheduler -- invokes the job, and nothing else
+    credential: Attached to the Cloud Scheduler job; no keys
+    declared_in: infra/gcp/pipeline.tf
+
+  gcp_terraform_admin:
+    match: {resource_type: "iam.googleapis.com/ServiceAccount", name: "Terraform Admin"}
+    kind: human
+    lane: Operator, GCP -- the account Terraform impersonates to apply
+    credential: Impersonated by the operator's Google account; no keys
+    declared_in: Created by hand at the project's start, not in Terraform; excused by rule in the GCP inventory check (registers/resources.yaml)
+
+  gcp_default_compute:
+    match: {resource_type: "iam.googleapis.com/ServiceAccount", name: "Default compute service account"}
+    kind: provider
+    lane: None -- created by Google when the Compute API was enabled; nothing runs as it
+    credential: No keys; excused by rule in the GCP inventory check
+    declared_in: Google (automatic)
+
+humans:
+  - who: The operator, alex@corp.elvievalmores.com
+    aws: Identity Center user, by hand (SCIM descoped); OperatorReadOnly standing, ElevatedAdmin by elevation
+    gcp: Google account, project owner -- standing, the GCP break-glass (PAM not built)
+  - who: Root, AWS account 437672023758
+    aws: Break-glass; hardware MFA, no access keys (iam-apm-cfg-aws-root-credentials)

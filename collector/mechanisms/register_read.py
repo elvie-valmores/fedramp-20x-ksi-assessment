@@ -77,6 +77,9 @@ class RegisterRead(Mechanism):
         elif p["assertion"] == "secrets_owned":
             members = [r for r in _inventory(p["region"], p["project_id"]) if r["resource_type"] in p["types"]]
             ok, detail, evidence = evaluate_secrets_owned(members, register)
+        elif p["assertion"] == "identities_cover_inventory":
+            members = [r for r in _inventory(p["region"], p["project_id"]) if r["resource_type"] in p["types"]]
+            ok, detail, evidence = evaluate_identities(members, register.get("identities") or {})
         elif p["assertion"] == "policy_coverage":
             rules = sorted((REPO / "policy" / "rules").glob("*.rego"))
             sources = {f.name: f.read_text() for f in rules if not f.name.endswith("_test.rego")}
@@ -543,3 +546,30 @@ def evaluate_signal_report(report: dict | None, declared: dict, now, max_age_hou
         return False, f"the report is {age:.0f} hours old, over {max_age_hours}", evidence
     count = sum(len(v.get("signals") or {}) for v in wanted.values())
     return True, f"{len(wanted)} section(s), all {count} signals computed over {report['period']['days']} days", evidence
+
+
+# --- The identity register (2026-10-07) ---
+
+IDENTITY_FIELDS = ("kind", "lane", "credential", "declared_in")
+
+
+def evaluate_identities(members: list[dict], identities: dict) -> tuple[bool, str, dict]:
+    """Every identity in the inventory matches one register entry, and every entry is complete."""
+    incomplete = [f"{name}: no {f}" for name, e in identities.items() for f in IDENTITY_FIELDS if not str(e.get(f) or "").strip()]
+    placed, unplaced = {}, []
+    for r in members:
+        name = r.get("name") or r["resource_id"]
+        hits = [n for n, e in identities.items() if e["match"]["resource_type"] == r["resource_type"]
+                and fnmatch.fnmatchcase(name, e["match"]["name"])]
+        if hits:
+            placed[name] = hits[0]
+        else:
+            unplaced.append(f"{r['resource_type']} {name}")
+    evidence = {"placed": placed, "unplaced": unplaced, "incomplete": incomplete}
+    if not members:
+        return False, "no identities in the inventory -- nothing to judge", evidence
+    if incomplete:
+        return False, f"{len(incomplete)} incomplete register entr(ies): {incomplete[0]}", evidence
+    if unplaced:
+        return False, f"{len(unplaced)} identit(ies) the register cannot place: {', '.join(unplaced[:4])}", evidence
+    return True, f"all {len(members)} identities placed, each with a lane, credential and declaration", evidence
