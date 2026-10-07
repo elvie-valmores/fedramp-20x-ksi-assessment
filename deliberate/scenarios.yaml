@@ -99,3 +99,17 @@ scenarios:
     cadence_days: 30
     runs_as: elevated
     what: Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting
+
+  mis_scoped_token_rejected:
+    rows: [KSI-SVC-VCM.validate.4]
+    requires: persistent
+    cadence_days: 30
+    runs_as: elevated
+    what: Mint a Google ID token with the pipeline role's pinned audience but another identity's subject (Terraform Admin, by impersonation) and present it to AWS for the pipeline role; AssumeRoleWithWebIdentity must refuse it
+
+  idle_connection_closed:
+    rows: [KSI-CNA-ULN.validate.2]
+    requires: aws-phase1
+    cadence_days: 30
+    runs_as: elevated
+    what: Open a TLS connection to the load balancer and send nothing past its 60-second idle timeout; the load balancer must close it

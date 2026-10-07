@@ -1,0 +1,25 @@
+{
+  "id": "svc-sin-ops-aws-db-connections-tls",
+  "indicator": "KSI-SVC-SIN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing check, zero expected: every application connection the database authorized in the last six hours used TLS, read from its own connection log (log_connections)",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "db_connections",
+    "judge": "tls",
+    "log_group": "/aws/rds/instance/fedramp-20x-ksi/postgresql",
+    "hours": 6
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-SIN.validate.2",
+      "covers": "partial",
+      "gap": "Judged in sessions: the database and its log stand only then. rds.force_ssl already refuses a plain connection (svc-sin-cfg-aws-database-settings); this shows none was made."
+    }
+  ]
+}

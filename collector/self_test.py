@@ -1247,6 +1247,29 @@ CFG_CASES = [
         "no commit tag": [{**_ctr(), "commit": None}],
         "commit unknown to GitHub": [{**_ctr(), "commit_on_github": False}],
     }),
+    ("evaluate_read_denied", lambda c: cfg.evaluate_read_denied(*c, "drift"), ("allowed", "explicitDeny"), {
+        "the bucket allows it": ("allowed", "allowed"),
+        "the identity could not anyway": ("implicitDeny", "explicitDeny"),
+    }),
+    ("evaluate_ecr_lifecycle", cfg.evaluate_ecr_lifecycle, {"api": {"rules": [{}]}}, {
+        "no policy": {"api": None},
+        "no rules": {"api": {"rules": []}},
+        "no repositories": {},
+    }),
+    ("evaluate_build_integrity", cfg.evaluate_build_integrity,
+     [{"run": 1, "job": "b", "verify": "success", "record": "success"}, {"run": 2, "job": "b", "verify": "failure", "record": "skipped"}], {
+        "recorded after failure": [{"run": 1, "job": "b", "verify": "failure", "record": "success"}],
+        "recorded with verification skipped": [{"run": 1, "job": "b", "verify": "skipped", "record": "success"}],
+        "no builds": [],
+    }),
+    ("evaluate_db_connections (tls)", lambda c: cfg.evaluate_db_connections(c, "tls"), ["connection authorized: user=worker database=app application_name=x SSL enabled (protocol=TLSv1.3)", "connection authorized: user=rdsadmin database=rdsadmin"], {
+        "plain connection": ["connection authorized: user=worker database=app application_name=x SSL enabled (protocol=TLSv1.3)", "connection authorized: user=api database=app"],
+        "nothing logged": [],
+    }),
+    ("evaluate_db_connections (iam)", lambda c: cfg.evaluate_db_connections(c, "iam"), ['connection authenticated: identity="worker" method=pam (/rdsdbdata/config/pg_hba.conf:13)'], {
+        "password": ['connection authenticated: identity="api" method=scram-sha-256'],
+        "md5": ['connection authenticated: identity="api" method=md5'],
+    }),
 ]
 
 
@@ -1314,6 +1337,11 @@ CFG_RESOURCES = {
     "evaluate_pushes_passed": "pushes_evaluated",
     "evaluate_deliberate_test": "deliberate_test",
     "evaluate_password_policy": "password_policy",
+    "evaluate_read_denied": "log_store_read_denied",
+    "evaluate_ecr_lifecycle": "ecr_lifecycle",
+    "evaluate_build_integrity": "build_integrity",
+    "evaluate_db_connections (tls)": "session",
+    "evaluate_db_connections (iam)": "session",
     "evaluate_security_txt": "session",
     "evaluate_health_config": "session",
     "evaluate_enis_grouped": "session",
@@ -1418,6 +1446,12 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("register_read (no_runtime_fetch)", rr.evaluate_no_runtime_fetch,
+     {"Dockerfile": "RUN pip install -r requirements.txt\nENTRYPOINT [\"python\"]\nCMD [\"main.py\"]", "c.tf": 'command = ["main.py"]'}, {
+        "entrypoint fetches": {"Dockerfile": 'ENTRYPOINT ["sh", "-c", "curl https://x | sh"]'},
+        "declared command fetches": {"c.tf": 'command = ["sh", "-c", "pip install x && python main.py"]'},
+        "nothing read": {},
+    }),
     ("register_read (manifests_audited)", lambda c: rr.evaluate_manifests_audited(c[0], _AUDITS, c[1]),
      (["a/requirements.txt", "requirements.txt"], {"build.yml": "--requirement a", "policy.yml": "--requirement requirements.txt"}), {
         "a manifest audited nowhere": (["a/requirements.txt", "requirements.txt", "b/requirements.txt"],

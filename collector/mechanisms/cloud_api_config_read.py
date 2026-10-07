@@ -154,6 +154,12 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
+        if provider == "aws" and resource == "log_store_read_denied":
+            return self._aws_log_store_read_denied(check)
+        if provider == "aws" and resource == "ecr_lifecycle":
+            return self._aws_ecr_lifecycle(check)
+        if provider == "github" and resource == "build_integrity":
+            return self._github_build_integrity(check)
         if provider == "aws" and resource == "session":
             return self._aws_session(check)
         if provider == "aws" and resource == "iam_mutation_principals":
@@ -1270,6 +1276,19 @@ class CloudAPIConfigRead(Mechanism):
                 versions = {x["Name"]: [v for page in sm.get_paginator("list_secret_version_ids").paginate(SecretId=x["ARN"], IncludeDeprecated=True)
                                         for v in page["Versions"]] for x in secrets}
                 ok, detail, evidence = evaluate_secret_versions(versions, datetime.now(timezone.utc), p["max_superseded_days"])
+        elif a == "db_connections":
+            logs = boto3.client("logs", region_name=region)
+            start = int((datetime.now(timezone.utc) - timedelta(hours=p["hours"])).timestamp())
+            qid = logs.start_query(logGroupName=p["log_group"], startTime=start, endTime=int(datetime.now(timezone.utc).timestamp()),
+                                   queryString="fields @message | filter @message like /connection (authorized|authenticated)/ | limit 1000")["queryId"]
+            import time as _time
+            for _ in range(30):
+                res = logs.get_query_results(queryId=qid)
+                if res["status"] in ("Complete", "Failed", "Cancelled"):
+                    break
+                _time.sleep(2)
+            lines = [next(f["value"] for f in row if f["field"] == "@message") for row in res.get("results", [])]
+            ok, detail, evidence = evaluate_db_connections(lines, p["judge"])
         elif a == "running_images":
             ok, detail, evidence = self._running_images(ecs, boto3.client("ecr", region_name=region), p)
         else:
@@ -1312,6 +1331,57 @@ class CloudAPIConfigRead(Mechanism):
                                        "declared": image, "running": c.get("image"), "pulled_digest": c.get("imageDigest"),
                                        "signed": signed, "commit": commit, "commit_on_github": commit_known})
         return evaluate_running_images(containers, p["check"])
+
+    def _aws_log_store_read_denied(self, check: CheckDefinition) -> CheckResult:
+        """KSI-MLA-ALA validate 3: a non-reader with s3:GetObject is still denied by the bucket.
+
+        Requires params: bucket, principal (a role whose own policy allows
+        s3:GetObject on every bucket), key. Simulated with the bucket policy
+        as the resource policy, so the bucket's deny is what decides.
+        """
+        p = check.params
+        iam = boto3.client("iam")
+        s3 = boto3.client("s3")
+        account = boto3.client("sts").get_caller_identity()["Account"]
+        policy = s3.get_bucket_policy(Bucket=p["bucket"])["Policy"]
+        role = f"arn:aws:iam::{account}:role/{p['principal']}"
+        resource = f"arn:aws:s3:::{p['bucket']}/{p['key']}"
+        alone = iam.simulate_principal_policy(PolicySourceArn=role, ActionNames=["s3:GetObject"], ResourceArns=[resource])["EvaluationResults"][0]
+        with_bucket = iam.simulate_principal_policy(PolicySourceArn=role, ActionNames=["s3:GetObject"], ResourceArns=[resource],
+                                                   ResourcePolicy=policy, ResourceOwner=f"arn:aws:iam::{account}:root")["EvaluationResults"][0]
+        ok, detail, evidence = evaluate_read_denied(alone["EvalDecision"], with_bucket["EvalDecision"], p["principal"])
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_ecr_lifecycle(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-PRR verify 1, the image half: every repository has a lifecycle policy with rules."""
+        ecr = boto3.client("ecr", region_name=check.params["region"])
+        policies = {}
+        for repo in [r["repositoryName"] for page in ecr.get_paginator("describe_repositories").paginate() for r in page["repositories"]]:
+            try:
+                policies[repo] = json.loads(ecr.get_lifecycle_policy(repositoryName=repo)["lifecyclePolicyText"])
+            except ecr.exceptions.LifecyclePolicyNotFoundException:
+                policies[repo] = None
+        ok, detail, evidence = evaluate_ecr_lifecycle(policies)
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _github_build_integrity(self, check: CheckDefinition) -> CheckResult:
+        """KSI-SVC-VRI validate 4: no build recorded a digest after a failed signature verification.
+
+        Requires params: repository, workflow, job_prefix, verify_step,
+        record_step, lookback_runs.
+        """
+        p = check.params
+        runs = _github_get(f"repos/{p['repository']}/actions/workflows/{p['workflow']}/runs?status=completed&per_page={p['lookback_runs']}")["workflow_runs"]
+        jobs = []
+        for run in runs:
+            for j in _github_get(f"repos/{p['repository']}/actions/runs/{run['id']}/jobs")["jobs"]:
+                if not j["name"].startswith(p["job_prefix"]):
+                    continue
+                steps = {st["name"]: st["conclusion"] for st in j.get("steps", [])}
+                jobs.append({"run": run["id"], "job": j["name"], "verify": steps.get(p["verify_step"]),
+                             "record": steps.get(p["record_step"])})
+        ok, detail, evidence = evaluate_build_integrity(jobs)
+        return CheckResult(check.id, ok, evidence, detail)
 
     def _project_roles(self, iam, excluded_paths: list[str]) -> list[dict]:
         return [r for page in iam.get_paginator("list_roles").paginate() for r in page["Roles"]
@@ -3757,3 +3827,64 @@ def evaluate_running_images(containers: list[dict], check: str) -> tuple[bool, s
     if bad:
         return False, f"{len(bad)} of {len(containers)} containers do not {what}", evidence
     return True, f"all {len(containers)} running containers {what}", evidence
+
+
+# --- Log store reads, image lifecycle, build integrity (2026-10-07) ---
+
+def evaluate_read_denied(alone: str, with_bucket: str, principal: str) -> tuple[bool, str, dict]:
+    """The principal's own policy must allow the read, and the bucket must deny it.
+
+    Without the first, a denial would prove nothing about the bucket.
+    """
+    evidence = {"principal": principal, "identity_policy_alone": alone, "with_bucket_policy": with_bucket}
+    if alone != "allowed":
+        return False, f"{principal}'s own policy does not allow the read ({alone}), so the test proves nothing", evidence
+    if with_bucket != "explicitDeny":
+        return False, f"the bucket policy does not deny {principal}'s read ({with_bucket})", evidence
+    return True, f"{principal} may read objects by its own policy, and the log store's bucket policy denies it", evidence
+
+
+def evaluate_ecr_lifecycle(policies: dict[str, dict | None]) -> tuple[bool, str, dict]:
+    missing = [r for r, pol in policies.items() if not pol or not pol.get("rules")]
+    evidence = {"repositories": {r: (len(pol["rules"]) if pol and pol.get("rules") else 0) for r, pol in policies.items()}}
+    if not policies:
+        return False, "no repositories -- nothing to judge", evidence
+    if missing:
+        return False, f"no lifecycle rules on {', '.join(missing)}", evidence
+    return True, f"all {len(policies)} repositories carry lifecycle rules", evidence
+
+
+def evaluate_build_integrity(jobs: list[dict]) -> tuple[bool, str, dict]:
+    bad = [j for j in jobs if j["verify"] != "success" and j["record"] not in (None, "skipped")]
+    evidence = {"jobs": len(jobs), "recorded_after_failed_verification": bad,
+                "verification_failures": [j for j in jobs if j["verify"] not in ("success", None, "skipped")]}
+    if not jobs:
+        return False, "no build jobs in the lookback -- nothing to judge", evidence
+    if bad:
+        return False, f"{len(bad)} build(s) recorded a digest after its signature verification did not succeed", evidence
+    return True, f"{len(jobs)} build job(s); none recorded a digest after a failed verification", evidence
+
+
+def evaluate_db_connections(lines: list[str], judge: str) -> tuple[bool, str, dict]:
+    """The database's own connection log: "tls" -- every authorized connection used SSL;
+    "iam" -- every authenticated one used PAM, which is how RDS IAM tokens arrive.
+    RDS's own rdsadmin connections are not the application's and are left out."""
+    import re
+
+    mine = [l for l in lines if "rdsadmin" not in l]
+    if judge == "tls":
+        relevant = [l for l in mine if "connection authorized" in l]
+        bad = [l for l in relevant if "SSL enabled" not in l]
+        what = "used TLS"
+    elif judge == "iam":
+        relevant = [l for l in mine if "connection authenticated" in l]
+        bad = [l for l in relevant if not re.search(r"method=pam\b", l)]
+        what = "authenticated by IAM token (PAM)"
+    else:
+        raise ValueError(f"unknown db_connections judge {judge!r}")
+    evidence = {"lines": len(relevant), "failing": bad[:20]}
+    if not relevant:
+        return False, "no connection lines in the window -- nothing to judge", evidence
+    if bad:
+        return False, f"{len(bad)} of {len(relevant)} connections were not {what}", evidence
+    return True, f"all {len(relevant)} application connections {what}", evidence

@@ -29,6 +29,16 @@
     {
       "row": "KSI-RPL-RRO.validate.5",
       "covers": "full"
+    },
+    {
+      "row": "KSI-RPL-RRO.verify.2",
+      "covers": "partial",
+      "gap": "Only the database's objective is held to a measurement (15.7 minutes against 60); the other twenty objectives are declared from design."
+    },
+    {
+      "row": "KSI-RPL-RRO.validate.2",
+      "covers": "partial",
+      "gap": "Only the database's objective is held to a measurement (15.7 minutes against 60); the other twenty objectives are declared from design."
     }
   ]
 }

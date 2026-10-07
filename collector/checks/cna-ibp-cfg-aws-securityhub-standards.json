@@ -28,6 +28,11 @@
       "row": "KSI-SVC-EIS.verify.2",
       "covers": "partial",
       "gap": "AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
+    },
+    {
+      "row": "KSI-CNA-DFP.verify.3",
+      "covers": "partial",
+      "gap": "Security Hub's standards, declared explicitly."
     }
   ]
 }

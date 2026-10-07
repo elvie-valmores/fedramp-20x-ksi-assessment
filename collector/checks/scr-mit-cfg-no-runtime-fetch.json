@@ -1,0 +1,24 @@
+{
+  "id": "scr-mit-cfg-no-runtime-fetch",
+  "indicator": "KSI-SCR-MIT",
+  "mechanism": "register_read",
+  "evidence_type": "CFG",
+  "description": "No image's ENTRYPOINT or CMD, and no declared container or job command, fetches code at start: curl, wget, git clone or a package install. Fetching happens at build time only, against hashed manifests",
+  "required_cadence": "on every pipeline change",
+  "params": {
+    "assertion": "no_runtime_fetch",
+    "files": [
+      "app/api/Dockerfile",
+      "app/worker/Dockerfile",
+      "app/analytics/Dockerfile",
+      "infra/aws/compute.tf",
+      "infra/gcp/pipeline.tf"
+    ]
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SCR-MIT.verify.3",
+      "covers": "full"
+    }
+  ]
+}

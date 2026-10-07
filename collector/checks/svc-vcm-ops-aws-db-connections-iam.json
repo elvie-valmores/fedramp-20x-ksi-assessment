@@ -1,0 +1,25 @@
+{
+  "id": "svc-vcm-ops-aws-db-connections-iam",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing check, zero expected: every application connection the database authenticated in the last six hours used PAM -- the IAM token path -- not a password",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "db_connections",
+    "judge": "iam",
+    "log_group": "/aws/rds/instance/fedramp-20x-ksi/postgresql",
+    "hours": 6
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VCM.validate.2",
+      "covers": "partial",
+      "gap": "Judged in sessions. RDS's own rdsadmin connections are excluded; the master credential exists, RDS-managed, and its use would show here as a password authentication."
+    }
+  ]
+}

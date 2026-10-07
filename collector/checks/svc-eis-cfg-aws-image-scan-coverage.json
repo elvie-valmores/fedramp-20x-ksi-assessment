@@ -20,6 +20,11 @@
       "row": "KSI-SVC-EIS.validate.1",
       "covers": "partial",
       "gap": "ECR images, by coverage status, not by a scan date against a declared interval; Inspector rescans on new advisories rather than on a clock. The analytics image in Artifact Registry is scanned by Container Scanning, not read here."
+    },
+    {
+      "row": "KSI-SCR-MON.validate.1",
+      "covers": "partial",
+      "gap": "Inspector's coverage of recent images is checked; GuardDuty's publishing and the build's audits are judged by their own checks. A feed falling silent is not detected per feed."
     }
   ]
 }

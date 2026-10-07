@@ -1,0 +1,25 @@
+{
+  "id": "svc-vri-ops-build-integrity",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing check, zero expected: across the last 30 completed build runs, no job recorded an image digest -- made it deployable -- after its signature verification did not succeed",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "github",
+    "resource": "build_integrity",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment",
+    "workflow": "build-and-push.yml",
+    "job_prefix": "build and publish",
+    "verify_step": "verify the signature",
+    "record_step": "record the digest",
+    "lookback_runs": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.validate.4",
+      "covers": "partial",
+      "gap": "A recorded digest is what deployment uses; the apply that deploys it is the operator's, and nothing re-verifies there (SVC-VRI validate 2's gap)."
+    }
+  ]
+}

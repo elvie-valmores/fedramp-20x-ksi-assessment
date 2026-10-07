@@ -1,0 +1,19 @@
+{
+  "id": "cna-uln-ops-idle-connection-closed",
+  "indicator": "KSI-CNA-ULN",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (idle_connection_closed): Open a TLS connection to the load balancer and send nothing past its 60-second idle timeout; the load balancer must close it. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "idle_connection_closed",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-ULN.validate.2",
+      "covers": "partial",
+      "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the load balancer stands only during sessions."
+    }
+  ]
+}

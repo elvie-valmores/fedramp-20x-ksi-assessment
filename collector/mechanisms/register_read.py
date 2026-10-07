@@ -80,6 +80,9 @@ class RegisterRead(Mechanism):
         elif p["assertion"] == "identities_cover_inventory":
             members = [r for r in _inventory(p["region"], p["project_id"]) if r["resource_type"] in p["types"]]
             ok, detail, evidence = evaluate_identities(members, register.get("identities") or {})
+        elif p["assertion"] == "no_runtime_fetch":
+            files = {f: (REPO / f).read_text() for f in p["files"]}
+            ok, detail, evidence = evaluate_no_runtime_fetch(files)
         elif p["assertion"] == "manifests_audited":
             tracked = subprocess_lines(["git", "-C", str(REPO), "ls-files", "*requirements*.txt"])
             workflows = {w.name: w.read_text() for w in (REPO / ".github" / "workflows").glob("*.yml")}
@@ -605,3 +608,32 @@ def evaluate_manifests_audited(tracked: list[str], audits: dict[str, dict], work
     if stale:
         return False, f"declared audits for manifests that no longer exist: {', '.join(stale)}", evidence
     return True, f"all {len(tracked)} manifests audited: " + ", ".join(sorted({a['workflow'] for a in audits.values()})), evidence
+
+
+# --- No fetching code at run time (2026-10-07) ---
+
+import re as _re
+
+_FETCH = _re.compile(r"\b(curl|wget|git\s+clone|pip\s+install|npm\s+install|apt-get\s+install|apk\s+add)\b")
+
+
+def evaluate_no_runtime_fetch(files: dict[str, str]) -> tuple[bool, str, dict]:
+    """What runs at start -- Dockerfile ENTRYPOINT and CMD, and declared container
+    commands -- fetches nothing. Fetching at build time (RUN) is the build's
+    business, with hashed manifests (SCR-MIT build row 4)."""
+    found = []
+    for name, text in files.items():
+        if name.endswith("Dockerfile"):
+            for line in text.splitlines():
+                if line.strip().upper().startswith(("ENTRYPOINT", "CMD")) and _FETCH.search(line):
+                    found.append(f"{name}: {line.strip()}")
+        else:
+            for m in _re.finditer(r"(?:command|entryPoint)\s*=\s*\[([^\]]*)\]", text):
+                if _FETCH.search(m.group(1)):
+                    found.append(f"{name}: {m.group(0)[:120]}")
+    evidence = {"files": sorted(files), "fetches_at_start": found}
+    if not files:
+        return False, "no files to read", evidence
+    if found:
+        return False, f"{len(found)} start command(s) fetch code: {found[0]}", evidence
+    return True, f"no start command in {len(files)} file(s) fetches code", evidence

@@ -20,6 +20,11 @@
     {
       "row": "KSI-MLA-OSM.validate.4",
       "covers": "full"
+    },
+    {
+      "row": "KSI-SVC-VCM.validate.5",
+      "covers": "partial",
+      "gap": "The daily detection query reads failed authentication from the corpus and alerts on it; no specific failure has been traced from its event to its alert."
     }
   ]
 }

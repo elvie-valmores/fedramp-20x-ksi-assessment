@@ -17,6 +17,16 @@
     {
       "row": "KSI-SCR-MIT.validate.3",
       "covers": "full"
+    },
+    {
+      "row": "KSI-SCR-MIT.verify.1",
+      "covers": "partial",
+      "gap": "Support-window positions are recorded for the components judged at risk -- the base image, the Python runtime -- not reconciled against every component (Lambda runtimes, the database engine, providers)."
+    },
+    {
+      "row": "KSI-SCR-MIT.validate.1",
+      "covers": "partial",
+      "gap": "Support-window positions are recorded for the components judged at risk -- the base image, the Python runtime -- not reconciled against every component (Lambda runtimes, the database engine, providers)."
     }
   ]
 }

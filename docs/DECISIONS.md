@@ -8687,3 +8687,69 @@ same days without the allowlist it returns every change, so the lanes are what e
 a multi-platform index, which Inspector reports as `UNSUPPORTED_MEDIA_TYPE`; Inspector scans the
 platform images inside it. The check now resolves each index through `ecr:BatchGetImage`, granted to
 the CI read roles by an elevated apply. That call returns manifests only, not layers.
+
+## 2026-10-07 — Every evidence row accounted for: 137 full, 124 partial, 119 recorded, 0 open
+
+The first clause of the definition of done (2026-10-03) is met: every one of the 380 evidence rows is
+either automated or recorded with its risk. The rows and checks moved like this:
+
+| | 2026-10-06, start | Now |
+|---|---|---|
+| Full | 113 | 137 |
+| Partial | 49 | 124 |
+| Recorded | 0 | 119 |
+| Open | 218 | 0 |
+| Checks | 157 | 205 |
+| Self-test assertions | 103 | 138 |
+
+Partial rows state what is missing; recorded rows state their reason and risk
+(`registers/row-positions.yaml`). Both are visible per row in `docs/MATRIX-COVERAGE.md` and in the
+SDR.
+
+**Built today:**
+
+- **The record store mechanism.** The review queries' records are read back: each query ran, and
+  their windows are continuous.
+- **The identity register.** One reconciliation of every inventoried identity answers six rows.
+- **Persistent checks:**
+  - who can change IAM, by simulation
+  - idle roles
+  - Inspector coverage of the platform images
+  - every dependency manifest audited
+  - no fetch at run time
+  - ECR lifecycle
+  - build integrity
+  - a simulated log store read by a non-reader
+- **Standing queries on the new normalizer fields:**
+  - changes outside declared lanes
+  - the read-only role's changes
+  - identity changes
+  - root sign-in MFA
+  - unattributed changes
+  - project roles denied
+- **Session checks for session 2:**
+  - `security.txt`
+  - the load balancer's idle timeout and health configuration
+  - the interfaces' groups, and group references
+  - secret rotation and versions
+  - running images: declared, signed and traced
+  - the database's TLS and IAM authentication, from its own log
+- **Deliberate scenarios:**
+  - `mis_scoped_token_rejected`: passed in a dry run, and records at the next elevated run
+  - `idle_connection_closed`: for session 2
+
+**The restore in the corpus (CMT-LMC validate 5's evidence).** The 2026-10-07 change survey -- the
+three-day listing of every change, used to draw the change query's lanes -- showed the session's
+`RestoreDBInstanceToPointInTime` and `DeleteDBInstance` calls, made by the elevated role, as
+management events in the corpus. The maintenance action is logged as a modification. It is recorded
+as manual, not standing, because the corpus's query window is three days.
+
+**Still to meet the definition of done:**
+
+1. **Every failing check fixed, or recorded as a finding.**
+   - **Ageing out:** the two denial rows, about 2026-10-09; the backups, 2026-10-09.
+   - **Need session 2:**
+     - the never-run scenarios (`stopped_task_replaced`, `idle_connection_closed`)
+     - `mis_scoped_token_rejected`, until it is recorded
+     - the catalogue check, until all of those have run
+2. **The final SDR emitted by CI, and valid.**

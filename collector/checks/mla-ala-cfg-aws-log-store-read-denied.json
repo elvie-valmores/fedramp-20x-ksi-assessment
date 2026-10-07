@@ -1,0 +1,22 @@
+{
+  "id": "mla-ala-cfg-aws-log-store-read-denied",
+  "indicator": "KSI-MLA-ALA",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The drift role, whose own policy allows s3:GetObject on every bucket but which is not a declared log reader, is denied a log store object read by the bucket policy -- by IAM simulation with the bucket policy as the resource policy",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "log_store_read_denied",
+    "bucket": "fedramp-20x-ksi-log-store-437672023758",
+    "principal": "fedramp-20x-ksi-github-drift",
+    "key": "AWSLogs/437672023758/CloudTrail/sample.json.gz"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-MLA-ALA.validate.3",
+      "covers": "partial",
+      "gap": "By simulation, not a live read: the drift role cannot be assumed outside GitHub Actions. The simulation includes the bucket policy, so the deny it shows is the one a live read would meet."
+    }
+  ]
+}

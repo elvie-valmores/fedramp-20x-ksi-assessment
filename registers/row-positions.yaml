@@ -690,3 +690,124 @@ positions:
       test.
     evidence: DECISIONS.md, 2026-10-03 (the IAM-mutation query's catch)
     decided: '2026-10-06'
+  KSI-IAM-ELP.verify.2:
+    position: gap
+    reason: 'The CI read roles hold wildcard read actions by service (ec2:Describe*, s3:Get*) on Resource "*", enumerated
+      per service rather than per call: Terraform''s refresh calls more actions than can be listed stably. Write
+      actions are scoped to named resources throughout; no policy grants a wildcard write or "*" action.'
+    risk: A new read action AWS adds under a granted prefix is granted automatically; reads only.
+    decided: '2026-10-07'
+  KSI-IAM-ELP.validate.2:
+    position: inapplicable
+    reason: 'No data analyst identity is provisioned in either cloud: the identity register (registers/identities.yaml)
+      holds the operator and root as the only humans, and the analytics workload runs as a service account.'
+    risk: None from the analyst's access, which does not exist; the analyst persona's separation is untested because
+      there is no analyst.
+    decided: '2026-10-07'
+  KSI-IAM-ELP.validate.4:
+    position: gap
+    reason: Unused permissions are surfaced by IAM Access Analyzer's unused-access analyzer, which bills per role
+      per month; it is not enabled. Unused roles are surfaced instead (iam-snu-cfg-aws-roles-last-used).
+    risk: A role carrying permissions it never uses keeps them until someone narrows it.
+    decided: '2026-10-07'
+  KSI-IAM-SUS.verify.7:
+    position: descoped
+    reason: Effective-permission reconciliation of privileged accounts served the automated responder's scope, which
+      was descoped on 2026-10-03. IAM simulation shows who can change IAM (iam-elp-cfg-aws-iam-mutation-principals).
+    risk: Privileged reach beyond IAM change is not computed whole.
+    decided: '2026-10-07'
+  KSI-PIY-GIV.validate.2:
+    position: gap
+    reason: 'Not run deliberately: creating a resource outside Terraform to watch the inventory pick it up would
+      leave it in AWS Config''s record for the 27 to 51 hours Config takes to record a deletion, failing the declared-inventory
+      checks meanwhile (DECISIONS.md, 2026-10-02). The inventory is generated at query time from Config every run.'
+    risk: That a new resource appears in the next generation is shown in practice by every session, not by a recorded
+      test.
+    decided: '2026-10-07'
+  KSI-SVC-PRR.validate.4:
+    position: gap
+    reason: 'As PIY-GIV validate 2: a deliberately orphaned resource would sit in Config''s record for up to two
+      days. Orphans are found by the daily declared-inventory and snapshot-accounting checks.'
+    risk: Detection of an orphan from a specific change is not demonstrated end to end.
+    decided: '2026-10-07'
+  KSI-SVC-EIS.verify.4:
+    position: gap
+    reason: The build runs on pushes that touch the application and by hand; it has no schedule and no trigger from
+      a finding (build-and-push.yml).
+    risk: A finding against a deployed image waits for a person to rebuild; base image updates are not picked up
+      on their own.
+    decided: '2026-10-07'
+  KSI-SVC-EIS.validate.4:
+    position: gap
+    reason: 'As verify 4: no rebuild is triggered by a finding.'
+    risk: As verify 4.
+    decided: '2026-10-07'
+  KSI-SVC-EIS.validate.2:
+    position: gap
+    reason: Remediation timeframes are adopted from the Potential Agency Impact model in principle (registers/resources.yaml)
+      but not declared as days per severity, so a finding's age has no number to be held to.
+    risk: An old finding is visible in Inspector and Security Hub but nothing fails on its age.
+    decided: '2026-10-07'
+  KSI-SVC-EIS.validate.3:
+    position: gap
+    reason: Findings close in Inspector when a rescan no longer sees them; no closure record links a commit, digest
+      or apply.
+    risk: A finding that closes because an image was deleted reads the same as one that was fixed.
+    decided: '2026-10-07'
+  KSI-SVC-EIS.validate.5:
+    position: gap
+    reason: No base image currency window is declared; the base image is Debian 12 in LTS, recorded with a mitigation
+      due 2026-10-31 (registers/supply-chain-risks.yaml).
+    risk: An aging base image is caught as advisories accrue against it, not by its age.
+    decided: '2026-10-07'
+  KSI-CNA-IBP.validate.4:
+    position: gap
+    reason: 'As SVC-EIS validate 5: base images are scanned continuously (svc-eis-cfg-aws-image-scan-coverage),
+      but currency against the maintainer''s releases is not compared.'
+    risk: As SVC-EIS validate 5.
+    decided: '2026-10-07'
+  KSI-CNA-MAT.verify.4:
+    position: gap
+    reason: Task role permissions are enumerated per role, but not reconciled operation by operation against a declared
+      role model; the flows register covers network paths, not API operations.
+    risk: A task role permission that no declared operation needs would persist unnoticed.
+    decided: '2026-10-07'
+  KSI-CNA-RVP.verify.5:
+    position: gap
+    reason: No register names each protection mechanism with its evidence level; the WAF, Shield Standard and GuardDuty
+      are each evidenced by their checks, not catalogued together.
+    risk: A protection mechanism without evidence would not be noticed by absence.
+    decided: '2026-10-07'
+  KSI-MLA-LET.verify.2:
+    position: gap
+    reason: The event type list (registers/event-sources.yaml) is organised by source, not reconciled against the
+      mapped control categories one by one.
+    risk: A mapped category with no source would not be flagged.
+    decided: '2026-10-07'
+  KSI-MLA-LET.validate.2:
+    position: gap
+    reason: No test event per category is generated. The deliberate tests produce events in several categories (IAM
+      changes by elevation, KMS use, failed authorization), and the standing queries read them, but no test checks
+      each category's arrival.
+    risk: A category whose events stopped arriving would be noticed only if a query on it failed.
+    decided: '2026-10-07'
+  KSI-CMT-LMC.validate.4:
+    position: gap
+    reason: Only the AWS change surface delivers to the corpus; its daily presence is implied by the standing queries,
+      not checked per surface. The other surfaces -- GitHub, GCP, Google Admin -- are not delivered (CMT-LMC verify
+      1).
+    risk: A surface falling silent would not be detected.
+    decided: '2026-10-07'
+  KSI-CMT-LMC.validate.5:
+    position: manual
+    reason: 'The timed restore of 2026-10-06 appears in CloudTrail as RestoreDBInstanceToPointInTime and DeleteDBInstance
+      by the elevated role, seen in the corpus the same day. Not a standing check: the corpus''s query window is
+      three days.'
+    risk: Shown once, by a real maintenance action, not re-tested each cycle.
+    evidence: DECISIONS.md, 2026-10-07 (the change survey); deliberate-tests/scenario=timed_point_in_time_restore/
+    decided: '2026-10-07'
+  KSI-SCR-MIT.validate.2:
+    position: gap
+    reason: No staleness threshold is declared and dependency release dates are not collected.
+    risk: A dependency that stops being released is noticed only when an advisory lands against it.
+    decided: '2026-10-07'

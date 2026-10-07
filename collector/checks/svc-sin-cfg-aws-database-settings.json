@@ -33,6 +33,11 @@
       "row": "KSI-RPL-ABO.verify.1",
       "covers": "partial",
       "gap": "The database's automated backup retention, judged while phase 1 stands; object versioning on the stores is checked elsewhere (state bucket, Object Lock) and not joined to the declared windows here."
+    },
+    {
+      "row": "KSI-RPL-ABO.validate.1",
+      "covers": "partial",
+      "gap": "The database's backup configuration -- point-in-time recovery and 7-day retention -- meets its 5-minute recovery point; other classes' backup intervals are not compared with their objectives."
     }
   ],
   "requires_environment": "aws-phase1"

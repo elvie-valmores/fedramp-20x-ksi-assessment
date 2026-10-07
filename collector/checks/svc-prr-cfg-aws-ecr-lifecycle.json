@@ -1,0 +1,20 @@
+{
+  "id": "svc-prr-cfg-aws-ecr-lifecycle",
+  "indicator": "KSI-SVC-PRR",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every ECR repository carries a lifecycle policy with rules, so superseded images expire",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "ecr_lifecycle",
+    "region": "us-east-1"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-PRR.verify.1",
+      "covers": "partial",
+      "gap": "Images in ECR. Database snapshots expire by the instance's 7-day backup retention, checked while phase 1 stands (svc-sin-cfg-aws-database-settings); secret versions are checked in sessions (svc-prr-ops-aws-secret-versions); Artifact Registry's cleanup policy is in dry run until reviewed."
+    }
+  ]
+}

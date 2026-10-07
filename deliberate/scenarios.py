@@ -406,9 +406,60 @@ def stopped_task_replaced(session) -> tuple[bool, str, dict]:
             observed)
 
 
+def mis_scoped_token_rejected(session) -> tuple[bool, str, dict]:
+    import os
+    sts = session.client("sts", region_name=REGION)
+    account = sts.get_caller_identity()["Account"]
+    audience = os.environ.get("GCP_PIPELINE_SA_UNIQUE_ID", "104894493962317106056")
+    impostor = "terraform-admin@fedramp-20x-ksi-assessment.iam.gserviceaccount.com"
+    token = subprocess.run(["gcloud", "auth", "print-identity-token", f"--impersonate-service-account={impostor}",
+                            f"--audiences={audience}", "--include-email"],
+                           capture_output=True, text=True, check=True).stdout.strip()
+    # The token's own claims, so the record shows the audience was right and
+    # only the subject was wrong.
+    import base64
+    claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    refused = None
+    try:
+        sts.assume_role_with_web_identity(RoleArn=f"arn:aws:iam::{account}:role/fedramp-20x-ksi-gcp-pipeline",
+                                          RoleSessionName="deliberate-test", WebIdentityToken=token)
+    except ClientError as error:
+        refused = error.response["Error"]["Code"]
+    observed = {"token_aud": claims.get("aud"), "token_sub": claims.get("sub"), "token_email": claims.get("email"),
+                "pinned_sub": audience, "refused_with": refused}
+    return (refused is not None and claims.get("aud") == audience and claims.get("sub") != audience,
+            "a token with the pinned audience and another identity's subject is refused", observed)
+
+
+def idle_connection_closed(session) -> tuple[bool, str, dict]:
+    import os
+    import socket
+    import ssl
+    elb = session.client("elbv2", region_name=REGION)
+    lb = elb.describe_load_balancers(Names=["fedramp-20x-ksi"])["LoadBalancers"][0]
+    attrs = {a["Key"]: a["Value"] for a in elb.describe_load_balancer_attributes(LoadBalancerArn=lb["LoadBalancerArn"])["Attributes"]}
+    idle = int(attrs["idle_timeout.timeout_seconds"])
+    host = os.environ.get("APP_DOMAIN", "caliper.elvievalmores.com")
+    raw = socket.create_connection((socket.gethostbyname(lb["DNSName"]), 443), timeout=idle + 60)
+    tls = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+    opened = time.monotonic()
+    try:
+        data = tls.recv(1)  # blocks until the peer sends or closes
+        closed_after = time.monotonic() - opened
+        closed = data == b""
+    except (ConnectionResetError, ssl.SSLError, OSError):
+        closed_after, closed = time.monotonic() - opened, True
+    finally:
+        tls.close()
+    observed = {"idle_timeout_seconds": idle, "closed_by_peer": closed, "closed_after_seconds": round(closed_after, 1)}
+    return (closed and idle - 5 <= closed_after <= idle + 30,
+            "an idle connection is closed by the load balancer at about its idle timeout", observed)
+
+
 SCENARIOS = {f.__name__: f for f in (object_lock_rejects_change, out_of_band_change_detected,
                                        delivery_failure_alerts, prior_state_recoverable,
                                        historical_advisory_surfaced, waf_blocks_and_allows,
                                        task_internet_egress_blocked, permissive_group_still_no_egress,
                                        service_to_service_refused, failing_deploy_rolls_back,
-                                       timed_point_in_time_restore, stopped_task_replaced)}
+                                       timed_point_in_time_restore, stopped_task_replaced,
+                                       mis_scoped_token_rejected, idle_connection_closed)}

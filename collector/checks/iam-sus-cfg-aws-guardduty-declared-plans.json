@@ -29,6 +29,11 @@
       "row": "KSI-CNA-EIS.verify.1",
       "covers": "partial",
       "gap": "GuardDuty alone. AWS only: GCP has no Security Command Center without an organization, so its posture is the collector's GCP checks rather than an ingested service."
+    },
+    {
+      "row": "KSI-CNA-DFP.verify.3",
+      "covers": "partial",
+      "gap": "GuardDuty's plans are declared feature by feature; Security Hub's standards and ECS's Container Insights are declared too, each judged by its own check or position. Not every managed service's features are enumerated here."
     }
   ]
 }

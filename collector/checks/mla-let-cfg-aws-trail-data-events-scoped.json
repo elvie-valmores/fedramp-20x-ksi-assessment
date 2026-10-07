@@ -18,6 +18,11 @@
     {
       "row": "KSI-MLA-LET.verify.4",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-LMC.verify.3",
+      "covers": "partial",
+      "gap": "Maintenance by the operator is management-plane activity, which the trail records into the log store; GitHub-side maintenance (workflow runs) is not delivered there."
     }
   ]
 }

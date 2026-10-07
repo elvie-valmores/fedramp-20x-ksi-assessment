@@ -1,0 +1,18 @@
+{
+  "id": "svc-vcm-ops-mis-scoped-token-rejected",
+  "indicator": "KSI-SVC-VCM",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Deliberate test (mis_scoped_token_rejected): Mint a Google ID token with the pipeline role's pinned audience but another identity's subject (Terraform Admin, by impersonation) and present it to AWS for the pipeline role; AssumeRoleWithWebIdentity must refuse it. The newest recorded run must have passed within 30 days",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "mis_scoped_token_rejected",
+    "max_age_days": 35
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VCM.validate.4",
+      "covers": "full"
+    }
+  ]
+}
