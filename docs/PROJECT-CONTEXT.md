@@ -73,29 +73,28 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-10-06 (about 02:00 UTC)
+## Resume here — state at the end of 2026-10-07 (about 01:00 UTC)
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. The most common failure in this project is a control that is configured,
-deployed and internally consistent, and still does nothing. Nine have now been found, every one by
-running the thing rather than reading it (the ninth: Trivy scanning nothing, 2026-10-05). Check
-against the live accounts.
+deployed and internally consistent, and still does nothing. Nine have been found, every one by
+running the thing rather than reading it. Check against the live accounts.
 
-**Where it stands.** Weeks 1 and 2 of the finish-line plan are done, and week 3's first session ran.
-Read `DECISIONS.md` from 2026-10-05 on for the detail:
+**Where it stands.** Every one of the 380 evidence rows is accounted for:
 
-- **Done:**
-  - **JIT elevation:** your standing access is read-only.
-  - **Policy-as-code:** `policy.yml`, on every push and daily.
-  - **The signal report:** in `collect.yml`.
-  - **The deliberate test harness,** with 11 scenarios, all passed and recorded.
-- **Week 3, session 1 (2026-10-06):**
-  - **The run:** phases 1 and 2 stood up, six environment tests ran, then teardown.
-  - **The first measured recovery objective:** a point-in-time restore, available in 15.7 minutes
-    against the 60-minute objective.
-  - **Teardown verified:** 292 persistent, 0 ephemeral, and no cluster, database, load balancer, VPC
-    or endpoint left.
-- **Coverage:** 113 full and 49 partial of 380 rows, across 157 checks. Self-test: 103 assertions.
+| Status | Rows |
+|---|---|
+| Full | 137 |
+| Partial, with the gap stated | 124 |
+| Recorded, with reason and risk (`registers/row-positions.yaml`) | 119 |
+| **Open** | **0** |
+
+That is 205 checks and 138 self-test assertions. The SDR emits and validates locally. Of the
+definition of done (DECISIONS.md, 2026-10-03), two clauses remain:
+
+- **Every failing check fixed or recorded.** Most clear by themselves; session 2 clears the rest. The
+  list is below.
+- **The final SDR, emitted by CI and valid.** Week 4's freeze.
 
 ### First actions for the next session
 
@@ -116,8 +115,34 @@ Read `DECISIONS.md` from 2026-10-05 on for the detail:
    - **Drift:** `gh run list --workflow drift.yml -L 3`, green.
    - **The persistence boundary:** `infra/aws/boundary.py --persistent | wc -l` gives **292**, and
      `--ephemeral` gives 0.
-3. **Then "The next thing to do"** below. Start with the decision waiting on you, the seven Security
-   Hub controls.
+3. **Expected red in CI until they clear:**
+
+   | Check | Clears |
+   |---|---|
+   | `svc-sin-cfg-aws-backups-restorable` | 2026-10-09 |
+   | `iam-elp-ops-aws-project-roles-not-denied` (two real, understood denials) | About 2026-10-09 |
+   | `mla-rvl-ops-review-queries-recorded` | After one CI run |
+   | `piy-giv-ops-aws-inventory-current` (Config lag on a deleted elevated role) | By itself |
+   | The never-run scenarios: `cna-eis-ops-stopped-task-replaced`, `cna-uln-ops-idle-connection-closed`, `svc-vcm-ops-mis-scoped-token-rejected` | Session 2 |
+   | `rpl-trc-ops-deliberate-tests-current` | Session 2 |
+
+4. **Then session 2.** The steps:
+   - **Elevate,** after checking `elevate.sh status`.
+   - **Apply both phases** at `git-0cee46bbabef`.
+   - **Run the migration.**
+   - **Run the scenarios:** `stopped_task_replaced`, `idle_connection_closed` and
+     `mis_scoped_token_rejected`. Rerun any past its cadence.
+   - **Run the full collector with the environment up.** It proves the session checks written on
+     2026-10-07:
+     - the WAF
+     - circuit breakers, task spread, distinct identities
+     - `security.txt`, the idle timeout, health configuration
+     - interfaces' groups, group references
+     - secret rotation and versions
+     - running images: declared, signed and traced
+     - the database's TLS and IAM authentication, from its own logs
+   - **Tear down.**
+   - **Decide the GuardDuty runtime trial** first: its managed VPC endpoint may block teardown.
 
 ### Waiting on the user
 
