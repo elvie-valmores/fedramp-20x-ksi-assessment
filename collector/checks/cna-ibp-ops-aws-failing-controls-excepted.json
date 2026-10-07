@@ -134,6 +134,41 @@
         "control": "Config.1",
         "reason": "Config records the 17 types the inventory reconciles, not every type an enabled control covers: Config bills per configuration item and the environment is rebuilt every session (DECISIONS.md, 2026-09-05). The control's other half, the service-linked role, is remediated (2026-10-03). Decided 2026-10-05.",
         "review_by": "2027-04-05"
+      },
+      {
+        "control": "ELB.6",
+        "reason": "Load balancer deletion protection would block teardown.sh, which destroys the application environment after every session by design (DECISIONS.md, 2026-09-22). The environment is rebuilt from declared state in about 15 minutes. Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "RDS.8",
+        "reason": "Database deletion protection would block teardown.sh likewise. The data's protection is its retained backups under the persistent database key, and the point-in-time restore measured at 15.7 minutes (2026-10-06). Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "RDS.5",
+        "reason": "Multi-AZ doubles the instance cost for a database that stands only during sessions; the recorded availability position is a single zone, recovered by point-in-time restore against a 60-minute objective (registers/resources.yaml). Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "RDS.6",
+        "reason": "Enhanced monitoring needs a monitoring role carrying the AWS-managed AmazonRDSEnhancedMonitoringRole policy, which the CNA-DFP decision of 2026-09-05 bars on workload identities. Database logs go to CloudWatch under the logs key. Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "RDS.23",
+        "reason": "Moving off 5432 is obscurity only: three security groups confine the port to the api, worker and migrate tasks, and the database is private with IAM authentication (registers/flows.yaml). Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "SecretsManager.1",
+        "reason": "The one failing secret, the task TLS key, is generated afresh at every apply of the environment, so it never outlives the session that uses it -- shorter than any rotation schedule (registers/secrets.yaml). The database credential is RDS-managed and rotates. Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
+      },
+      {
+        "control": "ECS.12",
+        "reason": "Container Insights is off by a recorded decision: it bills per metric, and the environment's operational health is covered by the alarms in health.tf (compute.tf). Turning it on would also create an undeclared, unencrypted, never-expiring log group. Decided 2026-10-06; evaluated only while the session environment stands.",
+        "review_by": "2027-04-06"
       }
     ]
   },

@@ -8529,3 +8529,68 @@ Its exemption in the `iam-elp` query stays until its 2026-10-03 activity ages ou
   NAT gateway, endpoint or active task definition left.
 
 Coverage: 113 full and 49 partial of 380 rows, across 157 checks. Self-test: 103 assertions.
+
+## 2026-10-06 — Seven Security Hub controls excepted; recorded positions for rows with no check
+
+**Security Hub.** Seven controls appeared only while the session environment stood. The operator
+approved the recommendations ("go"). All seven are excepted in
+`cna-ibp-ops-aws-failing-controls-excepted`, for review by 2027-04-06:
+
+| Control | Reason |
+|---|---|
+| ELB.6, RDS.8 (deletion protection) | Teardown destroys the environment by design |
+| RDS.5 (multi-AZ) | The recorded single-zone availability position |
+| RDS.6 (enhanced monitoring) | It needs an AWS-managed policy on a role, which CNA-DFP bars |
+| RDS.23 (default port) | Obscurity only, since three security groups confine the port |
+| SecretsManager.1 (rotation) | The TLS secret is regenerated every session |
+| ECS.12 (Container Insights) | Off by a recorded decision |
+
+**A correction on ECS.12.** It was first recommended as "turn it on", without reading `compute.tf`,
+where Container Insights is off by decision: it bills per metric, and the alarms in `health.tf`
+cover operational health. Enabling it would also create an undeclared, unencrypted, never-expiring
+log group. It is excepted instead, and the operator was told.
+
+**The decrypt judge, for keys torn down with their session.** `svc-sin-ops-aws-decrypts-by-declared-principals`
+failed on 2026-10-06 with five patterns, all on the session's secrets key. Every actor was one its
+model declares; the key had lost its alias at teardown, so the judge could not find its model. This
+was the first session since the corpus started recording key IDs.
+
+- **The fix:** with no live alias, the judge now resolves a key through its declared description.
+  `declared_aliases` reads each key's description, and the alias that targets it, from
+  `infra/aws/*.tf`.
+- **The tests:** three negative controls. An undeclared description fails, a missing one fails, and
+  a live alias outranks the description.
+
+**Recorded positions** (`registers/row-positions.yaml`). The definition of done counts a row as done
+when it is recorded as descoped, manual or a stated gap, with its risk. Until now nothing recorded
+that.
+
+- **What a position carries:** its kind, the reason and the risk. A manual position also names where
+  its evidence is.
+- **Coverage:** `sdr/matrix_rows.py` counts a positioned row as "recorded".
+- **`--check` fails on a position that:**
+  - names a row the matrix lacks
+  - lacks its reason or risk
+  - sits on a row a check now covers
+- **The SDR** prints each recorded row with its reason and risk.
+
+**First 20 positions:**
+
+- **Descoped:** the responder's (KSI-IAM-SUS) and SCIM's (KSI-IAM-AAM) rows, with SVC-ASM v3.
+- **Gaps:** IAM-SUS validate 4 and INR-RIR validate 4. There are no response records and no
+  incident to time.
+- **Manual:**
+  - INR-RIR verify 2, by the runbook
+  - CMT-RMV validate 5, by the change-exception register
+
+**The SCIM risk, stated precisely.** Suspending the Google account blocks new sign-ins at once,
+through SAML. What does not propagate is removal of the Identity Center user, and a session already
+open survives up to its limit.
+
+**Kept open, to automate rather than position:**
+
+- IAM-AAM verify 3 and validate 3 (assignments against declared state, and drift)
+- IAM-AAM validate 2 (identity mutations)
+- IAM-AAM validate 4 and IAM-SUS verify 7 (inventory and access reconciliation)
+
+Coverage: 113 full, 49 partial, 20 recorded and 198 none. Self-test: 104 assertions.

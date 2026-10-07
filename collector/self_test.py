@@ -1224,6 +1224,18 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    # A session key judged after teardown: no alias, resolved by its declared
+    # description (2026-10-06). The verdict is the decrypt judge's, given the
+    # resolution; an unknown description must leave it unresolved and failing.
+    ("log_query (alias_resolution)", lambda c: lq.judge_decrypt_events(
+        [{"key": "k", "actor_type": "AssumedRole", "actor": "arn:aws:sts::1:assumed-role/api-task/s", "events": "1"}],
+        {"k": {"manager": "CUSTOMER", **lq.resolve_aliases(c[0], c[1], {"secret material": "alias/secrets"})}},
+        {"alias/secrets": ["arn:aws:iam::1:role/api-task"]}),
+     ([], "secret material"), {
+        "undeclared description": ([], "something else"),
+        "no description": ([], None),
+        "a live alias outranks the description": (["alias/other"], "secret material"),
+    }),
     ("deliberate_test", lambda c: dt_mech.evaluate_test_record(c, "s", _JIT_NOW, 35, 1), _TEST_OK, {
         "never run": None,
         "latest failed": {**_TEST_OK, "passed": False},

@@ -81,3 +81,40 @@ class Coverage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Positions(unittest.TestCase):
+    """Recorded positions for rows no check covers (2026-10-06)."""
+
+    ROWS = [{"id": "K.verify.1", "indicator": "K"}, {"id": "K.verify.2", "indicator": "K"}]
+    CHECK = {"id": "c", "matrix_rows": [{"row": "K.verify.1", "covers": "full"}]}
+    GOOD = {"position": "gap", "reason": "r", "risk": "k"}
+
+    def cov(self, positions):
+        from matrix_rows import coverage
+        return coverage([self.CHECK], self.ROWS, positions)
+
+    def test_a_position_records_an_uncovered_row(self):
+        from matrix_rows import position_problems
+        cov = self.cov({"K.verify.2": self.GOOD})
+        self.assertEqual(cov["K.verify.2"]["status"], "recorded")
+        self.assertEqual(position_problems({"K.verify.2": self.GOOD}, self.cov({})), [])
+
+    def test_a_position_on_a_covered_row_is_stale(self):
+        from matrix_rows import position_problems
+        self.assertTrue(position_problems({"K.verify.1": self.GOOD}, self.cov({})))
+        self.assertEqual(self.cov({"K.verify.1": self.GOOD})["K.verify.1"]["status"], "full")
+
+    def test_a_position_needs_a_real_row_a_kind_a_reason_and_a_risk(self):
+        from matrix_rows import position_problems
+        base = self.cov({})
+        self.assertTrue(position_problems({"K.verify.9": self.GOOD}, base))
+        self.assertTrue(position_problems({"K.verify.2": {**self.GOOD, "position": "later"}}, base))
+        self.assertTrue(position_problems({"K.verify.2": {**self.GOOD, "reason": ""}}, base))
+        self.assertTrue(position_problems({"K.verify.2": {**self.GOOD, "risk": " "}}, base))
+
+    def test_a_manual_row_says_where_its_evidence_is(self):
+        from matrix_rows import position_problems
+        base = self.cov({})
+        self.assertTrue(position_problems({"K.verify.2": {**self.GOOD, "position": "manual"}}, base))
+        self.assertEqual(position_problems({"K.verify.2": {**self.GOOD, "position": "manual", "evidence": "e"}}, base), [])

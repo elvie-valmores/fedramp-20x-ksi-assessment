@@ -1,0 +1,188 @@
+# Recorded positions for evidence rows no check covers.
+#
+# Started 2026-10-06. The definition of done (DECISIONS.md, 2026-10-03):
+# every row is automated, or recorded as manual or descoped with its risk
+# stated. A row here has no check, and instead one of:
+#
+#   descoped  the system the row evidences was descoped by decision
+#   manual    the evidence exists but is gathered by a person; `evidence`
+#             says where
+#   gap       nothing evidences it, and the row says why and what that risks
+#
+# sdr/matrix_rows.py --check fails on a position for a row the matrix lacks,
+# one without its reason or risk, and one on a row a check now covers.
+
+positions:
+  KSI-IAM-SUS.verify.2:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.verify.3:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.verify.4:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.verify.5:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.verify.6:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.1:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.2:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.5:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.6:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md.'
+    risk: Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator's own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do.
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.3:
+    position: descoped
+    reason: 'The automated responder (KSI-IAM-SUS) was descoped on 2026-10-03: automated containment was the riskiest
+      automation to build under the deadline, since a bug could lock the operator out. Detection and alerting stand;
+      response is the manual procedure in docs/INCIDENT-RESPONSE.md. It also depends on SCIM, descoped the same
+      day.'
+    risk: 'Containment waits on a person reading an alert email, so a compromise can run for as long as the alert
+      goes unread -- hours off-hours, not minutes. The operator''s own access is read-only by default (JIT, 2026-10-05),
+      which bounds what a stolen standing session can do. Deprovisioning does not propagate: a user suspended in
+      Google keeps its Identity Center user until removed by hand. Sign-in goes through Google''s SAML, so a suspended
+      account cannot start a session; one already open lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-IAM-SUS.validate.4:
+    position: gap
+    reason: With response manual there are no response records to correlate findings against; a finding's disposition
+      is prose in DECISIONS.md (INCIDENT-RESPONSE.md step 5), which nothing counts.
+    risk: A privileged-account finding that nobody dispositions is not visible as a number. The signal report lists
+      dispositions as not collected for the same reason.
+    decided: '2026-10-06'
+  KSI-IAM-AAM.verify.1:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-IAM-AAM.verify.2:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-IAM-AAM.verify.4:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-IAM-AAM.verify.5:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-IAM-AAM.validate.1:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-SVC-ASM.validate.3:
+    position: descoped
+    reason: 'SCIM provisioning (KSI-IAM-AAM) was descoped on 2026-10-03: it needs Cloud Identity Premium and mostly
+      proves group sync for a two-person setup. The one Identity Center user is created by hand. With no SCIM token
+      there is no rotation to verify.'
+    risk: 'Deprovisioning does not propagate: a user suspended in Google keeps its Identity Center user until removed
+      by hand. Sign-in goes through Google''s SAML, so a suspended account cannot start a session; one already open
+      lasts up to its limit, 4 hours read-only or 1 hour elevated.'
+    decided: '2026-10-06'
+  KSI-INR-RIR.verify.2:
+    position: manual
+    reason: 'Each alert class has a defined response in the manual procedure: triage, the narrowest containment,
+      recovery by redeploy, reconciliation and the record. Severity routing to automated actions went with the responder
+      (2026-10-03).'
+    evidence: docs/INCIDENT-RESPONSE.md, versioned in the repository
+    risk: The response is defined per alert class rather than per severity tier, and a person carries it out; its
+      timing is not measured.
+    decided: '2026-10-06'
+  KSI-INR-RIR.validate.4:
+    position: gap
+    reason: No incident has occurred, and containment is manual, so there is no finding-to-containment time to measure.
+    risk: The containment time is unknown until an incident or an exercise measures it; the declared expectation
+      is unproven.
+    decided: '2026-10-06'
+  KSI-CMT-RMV.validate.5:
+    position: manual
+    reason: Emergency modifications are entered in registers/change-exceptions.yaml under emergency_response and
+      reconciled the same day (INCIDENT-RESPONSE.md step 4). None has occurred; the signal report counts them (emergency_modifications,
+      0).
+    evidence: registers/change-exceptions.yaml; docs/INCIDENT-RESPONSE.md step 4
+    risk: Reconciliation of an emergency change rests on the operator following the runbook; nothing correlates
+      a change made during an incident with its reconciliation entry.
+    decided: '2026-10-06'

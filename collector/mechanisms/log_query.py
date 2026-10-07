@@ -91,17 +91,48 @@ class LogQuery(Mechanism):
         checks_dir = Path(__file__).resolve().parents[1] / "checks"
         declared = json.loads((checks_dir / f"{check.params['model_from']}.json").read_text())["params"]["declared"]
         kms = boto3.client("kms", region_name=check.params["region"])
+        by_description = declared_aliases(
+            {p.name: p.read_text() for p in (Path(__file__).resolve().parents[2] / "infra" / "aws").glob("*.tf")})
         keys = {}
         for uid in sorted({r["key"] for r in records}):
             try:
                 meta = kms.describe_key(KeyId=uid)["KeyMetadata"]
                 aliases = [a["AliasName"] for a in kms.list_aliases(KeyId=meta["KeyId"])["Aliases"]]
-                keys[uid] = {"manager": meta["KeyManager"], "aliases": aliases}
+                keys[uid] = {"manager": meta["KeyManager"], "state": meta.get("KeyState"),
+                             **resolve_aliases(aliases, meta.get("Description"), by_description)}
             except kms.exceptions.NotFoundException:
                 keys[uid] = None
         passed, detail, evidence = judge_decrypt_events(records, keys, declared)
         evidence["query_id"] = query_id
         return CheckResult(check.id, passed, evidence, detail)
+
+
+def declared_aliases(tf_sources: dict[str, str]) -> dict[str, str]:
+    """{key description: its alias}, from the Terraform that declares both.
+
+    A session key loses its alias at teardown and lingers, pending deletion,
+    for seven days; its decrypts from the session stay in the corpus for
+    three. Without its alias the judge could not tell which model governs
+    it, and every session decrypt read as a key with no model (found
+    2026-10-06, the first session since the corpus kept key IDs). The
+    description is declared beside the alias and does not change.
+    """
+    text = "\n".join(tf_sources.values())
+    descriptions = dict(re.findall(r'resource "aws_kms_key" "(\w+)" \{[^}]*?description\s*=\s*"([^"]+)"', text, re.S))
+    targets = re.findall(r'resource "aws_kms_alias" "\w+" \{[^}]*?name\s*=\s*"([^"]+)"[^}]*?'
+                         r'target_key_id\s*=\s*aws_kms_key\.(\w+)\.', text, re.S)
+    targets += [(n, k) for k, n in re.findall(r'resource "aws_kms_alias" "\w+" \{[^}]*?target_key_id\s*='
+                                              r'\s*aws_kms_key\.(\w+)\.[^}]*?name\s*=\s*"([^"]+)"', text, re.S)]
+    return {descriptions[k]: name for name, k in targets if k in descriptions}
+
+
+def resolve_aliases(aliases: list[str], description: str | None, by_description: dict[str, str]) -> dict:
+    """The key's live aliases, or, with none, the alias its declared description names."""
+    if aliases:
+        return {"aliases": aliases}
+    if description in by_description:
+        return {"aliases": [by_description[description]], "resolved_by": "declared description"}
+    return {"aliases": []}
 
 
 _ASSUMED = re.compile(r"^arn:aws:sts::\d+:assumed-role/([^/]+)/")

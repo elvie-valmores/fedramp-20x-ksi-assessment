@@ -185,6 +185,11 @@ def evidence_row_statement(row: list[str], row_id: str | None = None, coverage: 
         # Two checks with the same gap state it once.
         gaps = " ".join(dict.fromkeys(g.split(": ", 1)[1] for g in entry["gaps"]))
         return f"{statement} *Row `{row_id}`: partly automated by {checks}. Not covered: {gaps}*"
+    if entry["status"] == "recorded":
+        p = entry["position"]
+        where = f" Evidence: {p['evidence']}." if p.get("evidence") else ""
+        return (f"{statement} *Row `{row_id}`: not automated -- {p['position']}. {p['reason']}{where} "
+                f"Risk: {p['risk']}*")
     return f"{statement} *Row `{row_id}`: no automated check yet.*"
 
 
@@ -475,7 +480,8 @@ def render(sdr: dict, context: dict) -> str:
         f"from one collector run started {context['started_at']}.",
         "- **Evidence rows:** " + ", ".join(
             f"{sum(1 for v in context['coverage'].values() if v['status'] == s)} {label}"
-            for s, label in (("full", "automated"), ("partial", "partly automated"), ("none", "not yet automated"))
+            for s, label in (("full", "automated"), ("partial", "partly automated"),
+                             ("recorded", "recorded as descoped, manual or a stated gap"), ("none", "not yet automated"))
         ) + f", of {len(context['coverage'])}. Each row in Validation names the checks behind it.",
         "- **No independent assessor is engaged.** Assessment statements are the provider's own reasoning.",
         "- **`fedRampRequirements` is empty.** The project determined the 46 indicators, not the FRR rules.",
