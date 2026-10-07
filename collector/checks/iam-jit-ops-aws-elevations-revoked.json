@@ -1,0 +1,24 @@
+{
+  "id": "iam-jit-ops-aws-elevations-revoked",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every elevation granted in the last 30 days has a revocation recorded after it in the log store, unless it is still running: revocation observed firing, from the workflow's own Object Locked records",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "elevations_revoked",
+    "region": "us-east-1",
+    "elevated": "ElevatedAdmin",
+    "bucket": "fedramp-20x-ksi-log-store-437672023758",
+    "state_machine": "fedramp-20x-ksi-elevation",
+    "lookback_days": 30
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.validate.3",
+      "covers": "partial",
+      "gap": "AWS only. The revocation is the workflow's confirmed deletion of the assignment; the role's sessions already open run out within their hour, which is not observed."
+    }
+  ]
+}

@@ -8594,3 +8594,45 @@ open survives up to its limit.
 - IAM-AAM validate 4 and IAM-SUS verify 7 (inventory and access reconciliation)
 
 Coverage: 113 full, 49 partial, 20 recorded and 198 none. Self-test: 104 assertions.
+
+**Verified live, later on 2026-10-06** (after the operator's sign-in was renewed):
+
+- **`svc-sin-ops-aws-decrypts-by-declared-principals` passes.** It judged 62,352 customer-key decrypts,
+  including the torn-down session key's, now resolved through its declared description.
+- **The SecretsManager.1 exception's claim is confirmed** from Security Hub's finding history. Every
+  session's `fedramp-20x-ksi/task-tls` secret stayed FAILED, and every RDS-managed `rds!db-*` secret
+  went from FAILED to PASSED once its rotation was configured. The failing secret is the task TLS one,
+  as the exception says.
+- **The three new persistent checks pass:**
+  - the password policy (8 fields)
+  - root's hardware MFA, with no access keys
+  - none of 8 workload roles carrying an AWS-managed policy
+- **`cna-ibp-ops-aws-failing-controls-excepted` passes:** 99 of 116 controls pass outright, and every
+  failing control is excepted.
+
+**Positions and links, 2026-10-06.** 78 rows now carry recorded positions, each with its reason and
+risk, in `registers/row-positions.yaml`. About 25 rows are linked to existing checks that already
+evidenced them. One check, `scr-mit-cfg-manifest-integrity-checked`, lost its `unlinked_reason`: its
+ordered gate evidences CMT-VTD verify 1.
+
+Coverage: 123 full, 77 partial, 98 recorded and 82 none.
+
+**Found 2026-10-06: Terraform state holds the task TLS private key while the environment stands.**
+`tls_private_key.task` (secrets.tf) generates the key inside Terraform, so its PEM is in the AWS
+root's state. The state bucket is read by the operator's read-only role and by the CI read roles,
+which plan from it.
+
+- **Who can read it:** none of those roles can read the secret in Secrets Manager (the drift role is
+  denied `GetSecretValue` explicitly), but all of them can read the same key in state.
+- **What bounds the risk:**
+  - The key is self-signed, and protects only the load-balancer-to-task hop inside the VPC.
+  - It lives one session, and teardown removes it from current state.
+- **What does not bound it:** superseded state versions keep it for their 90-day retention.
+- **The fix, if wanted:** the task generates its own key at startup, and Terraform never holds it.
+- **Recorded:** in SVC-ASM validate 4's gap, and in the open items.
+
+**Also found:** the normalizer's test fixtures carried two real temporary access key IDs from
+CloudTrail records, committed to a public repository. They are IDs only, which sign nothing, and both
+expired within hours on 2026-10-02. They are replaced with AWS's documented example ID, and the
+repository is now scanned for secrets on every push (`svc-asm-cfg-repository-secret-scan`). The
+originals remain in git history.

@@ -74,6 +74,12 @@ jobs:
           chmod +x opa trivy
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
+      # KSI-SVC-ASM validate 4, the repository half: no secret material in
+      # any tracked file. Trivy's secret rules are embedded in the pinned
+      # binary. Terraform state is not scanned here (see row-positions).
+      - name: scan the repository for secrets
+        run: trivy fs --scanners secret --skip-version-check --exit-code 1 --quiet .
+
       - name: test the rules
         run: |
           opa check --strict policy/rules

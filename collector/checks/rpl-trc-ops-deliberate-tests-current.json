@@ -1,0 +1,18 @@
+{
+  "id": "rpl-trc-ops-deliberate-tests-current",
+  "indicator": "KSI-RPL-TRC",
+  "mechanism": "deliberate_test",
+  "evidence_type": "OPS",
+  "description": "Every scenario in the deliberate test catalogue (deliberate/scenarios.yaml) has a passing record younger than its declared cadence plus five days, failures and successful runs alike recorded in the Object Locked log store",
+  "required_cadence": "3 days",
+  "params": {
+    "scenario": "*",
+    "grace_days": 5
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-RPL-TRC.validate.1",
+      "covers": "full"
+    }
+  ]
+}

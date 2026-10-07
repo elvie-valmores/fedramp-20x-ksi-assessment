@@ -1,5 +1,5 @@
 {
-  "_note": "Real CloudTrail records from this account (2026-09-29/30), source IPs replaced with 203.0.113.10. console_login_failure is derived from console_login_success using AWS's documented failure shape; no failed ConsoleLogin has occurred here. Console LoginTo and the MFA device name are replaced with placeholders. kms_decrypt (added 2026-10-02) is the GCP pipeline's Decrypt of the artifacts key through S3, unchanged: its source is a service name, not an IP. api_call_over_tls (added 2026-10-02) is the operator's DescribeTrails, source IP replaced as above.",
+  "_note": "Real CloudTrail records from this account (2026-09-29/30), source IPs replaced with 203.0.113.10. console_login_failure is derived from console_login_success using AWS's documented failure shape; no failed ConsoleLogin has occurred here. Console LoginTo and the MFA device name are replaced with placeholders, and the temporary access key IDs with AWS's documented example (2026-10-06: a secret scan flagged them; an ID alone signs nothing, and these expired within hours). kms_decrypt (added 2026-10-02) is the GCP pipeline's Decrypt of the artifacts key through S3, unchanged: its source is a service name, not an IP. api_call_over_tls (added 2026-10-02) is the operator's DescribeTrails, source IP replaced as above.",
   "idp_login_failure": {
     "eventVersion": "1.11",
     "userIdentity": {
@@ -124,7 +124,7 @@
       "principalId": "AROAWLZ2JC3HAAJX7ZE5S:analytics-20261002T211854Z",
       "arn": "arn:aws:sts::437672023758:assumed-role/fedramp-20x-ksi-gcp-pipeline/analytics-20261002T211854Z",
       "accountId": "437672023758",
-      "accessKeyId": "ASIAWLZ2JC3HJCTYXRBZ",
+      "accessKeyId": "ASIAIOSFODNN7EXAMPLE",
       "sessionContext": {
         "sessionIssuer": {
           "type": "Role",
@@ -185,7 +185,7 @@
       "principalId": "AROAWLZ2JC3HKWKLFKL2K:alex@corp.elvievalmores.com",
       "arn": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_InterimOperatorAdmin_fb048b20f7be7777/alex@corp.elvievalmores.com",
       "accountId": "437672023758",
-      "accessKeyId": "ASIAWLZ2JC3HBDRTCIBO",
+      "accessKeyId": "ASIAIOSFODNN7EXAMPLE",
       "sessionContext": {
         "sessionIssuer": {
           "type": "Role",

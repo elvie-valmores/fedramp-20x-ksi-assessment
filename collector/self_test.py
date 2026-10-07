@@ -1157,6 +1157,13 @@ CFG_CASES = [
         "shared role": [_svc("api"), {**_svc("worker"), "task_role": "role-api"}],
         "no role": [{**_svc("api"), "task_role": None}],
     }),
+    ("evaluate_elevations_revoked", lambda c: cfg.evaluate_elevations_revoked(*c),
+     (["elevations/dt=2026-10-05/e1-requested-100000.json", "elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoked-101500.json",
+       "elevations/dt=2026-10-05/e2-granted-110000.json"], {"e2"}), {
+        "granted, never revoked": (["elevations/dt=2026-10-05/e1-granted-100005.json"], set()),
+        "revocation failed": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoke-failed-101500.json"], set()),
+        "unrevoked despite a sweep": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/sweep-swept-120000.json"], set()),
+    }),
 ]
 
 
@@ -1219,6 +1226,7 @@ CFG_RESOURCES = {
     "evaluate_elevation_backstop": "elevation_backstop",
     "evaluate_elevations_within_window": "elevations_within_window",
     "evaluate_elevations_justified": "elevations_justified",
+    "evaluate_elevations_revoked": "elevations_revoked",
     "evaluate_pushes_chained": "pushes_evaluated",
     "evaluate_pushes_passed": "pushes_evaluated",
     "evaluate_deliberate_test": "deliberate_test",
@@ -1315,6 +1323,10 @@ TP_ENTRIES = {"act": {"matches": [{"action_owner": "aws-actions"}], "comparison"
                       "monitoring": {"mechanism": "inspector", "status": "automatic"}}}
 
 SINGLE_CASES = [
+    ("deliberate_test (catalogue)", dt_mech.evaluate_catalogue, {"a": (True, "passed"), "b": (True, "passed")}, {
+        "one lapsed": {"a": (True, "passed"), "b": (False, "too old")},
+        "empty catalogue": {},
+    }),
     # A session key judged after teardown: no alias, resolved by its declared
     # description (2026-10-06). The verdict is the decrypt judge's, given the
     # resolution; an unknown description must leave it unresolved and failing.

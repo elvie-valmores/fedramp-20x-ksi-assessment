@@ -20,6 +20,11 @@
       "row": "KSI-IAM-JIT.verify.3",
       "covers": "partial",
       "gap": "AWS only. In GCP the project owner's binding stands as break-glass, and Privileged Access Manager entitlements are not built."
+    },
+    {
+      "row": "KSI-IAM-AAM.verify.3",
+      "covers": "partial",
+      "gap": "Assignments are held to the declared standing set by permission set; the declared set is one assignment (elevation.tf). There are no Identity Center groups to compare."
     }
   ]
 }

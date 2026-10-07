@@ -34,6 +34,8 @@ class DeliberateTest(Mechanism):
     def run(self, check: CheckDefinition) -> CheckResult:
         scenario = check.params["scenario"]
         s3 = boto3.client("s3", region_name=REGION)
+        if scenario == "*":
+            return self._catalogue(check, s3)
         prefix = f"deliberate-tests/scenario={scenario}/"
         keys = [o["Key"] for page in s3.get_paginator("list_objects_v2").paginate(Bucket=LOG_BUCKET, Prefix=prefix)
                 for o in page.get("Contents", [])]
@@ -45,6 +47,42 @@ class DeliberateTest(Mechanism):
         ok, detail, evidence = evaluate_test_record(record, scenario, datetime.now(timezone.utc),
                                                     check.params["max_age_days"], len(keys))
         return CheckResult(check.id, ok, evidence, detail)
+
+    def _catalogue(self, check: CheckDefinition, s3) -> CheckResult:
+        """Every scenario in deliberate/scenarios.yaml, each against its own cadence."""
+        import yaml
+        from pathlib import Path
+        catalogue = yaml.safe_load((Path(__file__).resolve().parents[2] / "deliberate" / "scenarios.yaml").read_text())["scenarios"]
+        now = datetime.now(timezone.utc)
+        results = {}
+        for sid, spec in catalogue.items():
+            record, runs = _latest(s3, sid)
+            ok, detail, _ = evaluate_test_record(record, sid, now, spec["cadence_days"] + check.params.get("grace_days", 5), runs)
+            results[sid] = (ok, detail)
+        ok, detail, evidence = evaluate_catalogue(results)
+        return CheckResult(check.id, ok, evidence, detail)
+
+
+def _latest(s3, scenario: str) -> tuple[dict | None, int]:
+    prefix = f"deliberate-tests/scenario={scenario}/"
+    keys = [o["Key"] for page in s3.get_paginator("list_objects_v2").paginate(Bucket=LOG_BUCKET, Prefix=prefix)
+            for o in page.get("Contents", [])]
+    if not keys:
+        return None, 0
+    record = json.loads(s3.get_object(Bucket=LOG_BUCKET, Key=max(keys))["Body"].read())
+    record["_key"] = max(keys)
+    return record, len(keys)
+
+
+def evaluate_catalogue(results: dict[str, tuple[bool, str]]) -> tuple[bool, str, dict]:
+    """KSI-RPL-TRC validate 1: every catalogued test has a recent passing record."""
+    failing = {sid: detail for sid, (ok, detail) in results.items() if not ok}
+    evidence = {"scenarios": {sid: detail for sid, (_, detail) in results.items()}, "failing": failing}
+    if not results:
+        return False, "the catalogue is empty -- nothing to judge", evidence
+    if failing:
+        return False, f"{len(failing)} of {len(results)} tests not current: {', '.join(sorted(failing))}", evidence
+    return True, f"all {len(results)} catalogued tests passed within their cadence", evidence
 
 
 def evaluate_test_record(record: dict | None, scenario: str, now: datetime, max_age_days: int,

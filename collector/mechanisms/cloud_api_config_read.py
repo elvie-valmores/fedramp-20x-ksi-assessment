@@ -26,7 +26,7 @@ check would make it "every bucket someone remembered to add".
 from __future__ import annotations
 
 import fnmatch
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 
 import boto3
@@ -1308,6 +1308,19 @@ class CloudAPIConfigRead(Mechanism):
         region = p["region"]
         account = boto3.client("sts").get_caller_identity()["Account"]
         sso = boto3.client("sso-admin", region_name=region)
+
+        if resource == "elevations_revoked":
+            s3 = boto3.client("s3", region_name=region)
+            since = (datetime.now(timezone.utc) - timedelta(days=p["lookback_days"])).date()
+            keys = [o["Key"] for page in s3.get_paginator("list_objects_v2").paginate(Bucket=p["bucket"], Prefix="elevations/")
+                    for o in page.get("Contents", [])
+                    if date.fromisoformat(o["Key"].split("dt=")[1][:10]) >= since]
+            sfn = boto3.client("stepfunctions", region_name=region)
+            running = {e["name"] for page in sfn.get_paginator("list_executions").paginate(
+                stateMachineArn=f"arn:aws:states:{region}:{account}:stateMachine:{p['state_machine']}", statusFilter="RUNNING")
+                for e in page["executions"]}
+            ok, detail, evidence = evaluate_elevations_revoked(keys, running)
+            return CheckResult(check.id, ok, evidence, detail)
 
         if resource == "elevation_backstop":
             events = boto3.client("events", region_name=region)
@@ -3030,7 +3043,8 @@ def evaluate_decrypt_principals(resolved: dict[str, list[dict]],
 # --- KSI-IAM-JIT (2026-10-03) ---
 
 ELEVATION_RESOURCES = {"elevated_unassigned", "standing_assignments", "elevated_bounded",
-                       "elevation_backstop", "elevations_within_window", "elevations_justified"}
+                       "elevation_backstop", "elevations_within_window", "elevations_justified",
+                       "elevations_revoked"}
 # The workflow's own bounds (lambda/elevation/handler.py), restated here so
 # a check that judges the history does not trust the code it is judging.
 ELEVATION_MIN_JUSTIFICATION, ELEVATION_MINUTES = 20, (15, 240)
@@ -3371,3 +3385,37 @@ def evaluate_ecs_services(services: list[dict], assertion: str, multi_task: list
         return (not problems, "; ".join(problems) or f"each of {len(services)} services has its own security group and task role",
                 evidence)
     raise ValueError(f"unknown ecs_services assertion {assertion!r}")
+
+
+def evaluate_elevations_revoked(keys: list[str], running: set[str]) -> tuple[bool, str, dict]:
+    """IAM-JIT validate 3: every granted elevation has a revocation recorded after it.
+
+    keys are the log store's elevations/ record names,
+    <execution>-<phase>-<HHMMSS>.json; the backstop's sweeps are "swept".
+    An elevation still running is not yet due one.
+    """
+    import re
+
+    granted, revoked, swept = {}, set(), 0
+    for k in keys:
+        # The file name only: a revocation after midnight UTC lands in the
+        # next day's dt= folder, and must still match its grant.
+        m = re.search(r"/([^/]+?)-(requested|granted|revoked|refused|grant-failed|revoke-failed)-\d{6}\.json$", k)
+        if m:
+            name, phase = m.groups()
+            if phase == "granted":
+                granted[name] = k
+            elif phase == "revoked":
+                revoked.add(name)
+        elif "/sweep-swept-" in k:
+            swept += 1
+    unrevoked = sorted(n for n in granted if n not in revoked and n not in running)
+    evidence = {"granted": len(granted), "revoked": len(revoked & set(granted)), "running": sorted(running & set(granted)),
+                "backstop_sweeps": swept, "unrevoked": unrevoked}
+    if not granted:
+        return True, "no elevation was granted in the window -- nothing to revoke", evidence
+    if unrevoked and not swept:
+        return False, f"{len(unrevoked)} granted elevation(s) with no revocation recorded: {', '.join(unrevoked)}", evidence
+    if unrevoked:
+        return False, f"{len(unrevoked)} granted elevation(s) without their own revocation; the backstop swept {swept} time(s) -- check it covered them", evidence
+    return True, f"all {len(granted)} granted elevation(s) were revoked, each recorded", evidence

@@ -28,6 +28,10 @@
       "with": [
         "mla-osm-cfg-aws-detection-query-scheduled"
       ]
+    },
+    {
+      "row": "KSI-IAM-AAM.validate.3",
+      "covers": "full"
     }
   ]
 }
