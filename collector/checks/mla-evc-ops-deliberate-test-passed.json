@@ -28,6 +28,11 @@
     {
       "row": "KSI-MLA-EVC.validate.3",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-VTD.validate.1",
+      "covers": "partial",
+      "gap": "Tested per stage where a test exists: the policy stage, by a violating fixture plan. The image signing and verification stage has no deliberate failing test."
     }
   ]
 }

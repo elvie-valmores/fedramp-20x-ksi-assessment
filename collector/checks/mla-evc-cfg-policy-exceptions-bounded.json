@@ -13,6 +13,16 @@
     {
       "row": "KSI-MLA-EVC.verify.4",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-RVP.verify.4",
+      "covers": "partial",
+      "gap": "Overrides of the policy gate are its exceptions, each with a reason and an expiry. Re-running a failed workflow is not recorded as an override."
+    },
+    {
+      "row": "KSI-CMT-RVP.validate.3",
+      "covers": "partial",
+      "gap": "As verify 4: policy exceptions only."
     }
   ]
 }

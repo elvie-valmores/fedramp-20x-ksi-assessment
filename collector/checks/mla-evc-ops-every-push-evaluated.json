@@ -19,6 +19,11 @@
       "row": "KSI-MLA-EVC.validate.4",
       "covers": "partial",
       "gap": "The project pushes to main rather than merging pull requests, so each push is evaluated once it lands, not before: a failing evaluation is a finding to fix or except before the change is applied, not a blocked merge."
+    },
+    {
+      "row": "KSI-PIY-RSD.validate.3",
+      "covers": "partial",
+      "gap": "Static analysis of the infrastructure only -- Trivy and the authored rules over every push's plans; the application code has no static analyser. There are no merges; every push to main is what is evaluated."
     }
   ]
 }

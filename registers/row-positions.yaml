@@ -189,3 +189,489 @@ positions:
     risk: Reconciliation of an emergency change rests on the operator following the runbook; nothing correlates
       a change made during an incident with its reconciliation entry.
     decided: '2026-10-06'
+  KSI-IAM-APM.verify.1:
+    position: gap
+    reason: Sign-in is delegated to Google Cloud Identity through SAML, so the factor is Google's 2-step verification,
+      configured in Google Admin. Identity Center's own MFA settings do not apply to an external identity provider,
+      and nothing reads Google's.
+    risk: The factor policy rests on the Google Admin setting, unverified by machine; a change to it there would
+      not be seen here.
+    decided: '2026-10-06'
+  KSI-IAM-APM.verify.2:
+    position: gap
+    reason: Google's 2SV enforcement is in the Admin console, reached by the Admin SDK with directory admin consent
+      the collector does not hold. The operator's account signs in with a passkey (DECISIONS.md, 2026-09-29); enforcement
+      across the OU is not verified.
+    risk: An account in the OU without 2SV would not be noticed by any check.
+    decided: '2026-10-06'
+  KSI-IAM-APM.validate.2:
+    position: gap
+    reason: Google sign-in events are in the Admin audit log, which nothing collects; GCP's Cloud Audit Logs are
+      not in the corpus either (registers/event-sources.yaml).
+    risk: The factor used at a GCP sign-in is not observed.
+    decided: '2026-10-06'
+  KSI-IAM-SNU.verify.3:
+    position: inapplicable
+    reason: An organization policy needs an organization. GCP has no organization in this project (a standalone
+      project under a personal billing account), so organization-level services do not exist here.
+    risk: Creating a service account key is not denied by policy. Declared state forbids it (policy rule GCP-IAM-02,
+      on every push) and the live project is checked for user-managed keys daily (iam-snu-cfg-gcp-no-user-managed-sa-keys),
+      so a key would be caught, not prevented.
+    decided: '2026-10-06'
+  KSI-IAM-JIT.verify.1:
+    position: gap
+    reason: GCP Privileged Access Manager entitlements are not built. The project owner's binding stands as the
+      GCP break-glass path (DECISIONS.md, 2026-10-05).
+    risk: 'GCP administration is standing, not just-in-time: the owner''s Google account holds it permanently, behind
+      Google''s 2SV.'
+    decided: '2026-10-06'
+  KSI-PIY-RVD.verify.1:
+    position: gap
+    reason: No disclosure policy is published. security.txt names a contact; its Policy field is optional and unset
+      (infra/aws/edge.tf, security_policy_url).
+    risk: A researcher has a contact but no stated scope, safe harbour or response expectation.
+    decided: '2026-10-06'
+  KSI-PIY-RVD.verify.3:
+    position: gap
+    reason: The published contact is on caliper.elvievalmores.com, which has no mail exchanger, so mail to it bounces
+      (PROJECT-CONTEXT open items).
+    risk: A report sent to the published contact is lost.
+    decided: '2026-10-06'
+  KSI-PIY-RVD.validate.1:
+    position: gap
+    reason: With no mail exchanger there is no destination for a test submission to reach.
+    risk: 'As above: the contact is not live, so the program''s intake does not function.'
+    decided: '2026-10-06'
+  KSI-PIY-RVD.verify.4:
+    position: gap
+    reason: There is no intake to route from, so no triage flow is configured into the vulnerability response pipeline.
+    risk: A received report would be handled ad hoc, if it arrived at all.
+    decided: '2026-10-06'
+  KSI-PIY-RVD.validate.3:
+    position: gap
+    reason: No intake and no triage flow exist, so there is no end-to-end path to test.
+    risk: The report-to-response path is unproven.
+    decided: '2026-10-06'
+  KSI-PIY-RVD.validate.4:
+    position: gap
+    reason: No reports are received or recorded; the signal report lists reports received as not collected, unknown
+      rather than zero.
+    risk: A report and its handling would leave no record to check.
+    decided: '2026-10-06'
+  KSI-PIY-RSD.verify.4:
+    position: inapplicable
+    reason: The project pushes to main rather than merging pull requests, so there is no merge to gate. Design reasoning
+      is recorded in docs/DECISIONS.md as practice, not enforced at any gate.
+    risk: A posture-changing change can land without its reasoning recorded; nothing checks that every one has an
+      entry.
+    decided: '2026-10-06'
+  KSI-PIY-RSD.validate.2:
+    position: gap
+    reason: Nothing correlates posture-changing commits with DECISIONS.md entries. The log is kept by practice,
+      and it is extensive, but its completeness is not checked.
+    risk: An undocumented posture change would not be flagged.
+    decided: '2026-10-06'
+  KSI-SVC-ASM.validate.2:
+    position: gap
+    reason: 'No secret here rotates on a schedule within a session: the task TLS secret is regenerated at each apply
+      and the database credential is RDS-managed. A rotation has not been observed end to end.'
+    risk: That the RDS-managed rotation completes and the application picks up the new version is unproven.
+    decided: '2026-10-06'
+  KSI-SVC-ASM.validate.5:
+    position: gap
+    reason: Tasks authenticate to the database by IAM token, not by a stored secret version, and nothing correlates
+      CloudTrail credential use with superseded versions.
+    risk: Use of a superseded secret version would not be detected.
+    decided: '2026-10-06'
+  KSI-SVC-VRI.verify.3:
+    position: gap
+    reason: Commits are not cryptographically signed and branch protection does not require it (recorded finding,
+      DECISIONS.md 2026-10-03).
+    risk: A commit's author is GitHub's account attribution, not a verifiable signature.
+    decided: '2026-10-06'
+  KSI-SVC-VRI.validate.5:
+    position: gap
+    reason: 'As verify 3: commits are unsigned, so a count of unsigned commits on main would be all of them.'
+    risk: As verify 3.
+    decided: '2026-10-06'
+  KSI-SVC-VRI.validate.2:
+    position: gap
+    reason: 'Nothing verifies a signature at deploy: verification happens in the build, before the digest is recorded,
+      and deployment is by that digest (svc-vri-cfg-signature-verified-before-digest-recorded). An unsigned image
+      pushed by hand would deploy if its digest were declared.'
+    risk: Deploy-time trust rests on the build's verification and on declared digests, not on an admission check.
+    decided: '2026-10-06'
+  KSI-SVC-PRR.verify.3:
+    position: gap
+    reason: There is no apply in the pipeline, so no change-boundary hook to wire to its completion; applies are
+      the operator's, by elevation.
+    risk: Residue review after a change is not triggered automatically.
+    decided: '2026-10-06'
+  KSI-SVC-PRR.validate.5:
+    position: gap
+    reason: 'As verify 3: with no pipeline apply there is no change event to correlate a residue review with. Teardown
+      verification (boundary.py) is the per-session residue review, recorded in DECISIONS.md.'
+    risk: A change between sessions that leaves residue is found only by the daily inventory and drift checks, not
+      by a review tied to the change.
+    evidence: DECISIONS.md, each session's teardown verification
+    decided: '2026-10-06'
+  KSI-CNA-RNT.verify.5:
+    position: inapplicable
+    reason: 'The GCP pipeline is a Cloud Run job, not a service: a job has no ingress to configure.'
+    risk: None from ingress; the job is triggered by Cloud Scheduler as its own service account.
+    decided: '2026-10-06'
+  KSI-CNA-ULN.verify.4:
+    position: inapplicable
+    reason: 'As CNA-RNT verify 5: there are no Cloud Run services, only a job.'
+    risk: None from ingress.
+    decided: '2026-10-06'
+  KSI-CNA-RNT.validate.1:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Accepted flows outside declared allows are not queried.
+    decided: '2026-10-06'
+  KSI-CNA-RNT.validate.2:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Outbound internet flows from private subnets are not queried; the deliberate egress tests and the private-routes
+      check show they cannot occur.
+    decided: '2026-10-06'
+  KSI-CNA-RNT.validate.4:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Rejected flows are logged during a session but not reviewed, and are lost at teardown.
+    decided: '2026-10-06'
+  KSI-CNA-ULN.validate.1:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Flows between tiers are not queried against declared paths.
+    decided: '2026-10-06'
+  KSI-CNA-ULN.validate.5:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Which declared flows were exercised is not derived from flow logs.
+    decided: '2026-10-06'
+  KSI-CNA-MAT.validate.3:
+    position: gap
+    reason: VPC flow logs go to a CloudWatch log group that is part of the session environment and deleted at teardown
+      (network.tf); they are not in the central store and nothing queries them.
+    risk: Accepted flows on undeclared ports are not queried.
+    decided: '2026-10-06'
+  KSI-CNA-MAT.validate.2:
+    position: gap
+    reason: Combined network and identity reachability analysis is the effective-access mechanism, which is not
+      built.
+    risk: Reachability is shown piecewise -- security groups against flows, routes, deliberate probes -- not computed
+      whole.
+    decided: '2026-10-06'
+  KSI-CNA-DFP.validate.3:
+    position: gap
+    reason: Process-level observation needs a runtime agent; GuardDuty Runtime Monitoring is off pending its trial
+      (GuardDuty.11, review 2026-11-03).
+    risk: A process running outside the declared command would not be seen.
+    decided: '2026-10-06'
+  KSI-CNA-EIS.verify.2:
+    position: gap
+    reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator
+      re-applying declared state under an elevation.'
+    risk: Drift persists until the operator acts on the drift run's failure, typically within a day.
+    decided: '2026-10-06'
+  KSI-CNA-EIS.verify.4:
+    position: gap
+    reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator
+      re-applying declared state under an elevation. There is therefore no safe remediation list.'
+    risk: As verify 2.
+    decided: '2026-10-06'
+  KSI-CNA-EIS.validate.1:
+    position: gap
+    reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator
+      re-applying declared state under an elevation.'
+    risk: As verify 2; the detection half is proven by svc-acm-ops-out-of-band-change-detected.
+    decided: '2026-10-06'
+  KSI-CNA-EIS.validate.2:
+    position: gap
+    reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator
+      re-applying declared state under an elevation. Every drift is detected and none is auto-corrected, which is
+      the boundary this row tests, held trivially.'
+    risk: As verify 2.
+    decided: '2026-10-06'
+  KSI-CNA-EIS.validate.5:
+    position: gap
+    reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator
+      re-applying declared state under an elevation.'
+    risk: No remediation actions run, so none can fail unsurfaced.
+    decided: '2026-10-06'
+  KSI-CNA-IBP.verify.2:
+    position: inapplicable
+    reason: Security Health Analytics is part of Security Command Center, which needs an organization. GCP has no
+      organization in this project (a standalone project under a personal billing account), so organization-level
+      services do not exist here.
+    risk: GCP's posture is judged by the collector's GCP checks only, which cover what was written, not a vendor's
+      detector set.
+    decided: '2026-10-06'
+  KSI-CNA-IBP.validate.2:
+    position: inapplicable
+    reason: 'As verify 2: no Security Command Center findings exist to review.'
+    risk: As verify 2.
+    decided: '2026-10-06'
+  KSI-MLA-LET.verify.1:
+    position: gap
+    reason: Nine of the sixteen event sources are outside the central log store, most unmonitored (registers/event-sources.yaml,
+      recorded 2026-10-03). Every source is enabled; the gap is the destination.
+    risk: Events from those sources -- CloudWatch application and database logs, GCP's Cloud Audit Logs, GitHub
+      -- are not in the corpus, so no standing query sees them.
+    decided: '2026-10-06'
+  KSI-MLA-OSM.verify.2:
+    position: gap
+    reason: Nine of the sixteen event sources are outside the central log store, most unmonitored (registers/event-sources.yaml,
+      recorded 2026-10-03).
+    risk: As MLA-LET verify 1.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.verify.2:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: No catalog partitioning by tier exists.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.verify.3:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: Every declared reader holds standing access to all logs, sensitive or not.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.verify.4:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: No elevation entitlement exists for log access; the operator's read-only role reads logs standing. Account
+      elevation (JIT) is separate.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.validate.1:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: There is no sensitive tier to account accesses against.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.validate.2:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: There are no tiers to join across.
+    decided: '2026-10-06'
+  KSI-MLA-ALA.validate.4:
+    position: gap
+    reason: The tiered log access model -- sensitive and operational tiers, granted per tier, with elevation for
+      the sensitive one -- is not built (recorded 2026-10-02 and 2026-10-03). Log reads are confined to declared
+      readers by the log store's bucket policy and the evidence key, one tier for all.
+    risk: No log-access elevations exist to carry justifications.
+    decided: '2026-10-06'
+  KSI-MLA-EVC.verify.2:
+    position: inapplicable
+    reason: The project pushes to main rather than merging pull requests, so there is no merge for a gate to block.
+      The policy workflow fails a push's run on a blocking finding, which is recorded and counted (mla-evc-ops-no-failed-push).
+    risk: A non-compliant declaration can land on main; it is caught after landing and before it is applied, not
+      before it lands.
+    decided: '2026-10-06'
+  KSI-CMT-RMV.validate.1:
+    position: gap
+    reason: 'Declared state is applied by the operator, under a justified, time-bound elevation, not by the pipeline:
+      the standing change exception, narrowed 2026-10-05 (registers/change-exceptions.yaml). A query for applies
+      by anyone but the pipeline would return every apply.'
+    risk: Applies rest on a person, bounded by elevation's justification, window and record, until an apply job
+      exists in CI.
+    decided: '2026-10-06'
+  KSI-CMT-LMC.verify.1:
+    position: gap
+    reason: GitHub's repository events -- pushes, workflow changes, settings -- are not delivered to the central
+      store; the git history and GitHub's own audit log are the record.
+    risk: A repository change is visible in git and GitHub, but no query over the corpus sees it.
+    decided: '2026-10-06'
+  KSI-CMT-LMC.verify.2:
+    position: gap
+    reason: No alert rule fires on a change to control content -- policy rules, checks, workflows. Such changes
+      are reviewed only as commits.
+    risk: A change weakening a control would not alert; it would show in the next run's results and in git.
+    decided: '2026-10-06'
+  KSI-CMT-LMC.validate.1:
+    position: gap
+    reason: 'As verify 2: no alert path exists for a policy rule change, so there is nothing to test.'
+    risk: As verify 2.
+    decided: '2026-10-06'
+  KSI-CMT-LMC.validate.2:
+    position: gap
+    reason: 'As verify 2: with no alerting on any surface, the opposite direction holds trivially and proves nothing.'
+    risk: As verify 2.
+    decided: '2026-10-06'
+  KSI-CMT-VTD.validate.3:
+    position: gap
+    reason: Nothing correlates a remediation deployment with the determination re-running; the daily collector re-runs
+      every check regardless, so a fix shows the next day.
+    risk: A remediation's effect is seen at the next daily run, not tied to the change that made it.
+    decided: '2026-10-06'
+  KSI-CMT-VTD.validate.4:
+    position: inapplicable
+    reason: Deployments are operator applies by elevation, not pipeline runs with stages that could be skipped.
+      The build pipeline's stages run unconditionally in sequence.
+    risk: 'As CMT-RMV validate 1: a person applies, so stage-skipping is a question about the person, not a pipeline.'
+    decided: '2026-10-06'
+  KSI-CMT-VTD.validate.5:
+    position: gap
+    reason: No post-apply validation record is written per deployment; the collector's next run and, in sessions,
+      the full run with the environment up are the validation.
+    risk: A deployment's validation is tied to a day's run, not to the deployment itself.
+    decided: '2026-10-06'
+  KSI-CMT-RVP.verify.1:
+    position: manual
+    reason: The procedure is the workflows and scripts in the repository, versioned in git; changes to them are
+      commits. Change alerting is not built (CMT-LMC verify 2).
+    risk: A change to the procedure is recorded but not alerted.
+    evidence: The repository's history of .github/workflows/, infra/aws/*.sh and deliberate/
+    decided: '2026-10-06'
+  KSI-CMT-RVP.validate.2:
+    position: gap
+    reason: Every gate has failed at least once in the period (the signal report's gates_never_failed is empty),
+      so none needs a position today; nothing enforces one if that changes.
+    risk: A gate that stops failing anything would be listed by the signal report but not required to justify itself.
+    decided: '2026-10-06'
+  KSI-CMT-RVP.validate.4:
+    position: gap
+    reason: 'No revert has followed a fully passed pipeline (the signal report''s reverts: 0), and no gate review
+      record is defined for when one does.'
+    risk: A rollback would be counted but its gate review would rest on the operator.
+    decided: '2026-10-06'
+  KSI-SCR-MON.validate.5:
+    position: gap
+    reason: 'Provider change and deprecation notices are not ingested: the AWS Health API''s programmatic access
+      needs a paid support plan, and Google''s notices are not collected (registers/third-parties.yaml).'
+    risk: A deprecation affecting the environment is noticed only by a person reading the provider's announcements,
+      or when something breaks.
+    decided: '2026-10-06'
+  KSI-SCR-MIT.verify.2:
+    position: gap
+    reason: Direct dependencies carry no recorded maintenance signal or criticality rating; the supply-chain risk
+      register holds the components judged risky, not every dependency.
+    risk: An unmaintained dependency would not be flagged until it carried an advisory.
+    decided: '2026-10-06'
+  KSI-RPL-RRO.verify.3:
+    position: descoped
+    reason: 'Periodic human review cycles were cut on 2026-09-14: a quarterly review by one contributor over statistically
+      empty signals would be a ceremony. Signal generation was kept, as the shared signal report.'
+    risk: Objectives are revisited when something changes them, by the operator, not on a schedule.
+    decided: '2026-10-06'
+  KSI-RPL-ARP.verify.4:
+    position: descoped
+    reason: 'Periodic human review cycles were cut on 2026-09-14: a quarterly review by one contributor over statistically
+      empty signals would be a ceremony. Signal generation was kept, as the shared signal report.'
+    risk: As RPL-RRO verify 3.
+    decided: '2026-10-06'
+  KSI-CNA-RVP.validate.4:
+    position: descoped
+    reason: 'Periodic human review cycles were cut on 2026-09-14: a quarterly review by one contributor over statistically
+      empty signals would be a ceremony. Signal generation was kept, as the shared signal report. The WAF''s counts
+      are logged, not reviewed on an interval.'
+    risk: Attack traffic patterns are seen only when someone looks.
+    decided: '2026-10-06'
+  KSI-CNA-RVP.validate.6:
+    position: descoped
+    reason: 'Periodic human review cycles were cut on 2026-09-14: a quarterly review by one contributor over statistically
+      empty signals would be a ceremony. Signal generation was kept, as the shared signal report. The load balancer''s
+      metrics are alarmed where it matters (health.tf), not reviewed.'
+    risk: As validate 4.
+    decided: '2026-10-06'
+  KSI-RPL-RRO.verify.4:
+    position: gap
+    reason: Objective revisions are commits to registers/resources.yaml; their reasons are in the commit message
+      and DECISIONS.md, which nothing checks.
+    risk: An objective could change without a recorded reason.
+    decided: '2026-10-06'
+  KSI-RPL-RRO.validate.3:
+    position: gap
+    reason: Nothing ties an architecture change to a recovery review record.
+    risk: A change affecting recovery would not prompt a review.
+    decided: '2026-10-06'
+  KSI-RPL-ABO.verify.4:
+    position: gap
+    reason: 'Backups are in the same region as their source: RDS automated backups and the S3 stores'' versions
+      are in us-east-1, with no cross-region copy.'
+    risk: A regional outage would take the backups with the source. Recorded with the zone-level availability position
+      (CNA-OFA).
+    decided: '2026-10-06'
+  KSI-RPL-TRC.verify.2:
+    position: gap
+    reason: Recovery tests run when the operator runs them, per session (deliberate/), not on a schedule; the environment
+      they need stands only during sessions.
+    risk: A test can lapse past its cadence; the deliberate_test checks then fail, which is how a lapse is seen.
+    decided: '2026-10-06'
+  KSI-RPL-TRC.verify.3:
+    position: manual
+    reason: Test records go to deliberate-tests/ in the Object Locked log store, written by deliberate/run.py; recovery
+      measurements are also entered in registers/recovery-tests.yaml.
+    risk: The destination is fixed in the runner, not a configuration a check reads.
+    evidence: deliberate/run.py; registers/recovery-tests.yaml
+    decided: '2026-10-06'
+  KSI-RPL-TRC.validate.4:
+    position: gap
+    reason: The restore test times the instance to available, encrypted and private; it does not connect and verify
+      the restored data.
+    risk: A restore that came up with corrupt or partial data would pass the timing test.
+    decided: '2026-10-06'
+  KSI-RPL-TRC.validate.5:
+    position: gap
+    reason: 'The analytics pipeline re-reads every extract each run and merges idempotently (2026-10-02), but a
+      rebuild from an empty warehouse has not been run: past 30 days the warehouse is the only copy (DECISIONS.md,
+      2026-10-03).'
+    risk: Reconstruction is proven only within the extracts' 30 days.
+    decided: '2026-10-06'
+  KSI-RPL-TRC.verify.1:
+    position: gap
+    reason: One of the 21 declared recovery objectives -- the database's -- has a demonstrating test (registers/recovery-tests.yaml).
+    risk: Twenty objectives are declared from design and unmeasured.
+    decided: '2026-10-06'
+  KSI-RPL-TRC.validate.6:
+    position: gap
+    reason: 'As verify 1: twenty objectives have no demonstrating test.'
+    risk: As verify 1.
+    decided: '2026-10-06'
+  KSI-RPL-ARP.validate.3:
+    position: gap
+    reason: Of the seven encoded recovery paths, restore_database is exercised and recorded; the others run in practice
+      at every session (re-applying declared state, replacing tasks) but are not recorded as tests.
+    risk: Five paths are exercised but unrecorded, and rebuild_images untested.
+    decided: '2026-10-06'
+  KSI-CNA-OFA.verify.4:
+    position: gap
+    reason: The restore measurement runs per session by the operator (deliberate/), not on a schedule.
+    risk: As RPL-TRC verify 2.
+    decided: '2026-10-06'
+  KSI-INR-RIR.verify.1:
+    position: manual
+    reason: The procedure is docs/INCIDENT-RESPONSE.md, versioned in git; changes are commits, not alerted.
+    risk: A change to the procedure is recorded but not alerted.
+    evidence: docs/INCIDENT-RESPONSE.md and its git history
+    decided: '2026-10-06'
+  KSI-INR-RIR.verify.4:
+    position: gap
+    reason: Dispositions are recorded as prose in DECISIONS.md (the runbook's step 5); no structured disposition
+      record is configured.
+    risk: An undispositioned alert is not visible as a number (the signal report lists dispositions as not collected).
+    decided: '2026-10-06'
+  KSI-INR-RIR.validate.1:
+    position: gap
+    reason: 'No response has been exercised: the responder was descoped and no incident or exercise has occurred.'
+    risk: The manual procedure is unexercised.
+    decided: '2026-10-06'
+  KSI-INR-RIR.validate.2:
+    position: gap
+    reason: 'As verify 4: dispositions are prose, so escalations without one cannot be counted.'
+    risk: As verify 4.
+    decided: '2026-10-06'

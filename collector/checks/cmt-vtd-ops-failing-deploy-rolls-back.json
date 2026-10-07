@@ -14,6 +14,11 @@
       "row": "KSI-CMT-VTD.validate.2",
       "covers": "partial",
       "gap": "Run once per environment session and recorded (cadence 30 days), not every 3: the environment it needs stands only during sessions."
+    },
+    {
+      "row": "KSI-CMT-VTD.validate.1",
+      "covers": "partial",
+      "gap": "Tested per stage where a test exists: the deploy stage, by a revision that fails its health checks. The image signing and verification stage has no deliberate failing test."
     }
   ]
 }

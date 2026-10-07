@@ -17,6 +17,11 @@
       "row": "KSI-SVC-VRI.verify.4",
       "covers": "partial",
       "gap": "Verification is in the build, before the digest is recorded, so an unverifiable image never becomes a deployable reference. Nothing re-verifies at deploy."
+    },
+    {
+      "row": "KSI-CMT-VTD.verify.1",
+      "covers": "partial",
+      "gap": "Ordering is checked where it is load-bearing -- verification before the digest is recorded, the hashed manifest before the scanner installs -- not for every stage of every workflow."
     }
   ]
 }

@@ -28,6 +28,11 @@
     {
       "row": "KSI-SCR-MON.validate.4",
       "covers": "full"
+    },
+    {
+      "row": "KSI-SCR-MON.verify.2",
+      "covers": "partial",
+      "gap": "Every provider in use has a recorded monitoring position; for six it is 'unavailable', so no feed is configured for them."
     }
   ]
 }

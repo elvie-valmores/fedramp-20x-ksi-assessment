@@ -19,6 +19,11 @@
       "row": "KSI-CNA-ULN.verify.6",
       "covers": "partial",
       "gap": "AWS only. GCP's federated access tokens last one hour, fixed by Google; the pool has no lifetime setting to read, so that half rests on the platform, not on a check."
+    },
+    {
+      "row": "KSI-CNA-ULN.validate.3",
+      "covers": "partial",
+      "gap": "The bound is shown by configuration -- STS cannot issue a session past a role's or permission set's maximum -- not by querying issued sessions."
     }
   ]
 }

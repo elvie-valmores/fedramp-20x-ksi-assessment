@@ -19,6 +19,11 @@
       "row": "KSI-RPL-ABO.validate.5",
       "covers": "partial",
       "gap": "Database backups only, judged per backup. Object stores are judged by their bucket's default encryption (svc-sin-cfg-aws-stores-use-declared-keys), not object by object."
+    },
+    {
+      "row": "KSI-RPL-ABO.validate.4",
+      "covers": "partial",
+      "gap": "Retained backups are checked restorable under a live key; their timestamps are not compared with a declared recovery point."
     }
   ]
 }

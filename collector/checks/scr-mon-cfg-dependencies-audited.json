@@ -29,6 +29,11 @@
       "row": "KSI-CNA-MAT.verify.5",
       "covers": "partial",
       "gap": "Dependency scanning (pip-audit) in the build, and IaC scanning in the policy gate (Trivy); no static analysis of the application code."
+    },
+    {
+      "row": "KSI-SCR-MON.verify.3",
+      "covers": "partial",
+      "gap": "pip-audit correlates each Python manifest against OSV at build; images are correlated by Inspector and Container Scanning. Terraform providers and actions are not correlated against advisories."
     }
   ]
 }

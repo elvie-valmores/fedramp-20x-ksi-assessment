@@ -22,6 +22,11 @@
     {
       "row": "KSI-CNA-RVP.verify.2",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CNA-RVP.validate.5",
+      "covers": "partial",
+      "gap": "The groups follow the vendor's current version, unpinned, so they update without intervention; an update is not observed in a version history."
     }
   ]
 }

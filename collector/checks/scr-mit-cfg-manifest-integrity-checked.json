@@ -12,5 +12,11 @@
     "before": "require hashed",
     "after": "install scanner"
   },
-  "unlinked_reason": "Proves build row 4 (build-time resolution only, verified rather than assumed). No VERIFY or VALIDATE row asks for manifest hashes."
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-VTD.verify.1",
+      "covers": "partial",
+      "gap": "One ordered gate: the hashed-manifest requirement precedes the scanner's install in the build, so an unhashed manifest stops the job before anything runs. It also proves SCR-MIT build row 4, which no VERIFY or VALIDATE row asks for."
+    }
+  ]
 }

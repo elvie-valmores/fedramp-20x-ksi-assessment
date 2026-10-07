@@ -20,6 +20,11 @@
     {
       "row": "KSI-CMT-RVP.validate.5",
       "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-RVP.verify.3",
+      "covers": "partial",
+      "gap": "Each gate's runs and failures are computed daily (gate_runs); there is no separate efficacy store, the signal report is the record."
     }
   ]
 }

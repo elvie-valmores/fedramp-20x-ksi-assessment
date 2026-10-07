@@ -16,6 +16,11 @@
     {
       "row": "KSI-MLA-EVC.verify.3",
       "covers": "full"
+    },
+    {
+      "row": "KSI-PIY-RSD.verify.3",
+      "covers": "partial",
+      "gap": "Static analysis of the infrastructure only -- Trivy and the authored rules over every push's plans; the application code has no static analyser."
     }
   ]
 }

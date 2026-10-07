@@ -21,6 +21,11 @@
       "row": "KSI-CNA-OFA.verify.1",
       "covers": "partial",
       "gap": "The worker runs one task, deliberately: it is a single extractor whose landed high-water mark turns a gap during replacement into latency, not lost data (registers/resources.yaml)."
+    },
+    {
+      "row": "KSI-CNA-OFA.validate.2",
+      "covers": "partial",
+      "gap": "The api service's subnets span two zones and it runs two tasks; where each task was placed is not read."
     }
   ]
 }
