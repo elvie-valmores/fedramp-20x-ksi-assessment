@@ -154,6 +154,8 @@ class CloudAPIConfigRead(Mechanism):
             return self._aws_database_backups_restorable(check)
         if provider == "github" and resource == "workflow_active":
             return self._github_workflow_active(check)
+        if provider == "aws" and resource == "session":
+            return self._aws_session(check)
         if provider == "aws" and resource == "iam_mutation_principals":
             return self._aws_iam_mutation_principals(check)
         if provider == "aws" and resource == "roles_last_used":
@@ -1209,6 +1211,107 @@ class CloudAPIConfigRead(Mechanism):
             step and {"name": step["name"], "conclusion": step["conclusion"]},
             datetime.now(timezone.utc), p["max_age_days"])
         return CheckResult(check.id, ok, evidence, detail)
+
+    def _aws_session(self, check: CheckDefinition) -> CheckResult:
+        """The session environment's live state, one assertion per row group (2026-10-07).
+
+        Requires params: region, assertion, and per assertion the declared
+        values it is held to. Judged only while the environment stands
+        (requires_environment on each check).
+        """
+        p = check.params
+        a, region = p["assertion"], p["region"]
+        ec2 = boto3.client("ec2", region_name=region)
+        elb = boto3.client("elbv2", region_name=region)
+        ecs = boto3.client("ecs", region_name=region)
+        if a == "security_txt":
+            import socket
+            import ssl
+            dns = elb.describe_load_balancers(Names=[p["load_balancer"]])["LoadBalancers"][0]["DNSName"]
+            with socket.create_connection((socket.gethostbyname(dns), 443), timeout=10) as raw:
+                with ssl.create_default_context().wrap_socket(raw, server_hostname=p["host"]) as tls:
+                    tls.sendall(f"GET /.well-known/security.txt HTTP/1.1\r\nHost: {p['host']}\r\nConnection: close\r\n\r\n".encode())
+                    body = b""
+                    while chunk := tls.recv(4096):
+                        body += chunk
+            head, _, text = body.decode(errors="replace").partition("\r\n\r\n")
+            ok, detail, evidence = evaluate_security_txt(int(head.split(" ")[1]), text, datetime.now(timezone.utc))
+        elif a == "idle_timeout":
+            lb = elb.describe_load_balancers(Names=[p["load_balancer"]])["LoadBalancers"][0]["LoadBalancerArn"]
+            attrs = {x["Key"]: x["Value"] for x in elb.describe_load_balancer_attributes(LoadBalancerArn=lb)["Attributes"]}
+            seconds = int(attrs.get("idle_timeout.timeout_seconds", 0))
+            ok = 0 < seconds <= p["max_idle_seconds"]
+            detail = f"idle timeout {seconds}s, bound {p['max_idle_seconds']}s"
+            evidence = {"idle_timeout_seconds": seconds, "attributes": attrs}
+        elif a == "health_config":
+            tg = elb.describe_target_groups(Names=[p["target_group"]])["TargetGroups"][0]
+            services = ecs.describe_services(cluster=p["cluster"], services=p["services"])["services"]
+            ok, detail, evidence = evaluate_health_config(tg, [{"name": x["serviceName"], "desired": x["desiredCount"],
+                                                                "running": x["runningCount"]} for x in services], p["expected"])
+        elif a in ("enis_grouped", "sg_references_resolve"):
+            vpc = ec2.describe_vpcs(Filters=[{"Name": "tag:Name", "Values": [p["vpc_name"]]}])["Vpcs"][0]["VpcId"]
+            groups = ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["SecurityGroups"]
+            if a == "enis_grouped":
+                enis = ec2.describe_network_interfaces(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["NetworkInterfaces"]
+                default = next(g["GroupId"] for g in groups if g["GroupName"] == "default")
+                ok, detail, evidence = evaluate_enis_grouped(
+                    [{"id": e["NetworkInterfaceId"], "type": e.get("InterfaceType"), "description": e.get("Description", ""),
+                      "groups": [g["GroupId"] for g in e.get("Groups", [])]} for e in enis], default)
+            else:
+                rules = ec2.describe_security_group_rules(Filters=[{"Name": "group-id", "Values": [g["GroupId"] for g in groups]}])["SecurityGroupRules"]
+                refs = [(r["GroupId"], r["ReferencedGroupInfo"]["GroupId"]) for r in rules if r.get("ReferencedGroupInfo")]
+                ok, detail, evidence = evaluate_sg_references(refs, {g["GroupId"] for g in groups})
+        elif a in ("secret_rotation", "secret_versions"):
+            sm = boto3.client("secretsmanager", region_name=region)
+            secrets = [x for page in sm.get_paginator("list_secrets").paginate(IncludePlannedDeletion=False) for x in page["SecretList"]]
+            if a == "secret_rotation":
+                ok, detail, evidence = evaluate_secret_rotation(secrets, p["plan"], datetime.now(timezone.utc))
+            else:
+                versions = {x["Name"]: [v for page in sm.get_paginator("list_secret_version_ids").paginate(SecretId=x["ARN"], IncludeDeprecated=True)
+                                        for v in page["Versions"]] for x in secrets}
+                ok, detail, evidence = evaluate_secret_versions(versions, datetime.now(timezone.utc), p["max_superseded_days"])
+        elif a == "running_images":
+            ok, detail, evidence = self._running_images(ecs, boto3.client("ecr", region_name=region), p)
+        else:
+            raise ValueError(f"unknown session assertion {a!r}")
+        return CheckResult(check.id, ok, evidence, detail)
+
+    def _running_images(self, ecs, ecr, p) -> tuple[bool, str, dict]:
+        """Each running container: the declared digest, signed, and its tag's commit on GitHub."""
+        containers = []
+        tasks = [t for page in ecs.get_paginator("list_tasks").paginate(cluster=p["cluster"], desiredStatus="RUNNING") for t in page["taskArns"]]
+        for i in range(0, len(tasks), 100):
+            for t in ecs.describe_tasks(cluster=p["cluster"], tasks=tasks[i:i + 100])["tasks"]:
+                td = ecs.describe_task_definition(taskDefinition=t["taskDefinitionArn"])["taskDefinition"]
+                declared = {c["name"]: c["image"] for c in td["containerDefinitions"]}
+                for c in t["containers"]:
+                    image = declared.get(c["name"], "")
+                    repo, _, digest = image.partition("/")[2].partition("@")
+                    tags = []
+                    if digest:
+                        found = ecr.describe_images(repositoryName=repo, imageIds=[{"imageDigest": digest}])["imageDetails"]
+                        tags = found[0].get("imageTags", []) if found else []
+                        # cosign signs the index digest the task declares, and
+                        # stores the signature under sha256-<hex>.sig.
+                        sig = f"sha256-{digest.split(':', 1)[1]}.sig"
+                        signed = sig in {x.get("imageTag") for page in ecr.get_paginator("list_images").paginate(
+                            repositoryName=repo, filter={"tagStatus": "TAGGED"}) for x in page["imageIds"]}
+                    else:
+                        signed = False
+                    commit = next((t2[4:] for t2 in tags if t2.startswith("git-")), None)
+                    commit_known = False
+                    if commit:
+                        try:
+                            _github_get(f"repos/{p['repository']}/commits/{commit}")
+                            commit_known = True
+                        except Exception:
+                            commit_known = False
+                    # c["image"] is the reference the task was started with;
+                    # c["imageDigest"] is the platform image pulled from it.
+                    containers.append({"task": t["taskArn"].rsplit("/", 1)[-1], "container": c["name"],
+                                       "declared": image, "running": c.get("image"), "pulled_digest": c.get("imageDigest"),
+                                       "signed": signed, "commit": commit, "commit_on_github": commit_known})
+        return evaluate_running_images(containers, p["check"])
 
     def _project_roles(self, iam, excluded_paths: list[str]) -> list[dict]:
         return [r for page in iam.get_paginator("list_roles").paginate() for r in page["Roles"]
@@ -3535,3 +3638,122 @@ def evaluate_image_scan_coverage(wanted: dict[str, str], coverage: dict[str, str
     if uncovered:
         return False, f"{len(uncovered)} image(s) not actively scanned: {', '.join(uncovered.values())}", evidence
     return True, f"all {len(wanted)} recent deployable images actively scanned by Inspector", evidence
+
+
+# --- The session environment (2026-10-07) ---
+
+def evaluate_security_txt(status: int, text: str, now: datetime) -> tuple[bool, str, dict]:
+    fields = {}
+    for line in text.splitlines():
+        if ":" in line and not line.startswith("#"):
+            k, _, v = line.partition(":")
+            fields.setdefault(k.strip().lower(), v.strip())
+    evidence = {"status": status, "fields": fields}
+    problems = []
+    if status != 200:
+        problems.append(f"HTTP {status}")
+    if "contact" not in fields:
+        problems.append("no Contact")
+    if "expires" not in fields:
+        problems.append("no Expires")
+    else:
+        try:
+            expires = datetime.fromisoformat(fields["expires"].replace("Z", "+00:00"))
+            evidence["days_to_expiry"] = (expires - now).days
+            if expires <= now:
+                problems.append(f"expired {fields['expires']}")
+        except ValueError:
+            problems.append(f"Expires not RFC 3339: {fields['expires']}")
+    if problems:
+        return False, "; ".join(problems), evidence
+    return True, f"served, well-formed, expires in {evidence['days_to_expiry']} days", evidence
+
+
+def evaluate_health_config(tg: dict, services: list[dict], expected: dict) -> tuple[bool, str, dict]:
+    have = {"path": tg.get("HealthCheckPath"), "interval": tg.get("HealthCheckIntervalSeconds"),
+            "healthy_threshold": tg.get("HealthyThresholdCount"), "unhealthy_threshold": tg.get("UnhealthyThresholdCount"),
+            "matcher": (tg.get("Matcher") or {}).get("HttpCode")}
+    wrong = {k: {"expected": v, "found": have.get(k)} for k, v in expected.items() if have.get(k) != v}
+    short = [x["name"] for x in services if x["desired"] < 1 or x["running"] < x["desired"]]
+    evidence = {"health_check": have, "wrong": wrong, "services": services}
+    if wrong or short or not services:
+        return False, "; ".join([f"health check off declaration: {', '.join(wrong)}"] * bool(wrong)
+                                + [f"below desired count: {', '.join(short)}"] * bool(short) + ["no services"] * (not services)), evidence
+    return True, f"health check as declared; {len(services)} services at their desired counts", evidence
+
+
+def evaluate_enis_grouped(enis: list[dict], default_group: str) -> tuple[bool, str, dict]:
+    bad = [e for e in enis if not e["groups"] or e["groups"] == [default_group]]
+    evidence = {"interfaces": len(enis), "ungrouped_or_default_only": bad}
+    if not enis:
+        return False, "no network interfaces -- nothing to judge", evidence
+    if bad:
+        return False, f"{len(bad)} interface(s) with no group but the default: {', '.join(e['id'] for e in bad)}", evidence
+    return True, f"all {len(enis)} interfaces carry a declared security group", evidence
+
+
+def evaluate_sg_references(refs: list[tuple[str, str]], existing: set[str]) -> tuple[bool, str, dict]:
+    dangling = [{"group": g, "references": r} for g, r in refs if r not in existing]
+    evidence = {"references": len(refs), "dangling": dangling}
+    if dangling:
+        return False, f"{len(dangling)} rule(s) reference a group that does not exist", evidence
+    return True, f"all {len(refs)} group references resolve", evidence
+
+
+def evaluate_secret_rotation(secrets: list[dict], plan: dict, now: datetime) -> tuple[bool, str, dict]:
+    """plan: {name pattern: max_days, or null where the secret is regenerated instead of rotated}."""
+    results, problems = {}, []
+    for x in secrets:
+        rule = next((v for pat, v in plan.items() if fnmatch.fnmatchcase(x["Name"], pat)), "unplanned")
+        last = x.get("LastRotatedDate")
+        results[x["Name"]] = {"plan_days": rule, "rotation_enabled": x.get("RotationEnabled", False),
+                              "interval_days": (x.get("RotationRules") or {}).get("AutomaticallyAfterDays"),
+                              "last_rotated": last and last.isoformat()}
+        if rule == "unplanned":
+            problems.append(f"{x['Name']}: not in the plan")
+        elif rule is not None:
+            r = results[x["Name"]]
+            if not r["rotation_enabled"] or not r["interval_days"] or r["interval_days"] > rule:
+                problems.append(f"{x['Name']}: rotation off or slower than {rule} days")
+            elif last and (now - last).days > rule:
+                problems.append(f"{x['Name']}: last rotated {(now - last).days} days ago")
+    evidence = {"secrets": results, "problems": problems}
+    if not secrets:
+        return False, "no secrets -- nothing to judge", evidence
+    if problems:
+        return False, "; ".join(problems), evidence
+    return True, f"all {len(secrets)} secrets rotate within their plan, or are regenerated each session", evidence
+
+
+def evaluate_secret_versions(versions: dict[str, list[dict]], now: datetime, max_days: int) -> tuple[bool, str, dict]:
+    stale = [{"secret": n, "version": v["VersionId"], "created": v["CreatedDate"].isoformat()}
+             for n, vs in versions.items() for v in vs
+             if not v.get("VersionStages") and (now - v["CreatedDate"]).days > max_days]
+    evidence = {"versions": {n: len(vs) for n, vs in versions.items()}, "superseded_beyond_window": stale}
+    if not versions:
+        return False, "no secrets -- nothing to judge", evidence
+    if stale:
+        return False, f"{len(stale)} superseded version(s) retrievable past {max_days} days", evidence
+    return True, f"no superseded secret version older than {max_days} days", evidence
+
+
+def evaluate_running_images(containers: list[dict], check: str) -> tuple[bool, str, dict]:
+    """check: "declared" | "signed" | "provenance"."""
+    evidence = {"containers": containers}
+    if not containers:
+        return False, "nothing running -- nothing to judge", evidence
+    if check == "declared":
+        bad = [c for c in containers if not c["declared"] or "@sha256:" not in c["declared"] or c["running"] != c["declared"]]
+        what = "run the declared digest"
+    elif check == "signed":
+        bad = [c for c in containers if not c["signed"]]
+        what = "run a signed image"
+    elif check == "provenance":
+        bad = [c for c in containers if not (c["commit"] and c["commit_on_github"])]
+        what = "trace to a commit on GitHub"
+    else:
+        raise ValueError(f"unknown running_images check {check!r}")
+    evidence["failing"] = bad
+    if bad:
+        return False, f"{len(bad)} of {len(containers)} containers do not {what}", evidence
+    return True, f"all {len(containers)} running containers {what}", evidence

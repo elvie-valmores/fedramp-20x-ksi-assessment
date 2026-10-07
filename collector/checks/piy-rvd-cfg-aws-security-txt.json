@@ -1,0 +1,29 @@
+{
+  "id": "piy-rvd-cfg-aws-security-txt",
+  "indicator": "KSI-PIY-RVD",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "security.txt is served at the well-known path through the load balancer, with a Contact and an RFC 3339 Expires in the future",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "security_txt",
+    "load_balancer": "fedramp-20x-ksi",
+    "host": "caliper.elvievalmores.com"
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-PIY-RVD.verify.2",
+      "covers": "partial",
+      "gap": "Served only while the environment stands; between sessions there is no published file, so the program's contact is unreachable then too."
+    },
+    {
+      "row": "KSI-PIY-RVD.validate.2",
+      "covers": "partial",
+      "gap": "As verify 2: the expiry is checked when the file is served, in sessions."
+    }
+  ]
+}

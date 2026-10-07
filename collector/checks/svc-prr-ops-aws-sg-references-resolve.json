@@ -1,0 +1,22 @@
+{
+  "id": "svc-prr-ops-aws-sg-references-resolve",
+  "indicator": "KSI-SVC-PRR",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Standing check, zero expected: no security group rule references a group that no longer exists",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "sg_references_resolve",
+    "vpc_name": "fedramp-20x-ksi"
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-PRR.validate.2",
+      "covers": "full"
+    }
+  ]
+}

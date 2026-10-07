@@ -1,0 +1,25 @@
+{
+  "id": "cna-dfp-ops-aws-running-as-declared",
+  "indicator": "KSI-CNA-DFP",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every running container was started from exactly the digest-pinned image its task definition declares",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "running_images",
+    "check": "declared",
+    "cluster": "fedramp-20x-ksi",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment"
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-DFP.validate.1",
+      "covers": "partial",
+      "gap": "The image reference; the rest of the running configuration (user, capabilities, read-only root) is the task definition's, enforced by ECS, and judged there by the hardened-task checks."
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "id": "cna-eis-cfg-aws-health-config",
+  "indicator": "KSI-CNA-EIS",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The api target group's health check holds its declaration (path /healthz, 200, every 30 seconds, 2 healthy and 3 unhealthy), and both services run at their desired counts",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "health_config",
+    "target_group": "fedramp-20x-ksi-api",
+    "cluster": "fedramp-20x-ksi",
+    "services": [
+      "api",
+      "worker"
+    ],
+    "expected": {
+      "path": "/healthz",
+      "matcher": "200",
+      "interval": 30,
+      "healthy_threshold": 2,
+      "unhealthy_threshold": 3
+    }
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-EIS.verify.3",
+      "covers": "partial",
+      "gap": "Health check and desired counts; the alarms are judged by mla-osm-cfg-aws-alarms-target-detection."
+    },
+    {
+      "row": "KSI-CMT-VTD.verify.3",
+      "covers": "partial",
+      "gap": "The load balancer's health check is the post-apply check, as declared; a failing deploy is rolled back by the circuit breaker (cmt-vtd-ops-failing-deploy-rolls-back)."
+    }
+  ]
+}

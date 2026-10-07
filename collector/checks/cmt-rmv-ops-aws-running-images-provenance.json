@@ -1,0 +1,33 @@
+{
+  "id": "cmt-rmv-ops-aws-running-images-provenance",
+  "indicator": "KSI-CMT-RMV",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every running container's image carries a git- tag naming a commit that exists on GitHub: what runs traces to source",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "running_images",
+    "check": "provenance",
+    "cluster": "fedramp-20x-ksi",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment"
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-CMT-RMV.verify.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-RMV.validate.3",
+      "covers": "full"
+    },
+    {
+      "row": "KSI-CMT-RMV.validate.6",
+      "covers": "partial",
+      "gap": "Running ECS containers; the analytics image's provenance is its pinned digest in pipeline.tf, built by build-and-push, not traced here."
+    }
+  ]
+}

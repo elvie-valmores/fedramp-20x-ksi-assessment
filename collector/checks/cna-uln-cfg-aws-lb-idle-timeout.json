@@ -1,0 +1,24 @@
+{
+  "id": "cna-uln-cfg-aws-lb-idle-timeout",
+  "indicator": "KSI-CNA-ULN",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "The load balancer's idle timeout is set and within the declared 60 seconds",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "idle_timeout",
+    "load_balancer": "fedramp-20x-ksi",
+    "max_idle_seconds": 60
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-ULN.verify.5",
+      "covers": "partial",
+      "gap": "The load balancer's idle timeout; the database parameter group's connection lifetimes are not read."
+    }
+  ]
+}

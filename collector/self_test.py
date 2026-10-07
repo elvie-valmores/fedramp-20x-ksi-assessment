@@ -648,6 +648,16 @@ _IDS = {"workloads": {"match": {"resource_type": "AWS::IAM::Role", "name": "*-ta
 _AUDITS = {"a/requirements.txt": {"workflow": "build.yml", "evidence": "--requirement a"},
            "requirements.txt": {"workflow": "policy.yml", "evidence": "--requirement requirements.txt"}}
 
+
+def _secret(name, enabled, interval, rotated_days_ago):
+    return {"Name": name, "RotationEnabled": enabled, **({"RotationRules": {"AutomaticallyAfterDays": interval}} if interval else {}),
+            **({"LastRotatedDate": _JIT_NOW - _td(days=rotated_days_ago)} if rotated_days_ago is not None else {})}
+
+
+def _ctr():
+    return {"task": "t", "container": "api", "declared": "r/api@sha256:abc", "running": "r/api@sha256:abc",
+            "pulled_digest": "sha256:def", "signed": True, "commit": "0cee46bbabef", "commit_on_github": True}
+
 def _sha(c):
     return (c * 40)[:40]
 
@@ -1191,6 +1201,52 @@ CFG_CASES = [
         "inactive": ({"sha256:a": "api:git-1"}, {"sha256:a": "INACTIVE"}),
         "no images": ({}, {}),
     }),
+    ("evaluate_security_txt", lambda c: cfg.evaluate_security_txt(c[0], c[1], _JIT_NOW), (200, "Contact: mailto:s@x\nExpires: 2026-12-31T00:00:00Z\n"), {
+        "not served": (404, ""),
+        "no contact": (200, "Expires: 2026-12-31T00:00:00Z\n"),
+        "expired": (200, "Contact: mailto:s@x\nExpires: 2026-09-01T00:00:00Z\n"),
+        "malformed expiry": (200, "Contact: mailto:s@x\nExpires: next year\n"),
+    }),
+    ("evaluate_health_config", lambda c: cfg.evaluate_health_config(c[0], c[1], {"path": "/healthz", "interval": 30}),
+     ({"HealthCheckPath": "/healthz", "HealthCheckIntervalSeconds": 30}, [{"name": "api", "desired": 2, "running": 2}]), {
+        "path changed": ({"HealthCheckPath": "/", "HealthCheckIntervalSeconds": 30}, [{"name": "api", "desired": 2, "running": 2}]),
+        "below desired": ({"HealthCheckPath": "/healthz", "HealthCheckIntervalSeconds": 30}, [{"name": "api", "desired": 2, "running": 1}]),
+        "no services": ({"HealthCheckPath": "/healthz", "HealthCheckIntervalSeconds": 30}, []),
+    }),
+    ("evaluate_enis_grouped", lambda c: cfg.evaluate_enis_grouped(c, "sg-default"), [{"id": "e1", "groups": ["sg-api"]}], {
+        "default only": [{"id": "e1", "groups": ["sg-default"]}],
+        "no group": [{"id": "e1", "groups": []}],
+        "none": [],
+    }),
+    ("evaluate_sg_references", lambda c: cfg.evaluate_sg_references(c, {"sg-a", "sg-b"}), [("sg-a", "sg-b")], {
+        "dangling": [("sg-a", "sg-gone")],
+    }),
+    ("evaluate_secret_rotation", lambda c: cfg.evaluate_secret_rotation(c, {"rds!db-*": 7, "app/tls*": None}, _JIT_NOW),
+     [_secret("rds!db-1", True, 7, 2), _secret("app/tls", False, None, None)], {
+        "rotation off": [_secret("rds!db-1", False, None, None)],
+        "too slow": [_secret("rds!db-1", True, 30, 2)],
+        "overdue": [_secret("rds!db-1", True, 7, 20)],
+        "unplanned": [_secret("other", True, 7, 1)],
+        "none": [],
+    }),
+    ("evaluate_secret_versions", lambda c: cfg.evaluate_secret_versions(c, _JIT_NOW, 30),
+     {"s": [{"VersionId": "v2", "VersionStages": ["AWSCURRENT"], "CreatedDate": _JIT_NOW - _td(days=90)},
+            {"VersionId": "v1", "VersionStages": [], "CreatedDate": _JIT_NOW - _td(days=10)}]}, {
+        "old superseded": {"s": [{"VersionId": "v0", "VersionStages": [], "CreatedDate": _JIT_NOW - _td(days=60)}]},
+        "none": {},
+    }),
+    ("evaluate_running_images (declared)", lambda c: cfg.evaluate_running_images(c, "declared"), [_ctr()], {
+        "running something else": [{**_ctr(), "running": "r/api@sha256:other"}],
+        "declared by tag": [{**_ctr(), "declared": "r/api:latest", "running": "r/api:latest"}],
+        "nothing running": [],
+    }),
+    ("evaluate_running_images (signed)", lambda c: cfg.evaluate_running_images(c, "signed"), [_ctr()], {
+        "unsigned": [{**_ctr(), "signed": False}],
+    }),
+    ("evaluate_running_images (provenance)", lambda c: cfg.evaluate_running_images(c, "provenance"), [_ctr()], {
+        "no commit tag": [{**_ctr(), "commit": None}],
+        "commit unknown to GitHub": [{**_ctr(), "commit_on_github": False}],
+    }),
 ]
 
 
@@ -1258,6 +1314,15 @@ CFG_RESOURCES = {
     "evaluate_pushes_passed": "pushes_evaluated",
     "evaluate_deliberate_test": "deliberate_test",
     "evaluate_password_policy": "password_policy",
+    "evaluate_security_txt": "session",
+    "evaluate_health_config": "session",
+    "evaluate_enis_grouped": "session",
+    "evaluate_sg_references": "session",
+    "evaluate_secret_rotation": "session",
+    "evaluate_secret_versions": "session",
+    "evaluate_running_images (declared)": "session",
+    "evaluate_running_images (signed)": "session",
+    "evaluate_running_images (provenance)": "session",
     "evaluate_iam_mutation_principals": "iam_mutation_principals",
     "evaluate_roles_last_used": "roles_last_used",
     "evaluate_image_scan_coverage": "image_scan_coverage",

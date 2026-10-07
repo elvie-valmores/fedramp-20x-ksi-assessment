@@ -1,0 +1,25 @@
+{
+  "id": "svc-vri-ops-aws-running-images-signed",
+  "indicator": "KSI-SVC-VRI",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "OPS",
+  "description": "Every running container's image has a cosign signature stored beside it in ECR",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "running_images",
+    "check": "signed",
+    "cluster": "fedramp-20x-ksi",
+    "repository": "elvie-valmores/fedramp-20x-ksi-assessment"
+  },
+  "requires_environment": "aws-phase2",
+  "matrix_rows": [
+    {
+      "row": "KSI-SVC-VRI.validate.1",
+      "covers": "partial",
+      "gap": "The signature's presence is checked, not re-verified against the signing identity; verification happens in the build, before the digest is recorded."
+    }
+  ]
+}

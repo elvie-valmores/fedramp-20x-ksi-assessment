@@ -1,0 +1,22 @@
+{
+  "id": "cna-rnt-cfg-aws-enis-grouped",
+  "indicator": "KSI-CNA-RNT",
+  "mechanism": "cloud_api_config_read",
+  "evidence_type": "CFG",
+  "description": "Every network interface in the project VPC carries a security group other than the VPC's default, which has no rules",
+  "required_cadence": "3 days",
+  "params": {
+    "provider": "aws",
+    "resource": "session",
+    "region": "us-east-1",
+    "assertion": "enis_grouped",
+    "vpc_name": "fedramp-20x-ksi"
+  },
+  "requires_environment": "aws-phase1",
+  "matrix_rows": [
+    {
+      "row": "KSI-CNA-RNT.verify.1",
+      "covers": "full"
+    }
+  ]
+}
