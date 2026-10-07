@@ -371,10 +371,11 @@ positions:
     decided: '2026-10-06'
   KSI-CNA-DFP.validate.3:
     position: gap
-    reason: Process-level observation needs a runtime agent; GuardDuty Runtime Monitoring is off pending its trial
-      (GuardDuty.11, review 2026-11-03).
+    reason: 'Process-level observation needs a runtime agent. GuardDuty Runtime Monitoring was decided against on
+      2026-10-07: on Fargate it creates its own VPC endpoint and security group outside Terraform, which can block
+      teardown, and it bills after its trial.'
     risk: A process running outside the declared command would not be seen.
-    decided: '2026-10-06'
+    decided: '2026-10-07'
   KSI-CNA-EIS.verify.2:
     position: gap
     reason: 'No automated remediation is built: drift is detected (drift.yml, daily) and corrected by the operator

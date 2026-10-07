@@ -122,13 +122,13 @@
       },
       {
         "control": "GuardDuty.11",
-        "reason": "Runtime Monitoring would inject an agent into the Fargate tasks, which run with a read-only root filesystem and every capability dropped; that combination is untested here. Revisit with a session to test it. Decided 2026-10-03.",
-        "review_by": "2026-11-03"
+        "reason": "Runtime Monitoring is not enabled, decided 2026-10-07 rather than trialled: on Fargate GuardDuty creates its own VPC endpoint and security group inside the session VPC, outside Terraform, which can block teardown.sh from deleting the VPC and would fail the declared-inventory checks, and it bills after the trial. Threat detection stands on CloudTrail, VPC flow, DNS, S3, RDS and Lambda signals; process-level observation is the recorded gap on CNA-DFP validate 3.",
+        "review_by": "2027-04-07"
       },
       {
         "control": "GuardDuty.12",
-        "reason": "As GuardDuty.11, for ECS specifically. Decided 2026-10-03.",
-        "review_by": "2026-11-03"
+        "reason": "Runtime Monitoring is not enabled, decided 2026-10-07 rather than trialled: on Fargate GuardDuty creates its own VPC endpoint and security group inside the session VPC, outside Terraform, which can block teardown.sh from deleting the VPC and would fail the declared-inventory checks, and it bills after the trial. Threat detection stands on CloudTrail, VPC flow, DNS, S3, RDS and Lambda signals; process-level observation is the recorded gap on CNA-DFP validate 3.",
+        "review_by": "2027-04-07"
       },
       {
         "control": "Config.1",

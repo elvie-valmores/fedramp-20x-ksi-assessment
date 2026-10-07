@@ -8753,3 +8753,16 @@ as manual, not standing, because the corpus's query window is three days.
      - `mis_scoped_token_rejected`, until it is recorded
      - the catalogue check, until all of those have run
 2. **The final SDR emitted by CI, and valid.**
+
+## 2026-10-07 — GuardDuty Runtime Monitoring: not trialled, decided
+
+The operator chose to skip the trial planned for session 2 (approved recommendation). On Fargate,
+Runtime Monitoring has GuardDuty create its own VPC endpoint and security group inside the session
+VPC, outside Terraform. That can block `teardown.sh` from deleting the VPC, would fail the
+declared-inventory checks, and bills after the trial.
+
+- **GuardDuty.11 and .12** stay excepted, with the reason rewritten as a decision, for review by
+  2027-04-07.
+- **What GuardDuty still watches:** CloudTrail, DNS, VPC flow, S3 data, RDS login and Lambda network
+  signals.
+- **CNA-DFP validate 3 (process observation)** stays a recorded gap, now citing this decision.
