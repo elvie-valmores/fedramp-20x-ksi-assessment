@@ -126,7 +126,13 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
         "api": {
             "operation": event_name,
             "service": {"name": record.get("eventSource")},
+            # CloudTrail's own read/write classification, so a query for
+            # changes need not guess from operation names (2026-10-06).
+            "read_only": record.get("readOnly"),
         },
+        # Whether a sign-in used MFA: ConsoleLogin's MFAUsed, as OCSF's
+        # is_mfa. Null on everything that is not a console sign-in.
+        "is_mfa": _mfa_used(record),
         "src_endpoint": {"ip": record.get("sourceIPAddress")},
         # What the call acted on, e.g. the key a Decrypt used. Kept since
         # 2026-10-02: without it no query can tell a customer key from an
@@ -146,8 +152,16 @@ def _to_ocsf(record: dict, account_id: str) -> dict:
         "metadata": {
             "original_source": "aws_cloudtrail",
             "original_event_id": record.get("eventID"),
+            # Management, Data or Insight: what a query for configuration
+            # changes filters to (2026-10-06).
+            "event_category": record.get("eventCategory"),
         },
     }
+
+
+def _mfa_used(record: dict):
+    used = (record.get("additionalEventData") or {}).get("MFAUsed")
+    return None if used is None else used == "Yes"
 
 
 def handler(event, context):

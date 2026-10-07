@@ -210,7 +210,7 @@ resource "aws_glue_catalog_table" "normalized_events" {
     }
     columns {
       name = "api"
-      type = "struct<operation:string,service:struct<name:string>>"
+      type = "struct<operation:string,service:struct<name:string>,read_only:boolean>"
     }
     columns {
       name = "src_endpoint"
@@ -218,7 +218,7 @@ resource "aws_glue_catalog_table" "normalized_events" {
     }
     columns {
       name = "metadata"
-      type = "struct<original_source:string,original_event_id:string>"
+      type = "struct<original_source:string,original_event_id:string,event_category:string>"
     }
     # Since 2026-10-02. Files written before it lack the field and read
     # back as null, so a query over resources covers from that date.
@@ -230,6 +230,14 @@ resource "aws_glue_catalog_table" "normalized_events" {
     columns {
       name = "tls"
       type = "struct<version:string,cipher:string>"
+    }
+
+    # Since 2026-10-06, with api.read_only and metadata.event_category:
+    # whether a console sign-in used MFA (KSI-IAM-APM validate 1). Null
+    # before then, and on every event that is not a console sign-in.
+    columns {
+      name = "is_mfa"
+      type = "boolean"
     }
   }
 

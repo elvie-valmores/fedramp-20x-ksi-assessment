@@ -55,6 +55,25 @@ class Resources(unittest.TestCase):
         self.assertEqual(handler._to_ocsf(FIXTURES["console_login_success"], "437672023758")["resources"], [])
 
 
+class ChangeAndFactor(unittest.TestCase):
+    """The fields added 2026-10-06: what a change query and the factor query read."""
+
+    def test_read_only_and_category_are_kept(self):
+        out = handler._to_ocsf(FIXTURES["kms_decrypt"], "437672023758")
+        self.assertIs(out["api"]["read_only"], True)
+        self.assertEqual(out["metadata"]["event_category"], "Management")
+
+    def test_a_console_sign_in_records_its_factor(self):
+        self.assertIs(handler._to_ocsf(FIXTURES["console_login_success"], "437672023758")["is_mfa"], True)
+        no_mfa = {**FIXTURES["console_login_success"],
+                  "additionalEventData": {**FIXTURES["console_login_success"]["additionalEventData"], "MFAUsed": "No"}}
+        self.assertIs(handler._to_ocsf(no_mfa, "437672023758")["is_mfa"], False)
+
+    def test_factor_is_null_off_sign_in(self):
+        # Absent, not False: an API call says nothing about a factor.
+        self.assertIsNone(handler._to_ocsf(FIXTURES["kms_decrypt"], "437672023758")["is_mfa"])
+
+
 class Classification(unittest.TestCase):
     def test_sign_ins(self):
         for name, cls, status in EXPECTED:
