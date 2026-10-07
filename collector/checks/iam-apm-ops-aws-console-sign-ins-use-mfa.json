@@ -1,0 +1,22 @@
+{
+  "id": "iam-apm-ops-aws-console-sign-ins-use-mfa",
+  "indicator": "KSI-IAM-APM",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: no successful console sign-in by root or an IAM user in the last three days without MFA, read from each ConsoleLogin's MFAUsed. Kept since 2026-10-07 00:25 UTC; earlier sign-ins carry no factor and are not judged",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, actor.user.type AS type, from_unixtime(time / 1000) AS at, is_mfa FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND api.operation = 'ConsoleLogin' AND status = 'Success' AND actor.user.type IN ('Root', 'IAMUser') AND time >= 1791332700000 AND is_mfa IS DISTINCT FROM true ORDER BY 3 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-APM.validate.1",
+      "covers": "partial",
+      "gap": "Root and IAM users only, which here means root: the operator signs in through Google's SAML, whose factor AWS does not see. The query lists only sign-ins without MFA, so root sign-ins that used it are not enumerated."
+    }
+  ]
+}

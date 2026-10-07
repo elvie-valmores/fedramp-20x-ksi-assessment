@@ -8636,3 +8636,37 @@ CloudTrail records, committed to a public repository. They are IDs only, which s
 expired within hours on 2026-10-02. They are replaced with AWS's documented example ID, and the
 repository is now scanned for secrets on every push (`svc-asm-cfg-repository-secret-scan`). The
 originals remain in git history.
+
+## 2026-10-07 — The normalizer keeps readOnly, eventCategory and the sign-in factor; four standing queries on them
+
+Deployed 2026-10-07 at 00:24 UTC by an elevated apply: the Lambda's code, and three columns added to
+`normalized_events`. Events normalized since then carry them; earlier events read them as null.
+
+- **`api.read_only`:** CloudTrail's own read/write flag.
+- **`metadata.event_category`:** Management, Data or Insight.
+- **`is_mfa`:** ConsoleLogin's `MFAUsed`. It is null, not false, on anything that is not a console
+  sign-in.
+
+**Four standing queries, zero results expected:**
+
+| Check | Row | What it asks |
+|---|---|---|
+| `svc-acm-ops-aws-changes-by-declared-principals` | SVC-ACM v2, CMT-RMV v4 (partial) | No management-plane change outside a declared lane |
+| `iam-jit-ops-aws-read-only-role-makes-no-changes` | IAM-JIT v4 (partial) | The standing role makes no change beyond starting and stopping elevations and queries |
+| `iam-aam-ops-aws-identity-changes-by-declared-principals` | IAM-AAM v2 (partial) | No Identity Center or Identity Store change by an undeclared principal |
+| `iam-apm-ops-aws-console-sign-ins-use-mfa` | IAM-APM v1 (partial) | No root or IAM-user console sign-in without MFA |
+
+**The lanes in the first query** came from three days of observed changes:
+
+- **Any change:** the elevated role, and AWS service-linked roles.
+- **A narrow, declared lane each:**
+  - log-stream creation by the project's roles
+  - Athena query starts by the collector, the detection Lambda and the read-only role
+  - elevation start and stop by the read-only role
+  - assignments and reserved-path IAM by the elevation workflow, and revocation by its backstop
+  - registry pushes by the build role
+  - Identity Center sign-in tokens
+
+**Tested before relying on it.** The query was re-run over three days of history, with an
+operation-name test standing in for the not-yet-populated `read_only`. It returned nothing. Over the
+same days without the allowlist it returns every change, so the lanes are what excuse them.

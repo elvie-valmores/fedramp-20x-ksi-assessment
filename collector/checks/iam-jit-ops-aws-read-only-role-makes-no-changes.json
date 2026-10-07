@@ -1,0 +1,22 @@
+{
+  "id": "iam-jit-ops-aws-read-only-role-makes-no-changes",
+  "indicator": "KSI-IAM-JIT",
+  "mechanism": "log_query",
+  "evidence_type": "OPS",
+  "description": "Standing query, zero results expected: the operator's standing read-only role made no successful change in the last three days beyond its declared ones -- starting and stopping an elevation, and starting and stopping Athena queries. Privileged action happens only under an elevation. api.read_only and metadata.event_category exist from 2026-10-07 00:25 UTC (DECISIONS.md, 2026-10-06), so the window fills over the following three days.",
+  "required_cadence": "3 days",
+  "params": {
+    "region": "us-east-1",
+    "database": "fedramp_20x_ksi_log_corpus",
+    "workgroup": "fedramp-20x-ksi-log-corpus",
+    "expect": "no_rows",
+    "query": "SELECT dt, api.service.name AS service, api.operation AS operation, count(*) AS events FROM normalized_events WHERE source='aws' AND dt >= date_format(date_add('day', -2, current_date), '%Y-%m-%d') AND status = 'Success' AND api.read_only = false AND regexp_like(coalesce(actor.user.name, ''), 'assumed-role/AWSReservedSSO_OperatorReadOnly_[0-9a-f]+/') AND api.operation NOT IN ('StartExecution', 'StopExecution', 'StartQueryExecution', 'StopQueryExecution') GROUP BY 1,2,3 ORDER BY 1 DESC LIMIT 50"
+  },
+  "matrix_rows": [
+    {
+      "row": "KSI-IAM-JIT.validate.4",
+      "covers": "partial",
+      "gap": "AWS only. The standing role's changes are held to its declared lane; the elevated role's sessions, which outlive their assignment by up to an hour, are not correlated with grant windows."
+    }
+  ]
+}
