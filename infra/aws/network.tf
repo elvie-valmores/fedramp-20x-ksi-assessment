@@ -536,4 +536,10 @@ resource "aws_flow_log" "main" {
   tags = {
     Name = "fedramp-20x-ksi"
   }
+
+  # Delivery starts as soon as the flow log exists; until the role's policy
+  # is attached it is denied CreateLogStream, and the first records are lost.
+  # Seen in sessions 1 and 2 (iam-elp-ops-aws-project-roles-not-denied,
+  # 2026-10-07): the policy was created after the flow log.
+  depends_on = [aws_iam_role_policy.flow_logs]
 }

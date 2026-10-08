@@ -8822,3 +8822,26 @@ endpoint or active task definition left.
 **Open: a stall in the full run.** The full collector run with the environment up stalled for over
 30 minutes on an AWS HTTPS read, and was stopped. Run one at a time with a 2-minute limit, no
 environment check hung. The persistent checks are being timed one by one to find it.
+
+**After session 2, the standing checks found three things, 2026-10-07:**
+
+- **The operator's own sign-in read as a change.** Identity Center's `Authenticate` and
+  `UserAuthentication` events are marked as writes, and the sign-in lane allowed only `CreateToken`.
+  It now allows the Identity Center user's events on its sign-in services (sso, signin, sso-oauth).
+  That identity type cannot call administration APIs, which arrive as assumed roles.
+- **A real ordering defect in the flow logs.** The flow-logs role was denied `CreateLogStream` in
+  both sessions (1 event, then 2). In the apply, `aws_flow_log.main` was created before
+  `aws_iam_role_policy.flow_logs`, so delivery started without its permissions and lost its first
+  records.
+  - **Fix:** `depends_on` in `network.tf`, effective next stand-up.
+  - **The two denials** age out of `iam-elp-ops-aws-project-roles-not-denied` by 2026-10-10.
+- **S3.8 and S3.13 turned FAILED in Security Hub.** Each was evaluated on the load balancer log
+  bucket in the seconds after creation, before its public access block and lifecycle were attached
+  (the lifecycle took 57 seconds). The bucket is deleted and the findings archived; the control
+  status clears at the next evaluation. Transient, and not excepted.
+
+**The full-run stall is environment-only.** Timed one by one, no persistent check hung; the slowest
+is `svc-sin-cfg-aws-keys-decrypt-only-declared` at 84 seconds, which simulates every role. With the
+session roles standing it simulates more, and is the likely staller. CI runs with the environment
+down, so this affects session runs only. In sessions, run the gated checks one at a time with a time
+limit, as on 2026-10-07.
