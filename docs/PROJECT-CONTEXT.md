@@ -73,76 +73,51 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ---
 
-## Resume here — state at the end of 2026-10-07 (about 01:00 UTC)
+## Resume here — state at the end of 2026-10-07 (evening)
 
 Read this before inferring anything from the code or from git history. Both have been stale before,
-and so has this block. The most common failure in this project is a control that is configured,
-deployed and internally consistent, and still does nothing. Nine have been found, every one by
-running the thing rather than reading it. Check against the live accounts.
+and so has this block. Check against the live accounts.
 
-**Where it stands.** Every one of the 380 evidence rows is accounted for:
+**Where it stands.** Weeks 1 to 3 of the finish-line plan are done. Every evidence row is accounted
+for:
 
 | Status | Rows |
 |---|---|
 | Full | 137 |
-| Partial, with the gap stated | 124 |
-| Recorded, with reason and risk (`registers/row-positions.yaml`) | 119 |
+| Partial, gap stated | 124 |
+| Recorded, with risk | 119 |
 | **Open** | **0** |
 
-That is 205 checks and 138 self-test assertions. The SDR emits and validates locally. Of the
-definition of done (DECISIONS.md, 2026-10-03), two clauses remain:
-
-- **Every failing check fixed or recorded.** Most clear by themselves; session 2 clears the rest. The
-  list is below.
-- **The final SDR, emitted by CI and valid.** Week 4's freeze.
+That is 205 checks and 139 self-test assertions. Session 2 proved all 31 environment-gated checks
+live, and the environment is torn down: 292 persistent, 0 ephemeral.
 
 ### First actions for the next session
 
-1. **Sign in:** `aws sso login --profile caliper-readonly`. If it fails, click the Identity Center
-   tile in Google's app grid as `alex@` first.
-   - `AWS_PROFILE=caliper-readonly` is the default in `~/.zshrc`.
-   - Anything that changes the account needs `infra/aws/elevate.sh start "<why>" [minutes]`, then
-     `AWS_PROFILE=caliper-elevated`.
-   - **Only one elevation runs at a time.** `elevate.sh start` refuses while one is running, so
-     check `elevate.sh status` before starting. On 2026-10-06 a refused start went unnoticed, and an
-     apply ran under the previous elevation's justification.
-2. **Verify, do not trust:**
-   - **The daily collector run:** `gh run list --workflow collect.yml -L 3`. It is expected red
-     only on `svc-sin-cfg-aws-backups-restorable` (clears 2026-10-09), and on `iam-elp` until about
-     2026-10-06 18:00 UTC (the root MFA change ages out). Its log should show "signal report: 25 of
-     25" and the self-test's 103 assertions.
-   - **The policy gate:** `gh run list --workflow policy.yml -L 3`, green.
-   - **Drift:** `gh run list --workflow drift.yml -L 3`, green.
-   - **The persistence boundary:** `infra/aws/boundary.py --persistent | wc -l` gives **292**, and
-     `--ephemeral` gives 0.
-3. **Expected red in CI until they clear:**
+1. **Sign in:** `aws sso login --profile caliper-readonly`. Changes go through
+   `infra/aws/elevate.sh`; check `elevate.sh status` before starting one.
+2. **Verify:**
+   - `gh run list --workflow collect.yml -L 3`
+   - `gh run list --workflow policy.yml -L 3`
+   - `gh run list --workflow drift.yml -L 3`
+3. **Expected red in CI until it clears:**
 
    | Check | Clears |
    |---|---|
    | `svc-sin-cfg-aws-backups-restorable` | 2026-10-09 |
-   | `iam-elp-ops-aws-project-roles-not-denied` (two real, understood denials) | About 2026-10-09 |
-   | `mla-rvl-ops-review-queries-recorded` | After one CI run |
-   | `piy-giv-ops-aws-inventory-current` (Config lag on a deleted elevated role) | By itself |
-   | The never-run scenarios: `cna-eis-ops-stopped-task-replaced`, `cna-uln-ops-idle-connection-closed`, `svc-vcm-ops-mis-scoped-token-rejected` | Session 2 |
-   | `rpl-trc-ops-deliberate-tests-current` | Session 2 |
+   | `iam-elp-ops-aws-project-roles-not-denied` (the flow-log ordering defect, fixed) | 2026-10-10 |
+   | `cna-ibp-ops-aws-failing-controls-excepted` (S3.8 and S3.13, transient) | Security Hub's next evaluation |
+   | `piy-giv-ops-aws-inventory-current` (Config lag on the deleted database) | By itself |
 
-4. **Then session 2.** The steps:
-   - **Elevate,** after checking `elevate.sh status`.
-   - **Apply both phases** at `git-0cee46bbabef`.
-   - **Run the migration.**
-   - **Run the scenarios:** `stopped_task_replaced`, `idle_connection_closed` and
-     `mis_scoped_token_rejected`. Rerun any past its cadence.
-   - **Run the full collector with the environment up.** It proves the session checks written on
-     2026-10-07:
-     - the WAF
-     - circuit breakers, task spread, distinct identities
-     - `security.txt`, the idle timeout, health configuration
-     - interfaces' groups, group references
-     - secret rotation and versions
-     - running images: declared, signed and traced
-     - the database's TLS and IAM authentication, from its own logs
-   - **Tear down.**
-   - **Decide the GuardDuty runtime trial** first: its managed VPC endpoint may block teardown.
+   Anything else red is new: investigate it.
+4. **Week 4, what is left:**
+   - **Review the Artifact Registry cleanup policy's dry-run log, then set it live.** This is a GCP
+     apply.
+   - **Emit and freeze the final SDR from CI,** once the list above is green. Check that it
+     validates, and record the freeze in DECISIONS.md.
+   - **Optional, if time allows:**
+     - the task generates its own TLS key, so state stops holding one
+     - GCP Privileged Access Manager
+     - an apply job in CI, which would close the standing change exception
 
 ### Waiting on the user
 
