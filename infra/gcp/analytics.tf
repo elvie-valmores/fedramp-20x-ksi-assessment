@@ -368,9 +368,15 @@ resource "google_artifact_registry_repository" "pipeline" {
   # Keep the five most recent images; delete others once 30 days old
   # (2026-10-03, the lean retention set). The pinned digest in pipeline.tf
   # must survive, which a recent build always does; svc-vri-ops-gcp-pinned-
-  # image-present fails the same day if it ever does not. Dry run first:
-  # Artifact Registry logs what it would delete without deleting.
-  cleanup_policy_dry_run = true
+  # image-present fails the same day if it ever does not.
+  #
+  # Live since 2026-10-07. It ran in dry run from 2026-10-03, but a dry run
+  # logs only what qualifies, and nothing does before 2026-10-31, when the
+  # oldest image turns 30 days old. So the review was of the policy against
+  # the versions instead (DECISIONS.md, 2026-10-07): each build is four
+  # versions, the latest build -- the pinned one -- is kept whole, and the
+  # two older builds are what would go.
+  cleanup_policy_dry_run = false
 
   cleanup_policies {
     id     = "keep-five-most-recent"

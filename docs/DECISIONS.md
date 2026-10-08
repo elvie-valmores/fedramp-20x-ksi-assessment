@@ -8845,3 +8845,24 @@ is `svc-sin-cfg-aws-keys-decrypt-only-declared` at 84 seconds, which simulates e
 session roles standing it simulates more, and is the likely staller. CI runs with the environment
 down, so this affects session runs only. In sessions, run the gated checks one at a time with a time
 limit, as on 2026-10-07.
+
+## 2026-10-07 — The Artifact Registry cleanup policy is live, reviewed against the versions
+
+The lean retention set (2026-10-03) put the policy in dry run until its log was reviewed. The log was
+empty, correctly: a dry run logs only what qualifies, and nothing does before 2026-10-31, when the
+oldest image (2026-10-01) turns 30 days old. Waiting for a log would have taken until the project's
+last day.
+
+**The review, done instead against the policy and the twelve versions present:**
+
+- **What a build is:** four versions -- the image index, its cosign signature, and two untagged
+  manifests.
+- **What is kept:** "keep the five most recent", so the whole of the latest build. That build is
+  `git-0cee46bbabef`, the digest `pipeline.tf` pins.
+- **What would go:** the two older builds (`git-70600724abeb`, `git-193454c1a7b2`), from
+  2026-10-31. Nothing uses them.
+- **The worst case:** a new build lands but the pin is not moved. Then the pinned image is deleted
+  once 30 days old, and `svc-vri-ops-gcp-pinned-image-present` fails the next morning.
+
+Set live by an elevated GCP apply (`cleanup_policy_dry_run = false`) and verified. The retention
+register says so.

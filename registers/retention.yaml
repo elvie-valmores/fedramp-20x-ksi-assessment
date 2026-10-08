@@ -77,7 +77,7 @@ entries:
   - what: Analytics images in Artifact Registry
     where: fedramp-20x-ksi (Artifact Registry)
     reason: The five most recent are kept; older images go once 30 days old. The pinned digest is checked daily (svc-vri-ops-gcp-pinned-image-present)
-    expires_with: Being outside the five most recent and 30 days old (cleanup policy, in dry run until reviewed)
+    expires_with: Being outside the five most recent and 30 days old (cleanup policy, live since 2026-10-07; nothing qualifies before 2026-10-31)
   - what: The measurements warehouse rows
     where: measurements.measurements (BigQuery)
     reason: The only copy of a measurement past 30 days -- extracts expire then and the database is rebuilt every session -- so this is how long customer data is kept

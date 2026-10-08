@@ -110,8 +110,8 @@ live, and the environment is torn down: 292 persistent, 0 ephemeral.
 
    Anything else red is new: investigate it.
 4. **Week 4, what is left:**
-   - **Review the Artifact Registry cleanup policy's dry-run log, then set it live.** This is a GCP
-     apply.
+   - ~~**Review the Artifact Registry cleanup policy, then set it live.**~~ **Done 2026-10-07,**
+     reviewed against the versions; nothing qualifies before 2026-10-31.
    - **Emit and freeze the final SDR from CI,** once the list above is green. Check that it
      validates, and record the freeze in DECISIONS.md.
    - **Optional, if time allows:**
