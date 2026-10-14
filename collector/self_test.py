@@ -610,6 +610,19 @@ _RULE = {"Name": "sweep", "State": "ENABLED", "ScheduleExpression": "rate(15 min
 _SWEEP = {"Arn": "arn:aws:lambda:us-east-1:1:function:fedramp-20x-ksi-elevation", "Input": '{"action": "sweep"}'}
 
 
+_GRANT_E3 = "elevations/dt=2026-10-07/e3-granted-212300.json"
+_GRANT_E4 = "elevations/dt=2026-10-08/e4-granted-001825.json"
+_SWEEP_KEY = "elevations/dt=2026-10-08/sweep-swept-002733.json"
+
+
+def _elevation_grant(hhmm, minutes, day=7):
+    return {"phase": "granted", "at": f"2026-10-{day:02d}T{hhmm}:00+00:00", "status": "SUCCEEDED", "minutes": minutes}
+
+
+def _swept(hhmm, status="SUCCEEDED"):
+    return {"phase": "swept", "at": f"2026-10-08T{hhmm}:00+00:00", "stopped": [], "removed": [{"principal": "u", "status": status}]}
+
+
 def _running(age_minutes, window):
     return {"arn": "e", "started": (_JIT_NOW - _td(minutes=age_minutes)).isoformat(), "minutes": window}
 
@@ -1178,12 +1191,19 @@ CFG_CASES = [
         "shared role": [_svc("api"), {**_svc("worker"), "task_role": "role-api"}],
         "no role": [{**_svc("api"), "task_role": None}],
     }),
-    ("evaluate_elevations_revoked", lambda c: cfg.evaluate_elevations_revoked(*c),
+    # e1 revoked itself; e2 is running; e3 and e4 were released, as on
+    # 2026-10-07, and one sweep removed the assignment they shared.
+    ("evaluate_elevations_revoked", lambda c: cfg.evaluate_elevations_revoked(*c, 15),
      (["elevations/dt=2026-10-05/e1-requested-100000.json", "elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoked-101500.json",
-       "elevations/dt=2026-10-05/e2-granted-110000.json"], {"e2"}), {
-        "granted, never revoked": (["elevations/dt=2026-10-05/e1-granted-100005.json"], set()),
-        "revocation failed": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoke-failed-101500.json"], set()),
-        "unrevoked despite a sweep": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/sweep-swept-120000.json"], set()),
+       "elevations/dt=2026-10-05/e2-granted-110000.json", _GRANT_E3, _GRANT_E4, _SWEEP_KEY], {"e2"},
+      {_GRANT_E3: _elevation_grant("21:23", 180), _GRANT_E4: _elevation_grant("00:18", 15, day=8), _SWEEP_KEY: _swept("00:27")}), {
+        "granted, never revoked": (["elevations/dt=2026-10-05/e1-granted-100005.json"], set(), {}),
+        "revocation failed": (["elevations/dt=2026-10-05/e1-granted-100005.json", "elevations/dt=2026-10-05/e1-revoke-failed-101500.json"], set(), {}),
+        "swept before the grant": ([_GRANT_E4, _SWEEP_KEY], set(), {_GRANT_E4: _elevation_grant("00:30", 15, day=8), _SWEEP_KEY: _swept("00:27")}),
+        "swept after its window": ([_GRANT_E4, _SWEEP_KEY], set(), {_GRANT_E4: _elevation_grant("00:18", 15, day=8), _SWEEP_KEY: _swept("00:49")}),
+        "a removal failed": ([_GRANT_E4, _SWEEP_KEY], set(), {_GRANT_E4: _elevation_grant("00:18", 15, day=8), _SWEEP_KEY: _swept("00:27", "FAILED")}),
+        "a sweep that removed nothing": ([_GRANT_E4, _SWEEP_KEY], set(), {_GRANT_E4: _elevation_grant("00:18", 15, day=8), _SWEEP_KEY: {**_swept("00:27"), "removed": []}}),
+        "no readable window": ([_GRANT_E4, _SWEEP_KEY], set(), {_GRANT_E4: {**_elevation_grant("00:18", 15, day=8), "minutes": None}, _SWEEP_KEY: _swept("00:27")}),
     }),
     ("evaluate_iam_mutation_principals", lambda c: cfg.evaluate_iam_mutation_principals(c, ["AWSReservedSSO_ElevatedAdmin_*"]),
      {"AWSReservedSSO_ElevatedAdmin_ab12": ["iam:CreateRole"]}, {

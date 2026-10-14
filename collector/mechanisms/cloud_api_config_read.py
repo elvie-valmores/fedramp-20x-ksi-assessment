@@ -1569,7 +1569,9 @@ class CloudAPIConfigRead(Mechanism):
         resource: standing_allowed (standing_assignments), max_session_seconds
         and home_region (elevated_bounded), rule, function and max_minutes
         (elevation_backstop), state_machine, allowance_minutes and
-        lookback_days (elevations_within_window, elevations_justified). The
+        lookback_days (elevations_within_window, elevations_justified), and
+        bucket, state_machine, lookback_days and allowance_minutes
+        (elevations_revoked). The
         account's assignments are read for every principal, groups included,
         so access through a group is not missed.
         """
@@ -1588,7 +1590,10 @@ class CloudAPIConfigRead(Mechanism):
             running = {e["name"] for page in sfn.get_paginator("list_executions").paginate(
                 stateMachineArn=f"arn:aws:states:{region}:{account}:stateMachine:{p['state_machine']}", statusFilter="RUNNING")
                 for e in page["executions"]}
-            ok, detail, evidence = evaluate_elevations_revoked(keys, running)
+            # The grants carry their window and the sweeps what they removed.
+            bodies = {k: json.loads(s3.get_object(Bucket=p["bucket"], Key=k)["Body"].read())
+                      for k in keys if "-granted-" in k or "/sweep-swept-" in k}
+            ok, detail, evidence = evaluate_elevations_revoked(keys, running, bodies, p["allowance_minutes"])
             return CheckResult(check.id, ok, evidence, detail)
 
         if resource == "elevation_backstop":
@@ -3660,16 +3665,26 @@ def evaluate_ecs_services(services: list[dict], assertion: str, multi_task: list
     raise ValueError(f"unknown ecs_services assertion {assertion!r}")
 
 
-def evaluate_elevations_revoked(keys: list[str], running: set[str]) -> tuple[bool, str, dict]:
+def evaluate_elevations_revoked(keys: list[str], running: set[str], bodies: dict[str, dict],
+                               allowance_minutes: int) -> tuple[bool, str, dict]:
     """IAM-JIT validate 3: every granted elevation has a revocation recorded after it.
 
     keys are the log store's elevations/ record names,
     <execution>-<phase>-<HHMMSS>.json; the backstop's sweeps are "swept".
-    An elevation still running is not yet due one.
+    bodies holds the grant and sweep records by key. An elevation still
+    running is not yet due one.
+
+    `elevate.sh release` stops the workflow before its own revocation, and
+    leaves the assignment to the backstop (elevation.tf). Such an elevation
+    is revoked when a sweep after its grant removed assignments, every
+    removal succeeded, and it fell within the requested minutes plus the
+    allowance. The assignment is one per principal, so that sweep removed
+    it. A grant with no readable window, or a sweep with a failed removal,
+    covers nothing. First seen on 2026-10-07 (DECISIONS.md, 2026-10-13).
     """
     import re
 
-    granted, revoked, swept = {}, set(), 0
+    granted, revoked, sweeps = {}, set(), []
     for k in keys:
         # The file name only: a revocation after midnight UTC lands in the
         # next day's dt= folder, and must still match its grant.
@@ -3681,17 +3696,31 @@ def evaluate_elevations_revoked(keys: list[str], running: set[str]) -> tuple[boo
             elif phase == "revoked":
                 revoked.add(name)
         elif "/sweep-swept-" in k:
-            swept += 1
-    unrevoked = sorted(n for n in granted if n not in revoked and n not in running)
+            body = bodies.get(k) or {}
+            removed = body.get("removed") or []
+            if body.get("at") and removed and all(r.get("status") == "SUCCEEDED" for r in removed):
+                sweeps.append(datetime.fromisoformat(body["at"]))
+    by_backstop, unrevoked = [], []
+    for n in sorted(granted):
+        if n in revoked or n in running:
+            continue
+        grant = bodies.get(granted[n]) or {}
+        if grant.get("at") and isinstance(grant.get("minutes"), int):
+            at = datetime.fromisoformat(grant["at"])
+            due = at + timedelta(minutes=grant["minutes"] + allowance_minutes)
+            if any(at < s <= due for s in sweeps):
+                by_backstop.append(n)
+                continue
+        unrevoked.append(n)
     evidence = {"granted": len(granted), "revoked": len(revoked & set(granted)), "running": sorted(running & set(granted)),
-                "backstop_sweeps": swept, "unrevoked": unrevoked}
+                "revoked_by_backstop": by_backstop, "successful_sweeps": len(sweeps), "unrevoked": unrevoked}
     if not granted:
         return True, "no elevation was granted in the window -- nothing to revoke", evidence
-    if unrevoked and not swept:
-        return False, f"{len(unrevoked)} granted elevation(s) with no revocation recorded: {', '.join(unrevoked)}", evidence
     if unrevoked:
-        return False, f"{len(unrevoked)} granted elevation(s) without their own revocation; the backstop swept {swept} time(s) -- check it covered them", evidence
-    return True, f"all {len(granted)} granted elevation(s) were revoked, each recorded", evidence
+        return False, (f"{len(unrevoked)} granted elevation(s) with no revocation of their own and no successful "
+                       f"sweep within their window: {', '.join(unrevoked)}"), evidence
+    return True, (f"all {len(granted) - len(evidence['running'])} ended elevation(s) were revoked: "
+                  f"{len(revoked & set(granted))} by their own revocation, {len(by_backstop)} by the backstop after release"), evidence
 
 
 # --- Who can change IAM, idle roles, image scan coverage (2026-10-07) ---

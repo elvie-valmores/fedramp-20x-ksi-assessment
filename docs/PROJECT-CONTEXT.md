@@ -110,23 +110,24 @@ live, and the environment is torn down: 292 persistent, 0 ephemeral.
 
    | Check | Clears |
    |---|---|
-   | `svc-acm-ops-aws-no-drift` (GuardDuty `RDS_DATA_RISK`, undeclared) | When the user applies the `posture.tf` patch; then run `drift.yml` |
+   | `svc-acm-ops-aws-no-drift` (GuardDuty `RDS_DATA_RISK`) | When the `ignore_changes` patch to `posture.tf` is committed; then run `drift.yml` |
    | `mla-rvl-ops-review-queries-recorded` (the 6-day gap) | The next collect run |
    | `piy-giv-ops-aws-inventory-current` (Config lag on two deleted session keys) | By itself, about 2026-10-15 |
-   | `mla-rvl-ops-review-windows-continuous` (the 6.53-day gap, true) | About 2026-11-06, **past the finish line** |
-   | `iam-jit-ops-aws-elevations-revoked` (two released elevations; revoked by the backstop, which the check does not credit) | About 2026-11-07 unless the check changes, **past the finish line** |
+   | `mla-rvl-ops-review-windows-continuous` (the 6.53-day gap, true) | About 2026-11-06. **Frozen with it visible,** a recorded finding (DECISIONS.md, 2026-10-13) |
 
    Anything else red is new: investigate it.
 4. **Week 4, what is left:**
    - ~~**Review the Artifact Registry cleanup policy, then set it live.**~~ **Done 2026-10-07,**
      reviewed against the versions; nothing qualifies before 2026-10-31.
-   - **Decide how the last two red checks above meet the freeze** (DECISIONS.md, 2026-10-13).
-   - **Emit and freeze the final SDR from CI,** once the list above is green. Check that it
-     validates, and record the freeze in DECISIONS.md.
+   - **Emit and freeze the final SDR from CI,** once the list above is green apart from the
+     continuity gap, which stays as a recorded finding. Check that it validates, **commit it to the
+     repository** (artifacts expire), and record the freeze in DECISIONS.md.
+   - **Then wind down** (operator's decision, 2026-10-13): copy `collector-runs/` and
+     `elevations/` out of the log store, disable the scheduled workflows, and tear down AWS
+     persistent and GCP, each from a reviewed plan, before about 2026-10-21.
    - **Optional, if time allows:**
-     - the task generates its own TLS key, so state stops holding one
-     - GCP Privileged Access Manager
-     - an apply job in CI, which would close the standing change exception
+     - ~~the TLS key, GCP Privileged Access Manager, an apply job in CI~~ **Not doing,** at the
+       close: each stays a recorded gap with its risk.
 
 ### Waiting on the user
 

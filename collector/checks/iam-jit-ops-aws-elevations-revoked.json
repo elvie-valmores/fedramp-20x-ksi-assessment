@@ -3,7 +3,7 @@
   "indicator": "KSI-IAM-JIT",
   "mechanism": "cloud_api_config_read",
   "evidence_type": "OPS",
-  "description": "Every elevation granted in the last 30 days has a revocation recorded after it in the log store, unless it is still running: revocation observed firing, from the workflow's own Object Locked records",
+  "description": "Every elevation granted in the last 30 days has a revocation recorded after it in the log store, unless it is still running: its own, or, after release, a backstop sweep whose removals all succeeded within its requested minutes plus 15. Revocation observed firing, from the workflow's own Object Locked records",
   "required_cadence": "3 days",
   "params": {
     "provider": "aws",
@@ -12,7 +12,8 @@
     "elevated": "ElevatedAdmin",
     "bucket": "fedramp-20x-ksi-log-store-437672023758",
     "state_machine": "fedramp-20x-ksi-elevation",
-    "lookback_days": 30
+    "lookback_days": 30,
+    "allowance_minutes": 15
   },
   "matrix_rows": [
     {

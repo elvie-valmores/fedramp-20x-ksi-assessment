@@ -8885,8 +8885,9 @@ A manual run, 38492179660, then ran all 205 checks.
 - **What failed was the sequencing, not the check.** A doc-freshness assertion sat in front of
   evidence collection and could stop it. `policy.yml` runs on every push and did not run the same
   assertion. It now does, so a push like `5f5737a` fails on that push.
-- **Not changed, and open:** collect's self-test still gates the checks. Whether a failed self-test
-  should stop collection, or only mark the run, is a judgement left open here.
+- **Collect's gate is narrowed to the judgements.** A failing self-test still stops the checks,
+  since it means a judgement cannot be trusted. `matrix_rows.py --check` left collect, because a
+  stale report says nothing about the judgements. It runs in `policy.yml`, on each push and daily.
 
 **Drift has been red since 2026-10-09 on one resource:** `aws_guardduty_detector_feature.rds_login_events`,
 with the plan to replace it. GuardDuty now returns an `additional_configuration` for `RDS_DATA_RISK`.
@@ -8906,18 +8907,47 @@ failures:
 | `mla-rvl-ops-review-queries-recorded` | The newest record before this run was 157 hours old | The next run, which reads this one |
 | `mla-rvl-ops-review-windows-continuous` | A 6.53-day gap, over the 3-day window. **True:** the record was not continuous | When the gap leaves the 30-day lookback, about 2026-11-06 |
 | `piy-giv-ops-aws-inventory-current` | Config still lists two session KMS keys (audit and container logs; secret material). They were scheduled for deletion on 2026-10-05 with a 7-day window, and deleted at 2026-10-13 02:04 UTC, 23 hours before the run | By itself, within the lag recorded on 2026-10-02 |
-| `iam-jit-ops-aws-elevations-revoked` | Two 2026-10-07 elevations ended by release, not by expiry | About 2026-11-07, unless the check changes |
+| `iam-jit-ops-aws-elevations-revoked` | Two 2026-10-07 elevations ended by release, not by expiry | **Fixed in the check;** passes live |
 
 **The elevations were revoked. The check cannot tell.** Both were stopped by `elevate.sh` release:
 `elevate-20261007T212255Z` (180 minutes asked for, released at 00:16:05 UTC on 2026-10-08) and
 `elevate-20261008T001820Z` (15 minutes asked for, released 16 seconds after it was granted). Release
 stops the workflow and leaves the assignment to the backstop. The backstop deleted the one shared
 assignment at 00:27:30 UTC, 11 minutes after the first release, and it succeeded. `ElevatedAdmin`
-has no assignments now. The check counts a backstop sweep as a hint, not as an elevation's
+has no assignments now. The check counted a backstop sweep as a hint, not as an elevation's
 revocation. This is the first time release has been used since the check was written.
 
-**Two of these outlast the finish line.** The continuity gap and the elevations check both stay red
-past the end of October. "Freeze the SDR once the list is green" can no longer be met as written.
+**The check now credits the backstop.** A released elevation is revoked when a sweep after its grant
+removed assignments, every removal succeeded, and it fell within the requested minutes plus the
+15-minute allowance `elevations-within-window` already uses. The assignment is one per principal,
+so that sweep removed it. The check reads the grant and sweep records' bodies; their names alone
+were not enough. Seven negative controls: never revoked, revocation failed, swept before the grant,
+swept after its window, a removal failed, a sweep that removed nothing, and no readable window.
+**Live: all 8 ended elevations revoked, 6 by their own revocation and 2 by the backstop.**
+
+**One of these outlasts the finish line,** and it stays. The continuity gap is true, and it is red
+until about 2026-11-06. The definition of done (2026-10-03) allows "a recorded finding with a
+decision", and this is one. The decision is to freeze with it visible, not to excuse it or widen
+the window: the gap, its cause and the fix are better evidence than a clean record.
+
+**The GuardDuty declaration, corrected.** The first patch handed over declared `RDS_DATA_RISK` in
+an `additional_configuration` block. A plan rejected it: provider 5.100.0, the last 5.x, accepts
+only `EKS_ADDON_MANAGEMENT`, `ECS_FARGATE_AGENT_MANAGEMENT` and `EC2_AGENT_MANAGEMENT` there. The
+replacement, handed over as a patch, is `lifecycle { ignore_changes = [additional_configuration] }`, after the
+precedent of `desired_count` in `compute.tf`. The feature's own status stays declared and watched.
+A move to provider 6.x touches all 292 resources, and is not worth it at the close.
+
+**The close (operator's decision).** Freeze, then wind down. The live infrastructure is not kept
+to show anyone; the Terraform, the registers, the run records and the frozen SDR are the evidence.
+The order:
+
+1. Wait for the self-clearing checks (inventory lag, the newest-record age) and a green drift run.
+2. Emit the final SDR from CI, validate it, and **commit it to the repository.** Artifacts expire
+   after 90 days.
+3. Copy `collector-runs/` and `elevations/` out of the log store into the repository.
+4. Disable the scheduled workflows, then tear down: AWS persistent and GCP, with a reviewed plan
+   for each. Before GuardDuty's trial ends, about 2026-10-21. GCP key rings cannot be deleted and
+   cost nothing.
 
 **Also seen:** GitHub starts the scheduled runs about 6.5 to 7 hours late. Collect, set for 05:30,
 runs around 12:00, and drift, set for 07:00, runs around 14:00. They still run in order, so nothing

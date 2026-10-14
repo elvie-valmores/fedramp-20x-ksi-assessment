@@ -90,9 +90,12 @@ jobs:
           done
 
       # The negative controls run every day, not only when someone remembers,
-      # and so do the normalizer's, the elevation function's and the metrics' tests. matrix_rows.py
-      # --check fails if a check links a row the matrix lacks, or if the
-      # matrix moved under the links (DECISIONS.md, 2026-10-02).
+      # and so do the normalizer's, the elevation function's and the metrics' tests.
+      # A failure here means a judgement cannot be trusted, so the checks
+      # do not run. matrix_rows.py --check used to run here too. A stale
+      # coverage report says nothing about the judgements, yet it stopped
+      # collection for six days. It runs in policy.yml instead, on each push
+      # and daily (DECISIONS.md, 2026-10-13).
       - name: self-test the judgements
         run: |
           (cd collector && python self_test.py)
@@ -101,7 +104,6 @@ jobs:
           (cd policy && python -m unittest test_gate.py)
           (cd signals && python -m unittest test_generate.py)
           (cd sdr && python -m unittest test_metrics.py test_matrix_rows.py)
-          python sdr/matrix_rows.py --check
 
       # The shared signal report (signals/, DECISIONS.md 2026-10-05): every
       # declared signal over the trailing 90 days, from the run history up
