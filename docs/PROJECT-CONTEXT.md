@@ -110,7 +110,7 @@ live, and the environment is torn down: 292 persistent, 0 ephemeral.
 
    | Check | Clears |
    |---|---|
-   | `svc-acm-ops-aws-no-drift` (GuardDuty `RDS_DATA_RISK`) | When the `ignore_changes` patch to `posture.tf` is committed; then run `drift.yml` |
+   | `svc-acm-ops-aws-no-drift` (GuardDuty `RDS_DATA_RISK`) | Committed 2026-10-14 with `ignore_changes`; the plan is clean. Confirm on the next `drift.yml` run |
    | `mla-rvl-ops-review-queries-recorded` (the 6-day gap) | The next collect run |
    | `piy-giv-ops-aws-inventory-current` (Config lag on two deleted session keys) | By itself, about 2026-10-15 |
    | `mla-rvl-ops-review-windows-continuous` (the 6.53-day gap, true) | About 2026-11-06. **Frozen with it visible,** a recorded finding (DECISIONS.md, 2026-10-13) |

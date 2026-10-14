@@ -8933,8 +8933,8 @@ the window: the gap, its cause and the fix are better evidence than a clean reco
 **The GuardDuty declaration, corrected.** The first patch handed over declared `RDS_DATA_RISK` in
 an `additional_configuration` block. A plan rejected it: provider 5.100.0, the last 5.x, accepts
 only `EKS_ADDON_MANAGEMENT`, `ECS_FARGATE_AGENT_MANAGEMENT` and `EC2_AGENT_MANAGEMENT` there. The
-replacement, handed over as a patch, is `lifecycle { ignore_changes = [additional_configuration] }`, after the
-precedent of `desired_count` in `compute.tf`. The feature's own status stays declared and watched.
+replacement, applied by the user from a patch, is `lifecycle { ignore_changes = [additional_configuration] }`,
+after the precedent of `desired_count` in `compute.tf`. A targeted plan with refresh showed no changes. The feature's own status stays declared and watched.
 A move to provider 6.x touches all 292 resources, and is not worth it at the close.
 
 **The close (operator's decision).** Freeze, then wind down. The live infrastructure is not kept

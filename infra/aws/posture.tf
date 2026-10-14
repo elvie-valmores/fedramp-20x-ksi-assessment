@@ -82,6 +82,16 @@ resource "aws_guardduty_detector_feature" "rds_login_events" {
   detector_id = aws_guardduty_detector.main.id
   name        = "RDS_LOGIN_EVENTS"
   status      = "ENABLED"
+
+  # GuardDuty began returning RDS_DATA_RISK (disabled since 2026-09-23)
+  # about 2026-10-09, and drift read it as a replacement. Provider 5.100.0,
+  # the last 5.x, accepts only three agent names here and cannot declare
+  # it. The feature's own status is still declared and watched; its
+  # sub-settings are not. CloudTrail records any UpdateDetector
+  # (DECISIONS.md, 2026-10-13).
+  lifecycle {
+    ignore_changes = [additional_configuration]
+  }
 }
 
 # Security Hub. Enabling the account is separate from enabling any
