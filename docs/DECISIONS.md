@@ -8866,3 +8866,59 @@ last day.
 
 Set live by an elevated GCP apply (`cleanup_policy_dry_run = false`) and verified. The retention
 register says so.
+
+---
+
+## 2026-10-13 — Six days without a record: collect stopped at self-test, and drift read a new field as a change
+
+The project was left to run unattended from 2026-10-08 to check the daily jobs. **Both failed every
+day, and nothing alerted.** `policy.yml` and the GCP pipeline (30 of 30 six-hourly executions) were
+green throughout.
+
+**Collect ran no checks from 2026-10-08 to 2026-10-13.** `5f5737a` (2026-10-07) changed the gap text
+of `svc-vcm-ops-aws-db-connections-iam` and did not regenerate `docs/MATRIX-COVERAGE.md`. The
+self-test step runs `matrix_rows.py --check`, which failed on the stale report. Everything after it
+was skipped: the checks, the run record and the SDR. **There is no record in `collector-runs/` for
+those six days.** One table cell differed, and the counts were unchanged. Regenerated in `bab64ed`.
+A manual run, 38492179660, then ran all 205 checks.
+
+- **What failed was the sequencing, not the check.** A doc-freshness assertion sat in front of
+  evidence collection and could stop it. `policy.yml` runs on every push and did not run the same
+  assertion. It now does, so a push like `5f5737a` fails on that push.
+- **Not changed, and open:** collect's self-test still gates the checks. Whether a failed self-test
+  should stop collection, or only mark the run, is a judgement left open here.
+
+**Drift has been red since 2026-10-09 on one resource:** `aws_guardduty_detector_feature.rds_login_events`,
+with the plan to replace it. GuardDuty now returns an `additional_configuration` for `RDS_DATA_RISK`.
+Its status is `DISABLED`, updated 2026-09-23, and it is not declared. **Nothing changed in the
+account.** CloudTrail since 2026-10-07 has only `Get*` and `List*` calls against GuardDuty, and the
+AWS provider is pinned at 5.100.0. What changed is what the API describes. The fix is to declare it
+as it stands, disabled. The session's permission controls refused that edit to `posture.tf` as
+"Logging/Audit Tampering", so it was handed to the user as a patch.
+
+**Run 38492179660: 169 pass, 31 not standing, 5 fail.** Three items on the expected-red list have
+cleared: backups restorable, project roles not denied, and the Security Hub exceptions. The five
+failures:
+
+| Check | Why | Clears |
+|---|---|---|
+| `svc-acm-ops-aws-no-drift` | The GuardDuty field above | When the declaration is applied |
+| `mla-rvl-ops-review-queries-recorded` | The newest record before this run was 157 hours old | The next run, which reads this one |
+| `mla-rvl-ops-review-windows-continuous` | A 6.53-day gap, over the 3-day window. **True:** the record was not continuous | When the gap leaves the 30-day lookback, about 2026-11-06 |
+| `piy-giv-ops-aws-inventory-current` | Config still lists two session KMS keys (audit and container logs; secret material). They were scheduled for deletion on 2026-10-05 with a 7-day window, and deleted at 2026-10-13 02:04 UTC, 23 hours before the run | By itself, within the lag recorded on 2026-10-02 |
+| `iam-jit-ops-aws-elevations-revoked` | Two 2026-10-07 elevations ended by release, not by expiry | About 2026-11-07, unless the check changes |
+
+**The elevations were revoked. The check cannot tell.** Both were stopped by `elevate.sh` release:
+`elevate-20261007T212255Z` (180 minutes asked for, released at 00:16:05 UTC on 2026-10-08) and
+`elevate-20261008T001820Z` (15 minutes asked for, released 16 seconds after it was granted). Release
+stops the workflow and leaves the assignment to the backstop. The backstop deleted the one shared
+assignment at 00:27:30 UTC, 11 minutes after the first release, and it succeeded. `ElevatedAdmin`
+has no assignments now. The check counts a backstop sweep as a hint, not as an elevation's
+revocation. This is the first time release has been used since the check was written.
+
+**Two of these outlast the finish line.** The continuity gap and the elevations check both stay red
+past the end of October. "Freeze the SDR once the list is green" can no longer be met as written.
+
+**Also seen:** GitHub starts the scheduled runs about 6.5 to 7 hours late. Collect, set for 05:30,
+runs around 12:00, and drift, set for 07:00, runs around 14:00. They still run in order, so nothing
+has contended for the state lock.

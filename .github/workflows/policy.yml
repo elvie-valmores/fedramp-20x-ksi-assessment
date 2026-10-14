@@ -97,6 +97,14 @@ jobs:
         working-directory: policy
         run: python -m unittest test_gate.py
 
+      # The same check collect.yml's self-test runs, here so a push that
+      # changes a check's links or gaps without regenerating the coverage
+      # report fails on that push. On 2026-10-07 one did, and nothing
+      # failed until collect's next scheduled run, which stopped at
+      # self-test for six days (DECISIONS.md, 2026-10-13).
+      - name: check the matrix links and generated files
+        run: python sdr/matrix_rows.py --check
+
       # validate rows 1-3: blocks a violating plan, passes a compliant one,
       # and catches what only the plan shows.
       - name: run the deliberate test

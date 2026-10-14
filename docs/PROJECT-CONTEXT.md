@@ -75,6 +75,13 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ## Resume here — state at the end of 2026-10-07 (evening)
 
+> **Update, 2026-10-13.** Left unattended from 2026-10-08, both daily AWS jobs failed every day.
+> Collect stopped at self-test on a stale coverage report, so **there is no record for 2026-10-08
+> to 2026-10-13**. Drift read a newly reported GuardDuty field as a change. The report has been
+> regenerated, and `policy.yml` now runs the same check on each push. The GuardDuty declaration
+> was handed to the user. See DECISIONS.md, 2026-10-13. The expected-red table below is current
+> to that day.
+
 Read this before inferring anything from the code or from git history. Both have been stale before,
 and so has this block. Check against the live accounts.
 
@@ -99,19 +106,21 @@ live, and the environment is torn down: 292 persistent, 0 ephemeral.
    - `gh run list --workflow collect.yml -L 3`
    - `gh run list --workflow policy.yml -L 3`
    - `gh run list --workflow drift.yml -L 3`
-3. **Expected red in CI until it clears:**
+3. **Expected red in CI until it clears** (as of run 38492179660, 2026-10-14 00:49 UTC):
 
    | Check | Clears |
    |---|---|
-   | `svc-sin-cfg-aws-backups-restorable` | 2026-10-09 |
-   | `iam-elp-ops-aws-project-roles-not-denied` (the flow-log ordering defect, fixed) | 2026-10-10 |
-   | `cna-ibp-ops-aws-failing-controls-excepted` (S3.8 and S3.13, transient) | Security Hub's next evaluation |
-   | `piy-giv-ops-aws-inventory-current` (Config lag on the deleted database) | By itself |
+   | `svc-acm-ops-aws-no-drift` (GuardDuty `RDS_DATA_RISK`, undeclared) | When the user applies the `posture.tf` patch; then run `drift.yml` |
+   | `mla-rvl-ops-review-queries-recorded` (the 6-day gap) | The next collect run |
+   | `piy-giv-ops-aws-inventory-current` (Config lag on two deleted session keys) | By itself, about 2026-10-15 |
+   | `mla-rvl-ops-review-windows-continuous` (the 6.53-day gap, true) | About 2026-11-06, **past the finish line** |
+   | `iam-jit-ops-aws-elevations-revoked` (two released elevations; revoked by the backstop, which the check does not credit) | About 2026-11-07 unless the check changes, **past the finish line** |
 
    Anything else red is new: investigate it.
 4. **Week 4, what is left:**
    - ~~**Review the Artifact Registry cleanup policy, then set it live.**~~ **Done 2026-10-07,**
      reviewed against the versions; nothing qualifies before 2026-10-31.
+   - **Decide how the last two red checks above meet the freeze** (DECISIONS.md, 2026-10-13).
    - **Emit and freeze the final SDR from CI,** once the list above is green. Check that it
      validates, and record the freeze in DECISIONS.md.
    - **Optional, if time allows:**
