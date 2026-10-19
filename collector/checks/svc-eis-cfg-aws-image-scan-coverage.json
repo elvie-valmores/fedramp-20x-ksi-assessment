@@ -19,7 +19,7 @@
     {
       "row": "KSI-SVC-EIS.validate.1",
       "covers": "partial",
-      "gap": "ECR images, by coverage status, not by a scan date against a declared interval; Inspector rescans on new advisories rather than on a clock. The analytics image in Artifact Registry is scanned by Container Scanning, not read here."
+      "gap": "ECR images, by coverage status, not by a scan date against a declared interval; Inspector rescans on new advisories rather than on a clock. Coverage also lapses: Inspector stops scanning an image 14 days after its push unless it is in use, and the images run only during sessions, so between sessions every deployable image goes INACTIVE (SCAN_ELIGIBILITY_EXPIRED). Red since 2026-10-16, a recorded finding (DECISIONS.md, 2026-10-19). The analytics image in Artifact Registry is scanned by Container Scanning, not read here."
     },
     {
       "row": "KSI-SCR-MON.validate.1",

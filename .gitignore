@@ -72,3 +72,6 @@ gha-creds-*.json
 # collect.yml downloads the stored run records here to compute the SDR's
 # metrics; the store, not the checkout, is their home.
 history/
+# The same store, fetched earlier for the signal report. Unignored, it
+# marked every CI SDR -dirty from 2026-10-05 (DECISIONS.md, 2026-10-19).
+signal-history/

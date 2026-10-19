@@ -8952,3 +8952,40 @@ The order:
 **Also seen:** GitHub starts the scheduled runs about 6.5 to 7 hours late. Collect, set for 05:30,
 runs around 12:00, and drift, set for 07:00, runs around 14:00. They still run in order, so nothing
 has contended for the state lock.
+
+## 2026-10-19 — Inspector's scan coverage lapses between sessions; the CI SDR was -dirty; the account is left to lapse
+
+**Collect, 2026-10-14 to 10-19: 172 pass, 31 not standing, 2 fail, every day.** Drift and policy were
+green throughout, so the GuardDuty `ignore_changes` held. The inventory lag and the newest-record age
+cleared on their own, as expected. One failure was expected: the continuity gap, frozen with it
+visible (2026-10-13). The other was new.
+
+**`svc-eis-cfg-aws-image-scan-coverage` has been red since 2026-10-16.** It began on 2 images
+(`git-193454c1a7b2`) and reached all 6 recent deployable images by 2026-10-17. Inspector reports
+each as `INACTIVE`, reason `SCAN_ELIGIBILITY_EXPIRED`. The account's ECR configuration is
+`rescanDuration: DAYS_14`, `pullDateRescanDuration: DAYS_14`, `pullDateRescanMode: LAST_IN_USE_AT`.
+That is the default, set when Inspector was enabled on 2026-09-23 and not declared in `posture.tf`.
+The images were pushed on 2026-10-01 and 10-02, so eligibility ran out 14 days later. The
+collector's daily manifest reads show as ECR pulls (`lastRecordedPullTime` 2026-10-19) but are not
+"in use", so they do not renew it.
+
+- **The check is right.** Under apply-and-destroy, deployable images run only during a session, so
+  Inspector stops watching them 14 days after each build. A new advisory against a dormant image
+  goes unseen until the next build or deployment. The check was written on 2026-10-02 and had never
+  run past 14 days without a build.
+- **Decision (operator): a recorded finding, frozen with it visible.** Rebuilding the images would
+  turn the check green for 14 days and say nothing true about the steady state. A longer rescan
+  window is a detection-service change at the close, for an account being wound down. The gap text
+  of `KSI-SVC-EIS.validate.1` now states the lapse, so the frozen SDR carries it.
+- **What a continuing system would do:** declare the rescan duration in Terraform, and rebuild or
+  rebuild each deployable image within the window. `build-and-push.yml` runs on push only; a
+  schedule under 14 days would do it.
+
+**Every CI SDR since 2026-10-05 was versioned `-dirty`.** `collect.yml` fetches the run history into
+`signal-history/` for the signal report, and `.gitignore` covered only `history/`. The emitter named
+the cause in each run's log (`?? signal-history/`). Nothing in the evidence was affected; the
+version suffix was. Ignored now, so the frozen SDR names a clean commit.
+
+**The AWS account is left to lapse, not closed (operator).** The wind-down removes this project's
+resources. The account stays open, on the Free plan, in case it is wanted for other work. It closes
+by itself around 2027-01-31 unless it is upgraded before then.
