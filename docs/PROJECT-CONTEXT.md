@@ -75,6 +75,11 @@ The build order below is the plan; the status table in `README.md` is what has a
 
 ## Resume here — state at the end of 2026-10-07 (evening)
 
+> **Update, 2026-10-26.** **The final SDR is frozen** in `sdr/final/` (DECISIONS.md, 2026-10-26).
+> Policy was red from 10-21 on two dependency advisories, and they are fixed in the collector's
+> lockfile. What is left: copy the records out of the log store, disable the schedules, and wind
+> down. The week 4 list below is superseded by that entry.
+
 > **Update, 2026-10-13.** Left unattended from 2026-10-08, both daily AWS jobs failed every day.
 > Collect stopped at self-test on a stale coverage report, so **there is no record for 2026-10-08
 > to 2026-10-13**. Drift read a newly reported GuardDuty field as a change. The report has been

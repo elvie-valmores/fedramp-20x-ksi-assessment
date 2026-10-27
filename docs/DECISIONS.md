@@ -8989,3 +8989,37 @@ version suffix was. Ignored now, so the frozen SDR names a clean commit.
 **The AWS account is left to lapse, not closed (operator).** The wind-down removes this project's
 resources. The account stays open, on the Free plan, in case it is wanted for other work. It closes
 by itself around 2027-01-31 unless it is upgraded before then.
+
+## 2026-10-26 — Two advisories turned policy red; the final SDR frozen
+
+**`policy.yml` was red from 2026-10-21, on a dependency audit, not on a rule.** pip-audit found
+`certifi` 2026.7.22 affected by PYSEC-2026-4320. That advisory covers eMudhra intermediate CAs with
+compromised keys, chaining to a root the bundle trusted. The failing step is the test job's first
+check, so everything after it was skipped as well: the secret scan, the rule and gate tests, the
+matrix check and the deliberate test. With no deliberate test, collect's
+`mla-evc-ops-deliberate-test-passed` read "skipped" and went red too. One fault produced two red
+workflows. A local audit after the bump found a second advisory:
+`opentelemetry-api` 1.45.0 is affected by CVE-2026-114603, quadratic parsing of `tracestate`. The
+collector never parses an inbound header, but the gate is strict, and should be.
+
+- **Fixed (`97cdfd2`):** in `requirements.txt` only certifi (to 2026.10.23) and the OpenTelemetry
+  trio (to 1.45.1 / 0.66b1) moved; `uv pip compile --upgrade-package`, nothing else. Policy passed
+  on the push, and the deliberate test ran.
+- **Not rebuilt: the analytics image.** `app/analytics/requirements.txt` pins the same certifi and
+  `opentelemetry-api` 1.44.0, so the deployed image (pinned by digest) carries both advisories. A
+  change under `app/` triggers `build-and-push.yml`, which publishes new images. That would change
+  what the frozen Inspector finding (2026-10-19) measures, and the image is about to be torn down.
+  **A recorded finding at the close.** The `api` and `worker` manifests audit clean.
+
+**The final SDR is frozen (`182eb40`), in `sdr/final/`.** It was emitted by collect run
+40422715625, dispatched after the fix, at commit `97cdfd2`: version `97cdfd2eee91`, not `-dirty`,
+valid against the pinned schema in CI and again locally. The checks were 172 pass, 31 not
+standing and 2 fail. The two failures are the recorded findings: the 6.5-day continuity gap
+(2026-10-13) and Inspector's scan-coverage lapse (2026-10-19). 46 indicators: 18 Implemented,
+22 Partially Implemented, 6 Not Implemented. Next to the SDR: the run's `results.json` and the
+signal report.
+
+**Still to do:** copy `collector-runs/` and `elevations/` out of the log store (`records/`, copied
+on 2026-10-19, is stale and was never committed), disable the schedules, and wind down. The
+target of about 2026-10-21 was missed by five days. GuardDuty's and Security Hub's trials have
+ended, so the posture services now bill, about 8.70 USD a month projected.
