@@ -1,0 +1,1 @@
+{"phase": "revoked", "at": "2026-10-06T00:28:13.771166+00:00", "execution": "arn:aws:states:us-east-1:437672023758:execution:fedramp-20x-ksi-elevation:elevate-20261005T234305Z", "status": "SUCCEEDED", "failure": null}

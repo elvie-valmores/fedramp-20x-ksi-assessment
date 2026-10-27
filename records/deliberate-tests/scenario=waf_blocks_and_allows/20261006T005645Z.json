@@ -1,0 +1,28 @@
+{
+  "scenario": "waf_blocks_and_allows",
+  "rows": [
+    "KSI-CNA-RVP.validate.1",
+    "KSI-CNA-RVP.validate.2",
+    "KSI-CNA-RVP.validate.3"
+  ],
+  "what": "Through the load balancer, a legitimate request is answered, a SQL injection pattern is blocked by the managed rules, and a flood past 2,000 requests from one address is blocked by the rate rule",
+  "passed": true,
+  "expected": "the legitimate request gets 200, the injection 403, and the flood is cut off with 403s",
+  "observed": {
+    "load_balancer": "fedramp-20x-ksi-1507695784.us-east-1.elb.amazonaws.com",
+    "legitimate": 200,
+    "sql_injection": 403,
+    "flood": {
+      "sent": 2300,
+      "200": 2300,
+      "403": 0,
+      "failed": 0
+    },
+    "rate_block_after_seconds": 31
+  },
+  "error": null,
+  "started_at": "2026-10-06T00:56:45.349670+00:00",
+  "finished_at": "2026-10-06T00:57:29.838373+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_0d21041e950d01cc/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

@@ -1,0 +1,23 @@
+{
+  "scenario": "delivery_failure_alerts",
+  "rows": [
+    "KSI-MLA-OSM.validate.5"
+  ],
+  "what": "Invoke the log normalizer with an event it cannot process, so the log delivery path fails; its error alarm must enter ALARM, which notifies the detection topic",
+  "passed": true,
+  "expected": "the normalizer fails, and its error alarm enters ALARM and notifies the detection topic",
+  "observed": {
+    "invoked_at": "2026-10-05T23:43:23.842319+00:00",
+    "function_failed": true,
+    "alarm_entered_at": "2026-10-05T19:44:33.213000-04:00",
+    "minutes_to_alarm": 1.2,
+    "alarm_notifies": [
+      "arn:aws:sns:us-east-1:437672023758:fedramp-20x-ksi-detection-interim"
+    ]
+  },
+  "error": null,
+  "started_at": "2026-10-05T23:43:23.824393+00:00",
+  "finished_at": "2026-10-05T23:44:36.816597+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_a95eef43b93e0f46/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

@@ -1,0 +1,28 @@
+{
+  "scenario": "prior_state_recoverable",
+  "rows": [
+    "KSI-RPL-ABO.validate.3"
+  ],
+  "what": "Read back the oldest retained version of the AWS root's Terraform state and confirm it parses as a prior baseline (older serial, its own lineage); read back the oldest retained api task definition",
+  "passed": true,
+  "expected": "an older state version of the same lineage and a prior task definition are both retrievable",
+  "observed": {
+    "state_versions": 130,
+    "oldest": "2026-09-18 19:47:14+00:00",
+    "depth_days": 17,
+    "oldest_serial": 1,
+    "current_serial": 130,
+    "same_lineage": true,
+    "oldest_resources": 1,
+    "task_definition": {
+      "arn": "arn:aws:ecs:us-east-1:437672023758:task-definition/fedramp-20x-ksi-api:1",
+      "status": "INACTIVE",
+      "image": "437672023758.dkr.ecr.us-east-1.amazonaws.com/fedramp-20x-ksi/api@sha256:b515cd4083afb1a4feba613edb64c839cc1f69ff64f6b74f0b7d6404367aa588"
+    }
+  },
+  "error": null,
+  "started_at": "2026-10-05T23:43:20.514898+00:00",
+  "finished_at": "2026-10-05T23:43:23.245214+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_a95eef43b93e0f46/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

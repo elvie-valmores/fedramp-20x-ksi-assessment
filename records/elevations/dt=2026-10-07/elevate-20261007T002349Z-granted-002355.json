@@ -1,0 +1,1 @@
+{"phase": "granted", "at": "2026-10-07T00:23:55.240032+00:00", "execution": "arn:aws:states:us-east-1:437672023758:execution:fedramp-20x-ksi-elevation:elevate-20261007T002349Z", "status": "SUCCEEDED", "failure": null, "justification": "Deploy the normalizer's read_only, event_category and is_mfa fields and the table columns", "minutes": 20}

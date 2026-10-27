@@ -1,0 +1,16 @@
+{
+  "scenario": "stopped_task_replaced",
+  "rows": [
+    "KSI-CNA-EIS.validate.3",
+    "KSI-CNA-OFA.validate.1"
+  ],
+  "what": "Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting",
+  "passed": false,
+  "expected": "Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting",
+  "observed": {},
+  "error": "Traceback (most recent call last):\n  File \"/Users/elvie.valmores/Documents/fedramp-20x-ksi-assessment/deliberate/run.py\", line 59, in main\n    passed, expected, observed = SCENARIOS[sid](session)\n                                 ~~~~~~~~~~~~~~^^^^^^^^^\n  File \"/Users/elvie.valmores/Documents/fedramp-20x-ksi-assessment/deliberate/scenarios.py\", line 388, in stopped_task_replaced\n    desired = ecs.describe_services(cluster=CLUSTER, services=[\"api\"])[\"services\"][0][\"desiredCount\"]\n              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^\nIndexError: list index out of range\n",
+  "started_at": "2026-10-07T21:26:53.149132+00:00",
+  "finished_at": "2026-10-07T21:26:53.533329+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_69ed6508b4475ffd/alex@corp.elvievalmores.com",
+  "commit": "563416e21df482898fc003ccb3bf6ce662a713b2"
+}

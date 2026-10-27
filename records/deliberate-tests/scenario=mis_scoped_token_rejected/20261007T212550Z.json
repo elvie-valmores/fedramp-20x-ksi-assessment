@@ -1,0 +1,21 @@
+{
+  "scenario": "mis_scoped_token_rejected",
+  "rows": [
+    "KSI-SVC-VCM.validate.4"
+  ],
+  "what": "Mint a Google ID token with the pipeline role's pinned audience but another identity's subject (Terraform Admin, by impersonation) and present it to AWS for the pipeline role; AssumeRoleWithWebIdentity must refuse it",
+  "passed": true,
+  "expected": "a token with the pinned audience and another identity's subject is refused",
+  "observed": {
+    "token_aud": "104894493962317106056",
+    "token_sub": "100515574285408814068",
+    "token_email": "terraform-admin@fedramp-20x-ksi-assessment.iam.gserviceaccount.com",
+    "pinned_sub": "104894493962317106056",
+    "refused_with": "AccessDenied"
+  },
+  "error": null,
+  "started_at": "2026-10-07T21:25:50.119533+00:00",
+  "finished_at": "2026-10-07T21:25:51.691617+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_69ed6508b4475ffd/alex@corp.elvievalmores.com",
+  "commit": "563416e21df482898fc003ccb3bf6ce662a713b2"
+}

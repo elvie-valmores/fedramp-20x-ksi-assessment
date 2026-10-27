@@ -1,0 +1,27 @@
+{
+  "scenario": "object_lock_rejects_change",
+  "rows": [
+    "KSI-SVC-SIN.validate.4",
+    "KSI-MLA-OSM.validate.1"
+  ],
+  "what": "As an administrator, delete a locked log object version and shorten its retention. Both must be refused, and the version must still be there",
+  "passed": true,
+  "expected": "every attempt refused, and the version still present with its retention unchanged",
+  "observed": {
+    "object": "collector-runs/dt=2026-10-05/run=37386005617.json",
+    "version": "zXH8cVUm4hOJShDxY9Bdw3NBExTEYQnh",
+    "mode": "COMPLIANCE",
+    "retain_until": "2026-10-12 23:08:37.123000+00:00",
+    "refused_with": {
+      "delete the version": "AccessDenied",
+      "delete it, bypassing governance": "AccessDenied",
+      "shorten its retention": "AccessDenied"
+    },
+    "version_intact_with_same_retention": true
+  },
+  "error": null,
+  "started_at": "2026-10-05T23:43:19.435159+00:00",
+  "finished_at": "2026-10-05T23:43:20.080944+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_a95eef43b93e0f46/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

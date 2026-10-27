@@ -1,0 +1,1 @@
+{"phase": "granted", "at": "2026-10-05T22:41:08.713265+00:00", "execution": "arn:aws:states:us-east-1:437672023758:execution:fedramp-20x-ksi-elevation:elevate-20261005T224103Z", "status": "SUCCEEDED", "failure": null, "justification": "Apply the policy gate's GCP grant and narrow the pipeline's landing bucket role", "minutes": 30}

@@ -1,0 +1,22 @@
+{
+  "scenario": "stopped_task_replaced",
+  "rows": [
+    "KSI-CNA-EIS.validate.3",
+    "KSI-CNA-OFA.validate.1"
+  ],
+  "what": "Stop one running api task; the scheduler must start a replacement and restore the desired count without anyone acting",
+  "passed": true,
+  "expected": "a replacement task starts and the service returns to its desired count unattended",
+  "observed": {
+    "desired": 2,
+    "stopped": "arn:aws:ecs:us-east-1:437672023758:task/fedramp-20x-ksi/c605577ff2514144b239b519d3033f74",
+    "replacement": "arn:aws:ecs:us-east-1:437672023758:task/fedramp-20x-ksi/c491aa8493e04676aa99e1f6974b2095",
+    "running_after": 2,
+    "minutes_to_restore": 1.4
+  },
+  "error": null,
+  "started_at": "2026-10-07T22:06:11.341095+00:00",
+  "finished_at": "2026-10-07T22:07:33.850154+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_69ed6508b4475ffd/alex@corp.elvievalmores.com",
+  "commit": "563416e21df482898fc003ccb3bf6ce662a713b2"
+}

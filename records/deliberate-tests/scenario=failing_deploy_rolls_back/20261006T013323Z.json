@@ -1,0 +1,39 @@
+{
+  "scenario": "failing_deploy_rolls_back",
+  "rows": [
+    "KSI-CMT-VTD.validate.2"
+  ],
+  "what": "Deploy an api revision that runs but never serves, so it fails the load balancer's health checks; the deployment circuit breaker must roll the service back to the prior revision. The test revision is deregistered after",
+  "passed": true,
+  "expected": "the circuit breaker fails the broken deployment and the service returns to the prior revision",
+  "observed": {
+    "original": "arn:aws:ecs:us-east-1:437672023758:task-definition/fedramp-20x-ksi-api:5",
+    "broken": "arn:aws:ecs:us-east-1:437672023758:task-definition/fedramp-20x-ksi-api:7",
+    "final": {
+      "primary": "arn:aws:ecs:us-east-1:437672023758:task-definition/fedramp-20x-ksi-api:5",
+      "primary_rollout": "COMPLETED",
+      "broken_failed": true
+    },
+    "rolled_back": true,
+    "minutes": 6.4,
+    "events": [
+      "(service api) has reached a steady state.",
+      "(service api) (deployment ecs-svc/0152066757914399730) deployment completed.",
+      "(service api) rolling back to deployment ecs-svc/0152066757914399730.",
+      "(service api) (deployment ecs-svc/6800611847758471109) deployment failed: tasks failed to start.",
+      "(service api, taskSet ecs-svc/6800611847758471109) has begun draining connections on 1 tasks.",
+      "(service api) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:us-east-1:437672023758:targetgroup/fedramp-20x-ksi-api/8b65a63cda7fec9d)",
+      "(service api) has stopped 1 running tasks: (task 6c06f3b2df4e4938b8bd3702fb8abeaf).",
+      "(service api) (task 6c06f3b2df4e4938b8bd3702fb8abeaf) (port 8443) is unhealthy in (target-group arn:aws:elasticloadbalancing:us-east-1:437672023758:targetgroup/fedramp-20x-ksi-api/8b65a63cda7fec9d) due to (reason Health checks failed).",
+      "(service api) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:us-east-1:437672023758:targetgroup/fedramp-20x-ksi-api/8b65a63cda7fec9d)",
+      "(service api, taskSet ecs-svc/6800611847758471109) has begun draining connections on 1 tasks.",
+      "(service api) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:us-east-1:437672023758:targetgroup/fedramp-20x-ksi-api/8b65a63cda7fec9d)",
+      "(service api) has stopped 1 running tasks: (task ec3c9ac2201f4f84af7960562aad835e)."
+    ]
+  },
+  "error": null,
+  "started_at": "2026-10-06T01:33:23.216432+00:00",
+  "finished_at": "2026-10-06T01:39:48.809052+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_0d21041e950d01cc/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

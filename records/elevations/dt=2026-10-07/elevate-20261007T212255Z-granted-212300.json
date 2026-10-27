@@ -1,0 +1,1 @@
+{"phase": "granted", "at": "2026-10-07T21:23:00.493153+00:00", "execution": "arn:aws:states:us-east-1:437672023758:execution:fedramp-20x-ksi-elevation:elevate-20261007T212255Z", "status": "SUCCEEDED", "failure": null, "justification": "Week 3 session 2: stand up both phases, run the session scenarios and checks, tear down", "minutes": 180}

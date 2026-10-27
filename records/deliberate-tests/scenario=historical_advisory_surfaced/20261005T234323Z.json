@@ -1,0 +1,57 @@
+{
+  "scenario": "historical_advisory_surfaced",
+  "rows": [
+    "KSI-SCR-MON.validate.2"
+  ],
+  "what": "Audit a manifest that pins urllib3, a package the worker uses, at 1.26.4, with the pinned pip-audit; CVE-2021-33503 (GHSA-q2q7-5pp4-w6pg) must be reported",
+  "passed": true,
+  "expected": "pip-audit reports CVE-2021-33503 for urllib3 1.26.4 and exits non-zero, which fails a build",
+  "observed": {
+    "package": "urllib3==1.26.4",
+    "advisories_reported": [
+      "CVE-2021-33503",
+      "CVE-2023-43804",
+      "CVE-2023-45803",
+      "CVE-2024-37891",
+      "CVE-2025-50181",
+      "CVE-2025-66418",
+      "CVE-2025-66471",
+      "CVE-2026-21441",
+      "CVE-2026-44431",
+      "CVE-2026-97687",
+      "CVE-2026-97689",
+      "GHSA-2xpw-w6gg-jr37",
+      "GHSA-34jh-p97f-mpxf",
+      "GHSA-38jv-5279-wg99",
+      "GHSA-8988-9cw3-xx77",
+      "GHSA-g4mx-q9vg-27p4",
+      "GHSA-gm62-xv2j-4w53",
+      "GHSA-pq67-6m6q-mj2v",
+      "GHSA-q2q7-5pp4-w6pg",
+      "GHSA-qccp-gfcp-xxvc",
+      "GHSA-v845-jxx5-vc9f",
+      "GHSA-vxq7-64xx-v4gw",
+      "PYSEC-2021-108",
+      "PYSEC-2023-192",
+      "PYSEC-2023-212",
+      "PYSEC-2026-141",
+      "PYSEC-2026-1994",
+      "PYSEC-2026-1995",
+      "PYSEC-2026-1996",
+      "PYSEC-2026-1998",
+      "PYSEC-2026-1999",
+      "PYSEC-2026-4175",
+      "PYSEC-2026-4177"
+    ],
+    "expected_among_them": [
+      "CVE-2021-33503",
+      "GHSA-q2q7-5pp4-w6pg"
+    ],
+    "exit_code": 1
+  },
+  "error": null,
+  "started_at": "2026-10-05T23:43:23.404574+00:00",
+  "finished_at": "2026-10-05T23:43:23.683884+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_a95eef43b93e0f46/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

@@ -1,0 +1,31 @@
+{
+  "scenario": "out_of_band_change_detected",
+  "rows": [
+    "KSI-SVC-ACM.validate.3"
+  ],
+  "what": "Tag a persistent log group outside Terraform and run the drift workflow, which must fail on it; remove the tag and run it again, which must pass",
+  "passed": true,
+  "expected": "the drift run after the change fails naming the tagged resource, and the run after reverting passes",
+  "observed": {
+    "changed": {
+      "resource": "/aws/lambda/fedramp-20x-ksi-elevation",
+      "tag": "20261005T234437Z",
+      "at": "2026-10-05T23:44:37.514483+00:00"
+    },
+    "drift_run": {
+      "id": 37390223456,
+      "conclusion": "failure",
+      "named_the_resource": true
+    },
+    "after_revert": {
+      "id": 37390298795,
+      "conclusion": "success"
+    },
+    "detected_within_minutes": 1.6
+  },
+  "error": null,
+  "started_at": "2026-10-05T23:44:37.285479+00:00",
+  "finished_at": "2026-10-05T23:46:11.116471+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_a95eef43b93e0f46/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

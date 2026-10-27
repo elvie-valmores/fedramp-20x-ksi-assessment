@@ -1,0 +1,26 @@
+{
+  "scenario": "timed_point_in_time_restore",
+  "rows": [
+    "KSI-CNA-OFA.validate.3",
+    "KSI-RPL-TRC.validate.2",
+    "KSI-RPL-TRC.validate.3"
+  ],
+  "what": "Restore the database to a chosen moment into a disposable instance, timed to available against the 60-minute objective; the instance is deleted after",
+  "passed": true,
+  "expected": "the restore to the chosen moment is available within the 60-minute objective, encrypted and private",
+  "observed": {
+    "restored_to": "2026-10-06T00:52:39+00:00",
+    "instance": "fedramp-20x-ksi-restore-202610060100",
+    "minutes_to_available": 15.7,
+    "objective_minutes": 60,
+    "encrypted": true,
+    "kms_key": "arn:aws:kms:us-east-1:437672023758:key/681c3cba-07c1-4007-b04a-6ed5e0c392f8",
+    "public": false,
+    "deleted_after": true
+  },
+  "error": null,
+  "started_at": "2026-10-06T01:00:26.769651+00:00",
+  "finished_at": "2026-10-06T01:16:07.222623+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_0d21041e950d01cc/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

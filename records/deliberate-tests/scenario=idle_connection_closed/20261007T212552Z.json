@@ -1,0 +1,19 @@
+{
+  "scenario": "idle_connection_closed",
+  "rows": [
+    "KSI-CNA-ULN.validate.2"
+  ],
+  "what": "Open a TLS connection to the load balancer and send nothing past its 60-second idle timeout; the load balancer must close it",
+  "passed": true,
+  "expected": "an idle connection is closed by the load balancer at about its idle timeout",
+  "observed": {
+    "idle_timeout_seconds": 60,
+    "closed_by_peer": true,
+    "closed_after_seconds": 60.0
+  },
+  "error": null,
+  "started_at": "2026-10-07T21:25:52.154071+00:00",
+  "finished_at": "2026-10-07T21:26:52.793682+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_69ed6508b4475ffd/alex@corp.elvievalmores.com",
+  "commit": "563416e21df482898fc003ccb3bf6ce662a713b2"
+}

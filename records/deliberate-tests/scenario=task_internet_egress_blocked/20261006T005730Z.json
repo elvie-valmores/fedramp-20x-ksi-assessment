@@ -1,0 +1,23 @@
+{
+  "scenario": "task_internet_egress_blocked",
+  "rows": [
+    "KSI-CNA-RNT.validate.3"
+  ],
+  "what": "A one-off task in the worker's subnets and security group tries to open a connection to an internet address; it must fail",
+  "passed": true,
+  "expected": "the connection to 1.1.1.1:443 fails from the worker's position",
+  "observed": {
+    "task": "arn:aws:ecs:us-east-1:437672023758:task/fedramp-20x-ksi/26730572f7a74c8496d645c54ed8a48f",
+    "target": "1.1.1.1:443",
+    "exit_code": 10,
+    "stopped_reason": "Essential container in task exited",
+    "security_groups": [
+      "sg-0237be13b9f0e8d95"
+    ]
+  },
+  "error": null,
+  "started_at": "2026-10-06T00:57:30.307041+00:00",
+  "finished_at": "2026-10-06T00:58:31.269724+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_0d21041e950d01cc/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}

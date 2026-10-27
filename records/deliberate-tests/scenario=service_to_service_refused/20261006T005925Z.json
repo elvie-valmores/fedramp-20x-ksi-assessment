@@ -1,0 +1,23 @@
+{
+  "scenario": "service_to_service_refused",
+  "rows": [
+    "KSI-CNA-MAT.validate.1"
+  ],
+  "what": "A one-off task in the worker's network position tries to reach a running api task on 8443; no flow declares it, so it must fail",
+  "passed": true,
+  "expected": "the worker's position cannot open a connection to the api",
+  "observed": {
+    "task": "arn:aws:ecs:us-east-1:437672023758:task/fedramp-20x-ksi/4204f3aae984445ead572592d8fa3aa5",
+    "target": "10.20.10.9:8443",
+    "exit_code": 10,
+    "stopped_reason": "Essential container in task exited",
+    "security_groups": [
+      "sg-0237be13b9f0e8d95"
+    ]
+  },
+  "error": null,
+  "started_at": "2026-10-06T00:59:25.182274+00:00",
+  "finished_at": "2026-10-06T01:00:26.447059+00:00",
+  "operator": "arn:aws:sts::437672023758:assumed-role/AWSReservedSSO_ElevatedAdmin_0d21041e950d01cc/alex@corp.elvievalmores.com",
+  "commit": "9de13ee89e4f437e8dbff8c5b5b755ffe4f81312"
+}
