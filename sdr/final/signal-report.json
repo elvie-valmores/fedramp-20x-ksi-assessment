@@ -1,0 +1,210 @@
+{
+  "generated_at": "2026-10-26T23:53:37.078649+00:00",
+  "period": {
+    "start": "2026-07-29",
+    "end": "2026-10-26",
+    "days": 90
+  },
+  "history_days": 19,
+  "commit": "97cdfd2eee91745843bbb9d17758668091a06d60",
+  "sections": {
+    "KSI-CMT-RVP": {
+      "purpose": "Whether the change procedure works, not only whether it is followed (DECISIONS.md, 2026-09-14)",
+      "signals": {
+        "gate_runs": {
+          "what": "Runs and failures per pipeline gate (build-and-push, policy, drift, collect), from GitHub",
+          "value": {
+            "build-and-push.yml": {
+              "runs": 9,
+              "failed": 1
+            },
+            "policy.yml": {
+              "runs": 50,
+              "failed": 7
+            },
+            "drift.yml": {
+              "runs": 50,
+              "failed": 11
+            },
+            "collect.yml": {
+              "runs": 51,
+              "failed": 50
+            }
+          }
+        },
+        "gates_never_failed": {
+          "what": "Gates that ran in the period and failed nothing -- either protecting against nothing or passing everything",
+          "value": []
+        },
+        "reverts": {
+          "what": "Commits on main that revert an earlier one -- changes that passed every gate and still had to be undone",
+          "value": 0
+        },
+        "emergency_modifications": {
+          "what": "In-place changes under the emergency category of registers/change-exceptions.yaml",
+          "value": 0
+        },
+        "policy_exceptions_live": {
+          "what": "Unexpired entries in policy/exceptions.yaml -- findings let through, each with a reason",
+          "value": 9
+        },
+        "finding_to_fix_days": {
+          "what": "For checks that went from failing to passing, the days it took",
+          "value": {
+            "fixed": 23,
+            "median_days": 1,
+            "max_days": 12,
+            "still_failing": 3
+          }
+        }
+      },
+      "not_collected": {}
+    },
+    "KSI-SCR-MIT": {
+      "purpose": "Supply chain risk that is not a vulnerability, and its mitigation",
+      "signals": {
+        "supply_chain_risks": {
+          "what": "Entries in registers/supply-chain-risks.yaml, by disposition",
+          "value": {
+            "accepted": 3,
+            "mitigation": 2
+          }
+        },
+        "risks_past_review": {
+          "what": "Risks whose review date has passed",
+          "value": 0
+        },
+        "third_parties_unmonitored": {
+          "what": "Third parties whose upstream monitoring is unavailable (registers/third-parties.yaml)",
+          "value": [
+            "aquasecurity_trivy",
+            "github",
+            "github_actions",
+            "google_cloud_identity",
+            "hashicorp_providers",
+            "open_policy_agent"
+          ]
+        },
+        "dependency_audit_failures": {
+          "what": "Builds whose dependency audit failed, from GitHub",
+          "value": 0
+        }
+      },
+      "not_collected": {}
+    },
+    "KSI-RPL-RRO": {
+      "purpose": "Recovery objectives declared, and measured against",
+      "signals": {
+        "objectives_declared": {
+          "what": "Resource classes with a recovery time objective (registers/resources.yaml)",
+          "value": 21
+        },
+        "objectives_measured": {
+          "what": "Recovery tests recorded in the period (registers/recovery-tests.yaml)",
+          "value": 1
+        },
+        "objectives_missed": {
+          "what": "Recorded tests whose measured recovery time exceeded the objective",
+          "value": 0
+        }
+      },
+      "not_collected": {}
+    },
+    "KSI-RPL-ARP": {
+      "purpose": "Whether the recovery paths are exercised",
+      "signals": {
+        "recovery_paths_encoded": {
+          "what": "Paths in registers/recovery-paths.yaml",
+          "value": 7
+        },
+        "recovery_paths_exercised": {
+          "what": "Distinct paths a recorded recovery test exercised in the period",
+          "value": 1
+        },
+        "backups_restorable_days": {
+          "what": "Days the backup restorability check passed, of the days it was judged",
+          "value": {
+            "passed_days": 13,
+            "judged_days": 19
+          }
+        }
+      },
+      "not_collected": {}
+    },
+    "KSI-INR-RIR": {
+      "purpose": "What the detection path raised, and what the response machinery did",
+      "signals": {
+        "alerts_published": {
+          "what": "Messages published to the detection topic (CloudWatch)",
+          "value": 52
+        },
+        "guardduty_findings": {
+          "what": "GuardDuty findings updated in the period, by severity",
+          "value": {
+            "low": 1,
+            "medium": 0,
+            "high": 0
+          }
+        },
+        "elevations_granted": {
+          "what": "Just-in-time elevations granted (log store, elevations/)",
+          "value": 8
+        },
+        "backstop_actions": {
+          "what": "Times the elevation backstop removed an assignment (log store, elevations/)",
+          "value": 1
+        }
+      },
+      "not_collected": {
+        "dispositions": "The runbook records each alert's disposition in DECISIONS.md, as prose. Nothing counts them, so an undispositioned alert is not visible as a number"
+      }
+    },
+    "KSI-PIY-RVD": {
+      "purpose": "The vulnerability disclosure program's function, since its effectiveness cannot be shown here",
+      "signals": {
+        "days_served": {
+          "what": "Days in the period the environment serving security.txt was standing, from the run history -- it is published only while the load balancer stands",
+          "value": 0
+        }
+      },
+      "not_collected": {
+        "reports_received": "No intake is collected, and the published contact has no mail exchanger (PROJECT-CONTEXT open items). The count is not zero; it is unknown"
+      }
+    },
+    "KSI-PIY-RSD": {
+      "purpose": "The Secure by Design posture's state, from the lifecycle register and the gates",
+      "signals": {
+        "lifecycle_stages": {
+          "what": "Deployment stages by status (registers/lifecycle.yaml)",
+          "value": {
+            "built": 5,
+            "partial": 2
+          }
+        },
+        "principles": {
+          "what": "Secure by Design principles by status",
+          "value": {
+            "evidenced": 2,
+            "not_evidenced": 1
+          }
+        },
+        "policy_gate_failures": {
+          "what": "Pushes to main whose policy evaluation failed, of those evaluated",
+          "value": {
+            "runs": 29,
+            "failed": 1
+          }
+        },
+        "checks_passing": {
+          "what": "The share of judged checks passing on the latest day of the period",
+          "value": {
+            "day": "2026-10-26",
+            "passed": 171,
+            "judged": 174
+          }
+        }
+      },
+      "not_collected": {}
+    }
+  }
+}
